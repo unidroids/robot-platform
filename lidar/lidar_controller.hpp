@@ -40,6 +40,10 @@
 #include "point_processing.hpp"
 //#include "ply_logger.hpp"
 #include "raw_logger.hpp"
+#include "lidar_calibration.hpp"
+
+
+
 
 namespace unilidar = unilidar_sdk2;
 
@@ -70,7 +74,6 @@ public:
         return ensureReaderLocked();
     }
 
-    // Spustí LiDAR (rotaci) a čtecí vlákno.
     bool start() {
         {
             std::lock_guard<std::mutex> lg(mtx_);
@@ -78,52 +81,28 @@ public:
                 std::cout << "[LIDAR] already running" << std::endl;
                 return true;
             }
-            
-            //points_->clear();
 
-            //resetDistance();
-
-            // Pokud reader_ ještě neexistuje, vytvoříme ho + initializeUDP
             if (!ensureReaderLocked()) {
                 return false;
             }
+
+            // --- NOVÉ: asi tady ---
+            if (!calibration_loaded_) {
+                LidarCalibration tmp;
+                if (!loadCalibration("calibration.dat", tmp)) {
+                    std::cout << "[LIDAR] start: calibration.dat not found or invalid, run CALIBRATE first" << std::endl;
+                    return false;
+                }
+                calibration_        = tmp;
+                calibration_loaded_ = true;
+                point_processing_.configure(calibration_);
+                std::cout << "[LIDAR] start: calibration loaded" << std::endl;
+            }
         } // mtx_ uvolněn
 
-        unilidar::UnitreeLidarReader* r = reader_.get();
-        if (!r) {
-            std::cerr << "[LIDAR] start: reader_ is null after ensureReaderLocked" << std::endl;
-            return false;
-        }
-
-        try {
-            // start rotace + 2s flush mimo zámek
-            r->startLidarRotation();
-
-            auto t_end = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-            while (std::chrono::steady_clock::now() < t_end) {
-                r->runParse();
-            }
-            r->clearBuffer();
-
-            {
-                std::lock_guard<std::mutex> lg(mtx_);
-                //resetDistance();
-                //points_->clear();
-                running_.store(true, std::memory_order_relaxed);
-                worker_ = std::thread(&LidarController::loopRead, this);
-            }
-
-            std::cout << "[LIDAR] started (flushed)" << std::endl;
-        } catch (const std::exception &e) {
-            std::cerr << "[LIDAR] start exc: " << e.what() << std::endl;
-            return false;
-        } catch (...) {
-            std::cerr << "[LIDAR] start: unknown exception" << std::endl;
-            return false;
-        }
+        // dál tvůj kód startu (startLidarRotation, flush, worker_, ...)
 
         point_processing_.clear();
-
         return true;
     }
 
@@ -213,6 +192,262 @@ public:
     bool getDistance(float &dist_out) {
         dist_out = point_processing_.distance();
         return dist_out < 0 ? false : true;
+    }
+
+    // Spustí kalibraci (10 s sběr dat) a uloží výsledek do calibration.dat.
+    // Vrací true při úspěchu, false při chybě (detaily na stdout/stderr).
+    bool calibrate(const std::string &file = "calibration.dat")
+    {
+        std::cout << "[CALIBRATE] starting calibration" << std::endl;
+
+        {
+            std::lock_guard<std::mutex> lg(mtx_);
+            if (running_.load(std::memory_order_relaxed)) {
+                std::cerr << "[CALIBRATE] cannot calibrate while LiDAR is running" << std::endl;
+                return false;
+            }
+            if (!ensureReaderLocked()) {
+                std::cerr << "[CALIBRATE] ensureReaderLocked() failed" << std::endl;
+                return false;
+            }
+        }
+
+        unilidar::UnitreeLidarReader *r = reader_.get();
+        if (!r) {
+            std::cerr << "[CALIBRATE] reader_ is null" << std::endl;
+            return false;
+        }
+
+        // 1) Spustit rotaci a začít sbírat data
+        try {
+            r->startLidarRotation();
+        } catch (const std::exception &e) {
+            std::cerr << "[CALIBRATE] exception in startLidarRotation: " << e.what() << std::endl;
+            return false;
+        } catch (...) {
+            std::cerr << "[CALIBRATE] unknown exception in startLidarRotation" << std::endl;
+            return false;
+        }
+
+        std::vector<Eigen::Vector3f> acc_samples;
+        acc_samples.reserve(5000);
+        std::vector<unilidar::PointCloudUnitree> clouds;
+        clouds.reserve(64);
+
+        auto t_start = std::chrono::steady_clock::now();
+        auto t_end   = t_start + std::chrono::seconds(10);
+
+        while (std::chrono::steady_clock::now() < t_end) {
+            int type = r->runParse();
+
+            if (type == LIDAR_IMU_DATA_PACKET_TYPE) {
+                unilidar::LidarImuData imu{};
+                if (!r->getImuData(imu)) {
+                    continue;
+                }
+
+                Eigen::Vector3f gyro(
+                    imu.angular_velocity[0],
+                    imu.angular_velocity[1],
+                    imu.angular_velocity[2]);
+                float gyro_norm = gyro.norm();
+
+                // Přibližně "stojím" – ignoruj velké rotační rychlosti
+                if (gyro_norm > 0.05f) {
+                    continue;
+                }
+
+                Eigen::Vector3f acc(
+                    imu.linear_acceleration[0],
+                    imu.linear_acceleration[1],
+                    imu.linear_acceleration[2]);
+                acc_samples.push_back(acc);
+            } else if (type == LIDAR_POINT_DATA_PACKET_TYPE) {
+                unilidar::PointCloudUnitree cloud;
+                if (r->getPointCloud(cloud)) {
+                    clouds.push_back(std::move(cloud));
+                }
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+
+        // Zastavit rotaci
+        try {
+            r->stopLidarRotation();
+        } catch (const std::exception &e) {
+            std::cerr << "[CALIBRATE] exception in stopLidarRotation: " << e.what() << std::endl;
+        } catch (...) {
+            std::cerr << "[CALIBRATE] unknown exception in stopLidarRotation" << std::endl;
+        }
+        r->clearBuffer();
+
+        // 2) Kontroly dat
+        if (acc_samples.empty()) {
+            std::cerr << "[CALIBRATE] no IMU samples collected" << std::endl;
+            return false;
+        }
+        if (clouds.empty()) {
+            std::cerr << "[CALIBRATE] no point clouds collected" << std::endl;
+            return false;
+        }
+
+        // 3) Orientace z IMU → R_CL
+        Eigen::Vector3f g_L = Eigen::Vector3f::Zero();
+        for (const auto &a : acc_samples) {
+            g_L += a;
+        }
+        g_L /= static_cast<float>(acc_samples.size());
+
+        if (!std::isfinite(g_L.x()) || !std::isfinite(g_L.y()) || !std::isfinite(g_L.z())) {
+            std::cerr << "[CALIBRATE] invalid IMU average" << std::endl;
+            return false;
+        }
+        if (g_L.norm() < 1e-3f) {
+            std::cerr << "[CALIBRATE] IMU gravity vector too small" << std::endl;
+            return false;
+        }
+
+        Eigen::Vector3f z_C = -g_L.normalized(); // +z_C nahoru
+        Eigen::Vector3f z_L(0.0f, 0.0f, 1.0f);
+
+        Eigen::Vector3f x_C = z_L - (z_L.dot(z_C)) * z_C; // projekce osy z_L do roviny ⟂ g
+        if (x_C.norm() < 1e-6f) {
+            x_C = Eigen::Vector3f(1.0f, 0.0f, 0.0f);
+        } else {
+            x_C.normalize();
+        }
+        Eigen::Vector3f y_C = z_C.cross(x_C).normalized();
+
+        Eigen::Matrix3f R_CL;
+        R_CL.row(0) = x_C.transpose();
+        R_CL.row(1) = y_C.transpose();
+        R_CL.row(2) = z_C.transpose();
+
+        // 4) Hledání roviny země v ROI: x∈[0.30,0.70], |y|≤0.20
+        std::vector<float> z_vals;
+        z_vals.reserve(100000);
+
+        const float roi_x_min = 0.30f;
+        const float roi_x_max = 0.70f;
+        const float roi_y_abs = 0.20f;
+        const float roi_z_abs = 1.0f;
+
+        for (const auto &cloud : clouds) {
+            for (const auto &pt : cloud.points) {
+                Eigen::Vector3f p_L(pt.x, pt.y, pt.z);
+                Eigen::Vector3f p_C = R_CL * p_L;
+
+                const float x = p_C.x();
+                const float y = p_C.y();
+                const float z = p_C.z();
+
+                if (x < roi_x_min || x > roi_x_max) continue;
+                if (std::fabs(y) > roi_y_abs) continue;
+                if (std::fabs(z) > roi_z_abs) continue;
+
+                z_vals.push_back(z);
+            }
+        }
+
+        const std::size_t N = z_vals.size();
+        if (N < 1000) {
+            std::cerr << "[CALIBRATE] not enough ground points in ROI, got " << N << std::endl;
+            return false;
+        }
+
+        std::sort(z_vals.begin(), z_vals.end());
+        float h = 0.0f;
+        if (N % 2 == 1) {
+            h = z_vals[N/2];
+        } else {
+            h = 0.5f * (z_vals[N/2 - 1] + z_vals[N/2]);
+        }
+
+        std::size_t count_ok = 0;
+        const float max_dev = 0.05f; // ±5 cm
+        for (float z : z_vals) {
+            if (std::fabs(z - h) <= max_dev) {
+                ++count_ok;
+            }
+        }
+        const double ratio = static_cast<double>(count_ok) / static_cast<double>(N);
+        if (ratio < 0.9) {
+            std::cerr << "[CALIBRATE] ground plane test failed: ratio=" << ratio
+                      << " (N=" << N << ")" << std::endl;
+            return false;
+        }
+
+        Eigen::Matrix4f T_CL = Eigen::Matrix4f::Identity();
+        T_CL.block<3,3>(0,0) = R_CL;
+        T_CL(2,3) = -h; // země → z_C = 0
+
+        // 5) Detekce obrysu robota (z≥5 cm, r≤1 m)
+        const float r_max        = 1.0f;
+        const float z_robot_min  = 0.05f;
+
+        float x_robot_max = -std::numeric_limits<float>::infinity();
+        float y_robot_min =  std::numeric_limits<float>::infinity();
+        float y_robot_max = -std::numeric_limits<float>::infinity();
+
+        for (const auto &cloud : clouds) {
+            for (const auto &pt : cloud.points) {
+                Eigen::Vector4f p_L_h(pt.x, pt.y, pt.z, 1.0f);
+                Eigen::Vector4f p_C_h = T_CL * p_L_h;
+
+                const float x = p_C_h.x();
+                const float y = p_C_h.y();
+                const float z = p_C_h.z();
+
+                if (z < z_robot_min) continue;
+
+                const float r2 = x*x + y*y;
+                if (r2 > r_max * r_max) continue;
+
+                if (x > x_robot_max) x_robot_max = x;
+                if (y < y_robot_min) y_robot_min = y;
+                if (y > y_robot_max) y_robot_max = y;
+            }
+        }
+
+        if (!std::isfinite(x_robot_max) ||
+            !std::isfinite(y_robot_min) ||
+            !std::isfinite(y_robot_max)) {
+            std::cerr << "[CALIBRATE] no robot points detected" << std::endl;
+            return false;
+        }
+
+        const float safety_x = 0.05f;
+        const float safety_y = 0.05f;
+
+        LidarCalibration calib;
+        calib.T_CL         = T_CL;
+        calib.mask_front_x = x_robot_max + safety_x;
+        calib.mask_x_min   = -0.70f; // zadní hrana robota (konstanta)
+        calib.mask_y_min   = y_robot_min - safety_y;
+        calib.mask_y_max   = y_robot_max + safety_y;
+
+        if (!saveCalibration(file, calib)) {
+            std::cerr << "[CALIBRATE] failed to save calibration to " << file << std::endl;
+            return false;
+        }
+
+        {
+            std::lock_guard<std::mutex> lg(mtx_);
+            calibration_        = calib;
+            calibration_loaded_ = true;
+            point_processing_.configure(calibration_);
+            point_processing_.clear();
+        }
+
+        std::cout << "[CALIBRATE] done: h=" << h
+                  << ", mask_front_x=" << calib.mask_front_x
+                  << ", mask_x_min="  << calib.mask_x_min
+                  << ", mask_y_min="  << calib.mask_y_min
+                  << ", mask_y_max="  << calib.mask_y_max
+                  << std::endl;
+
+        return true;
     }
 
 
@@ -526,10 +761,14 @@ private:
         }
     }
 
+
+
     // ------------------------------------------------------------------------
     // Členské proměnné
     // ------------------------------------------------------------------------
 
+    LidarCalibration calibration_;
+    bool             calibration_loaded_{false};
     std::unique_ptr<unilidar::UnitreeLidarReader, RD> reader_;
     std::thread worker_;
     //PLYLogger raw_logger_;   // syrový cloud
@@ -542,4 +781,5 @@ private:
     std::atomic<uint64_t> seq_;
 
     mutable std::mutex mtx_;
+
 };

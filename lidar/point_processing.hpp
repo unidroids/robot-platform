@@ -11,9 +11,11 @@
 #include <iomanip>
 #include <ctime>
 #include <iostream>
+#include <vector>
 
 #include <Eigen/Dense>
-#include "unitree_lidar_utilities.h"   // PointCloudUnitree, PointUnitree :contentReference[oaicite:1]{index=1}
+#include "unitree_lidar_utilities.h"
+#include "lidar_calibration.hpp"
 
 class LidarPointProcessing
 {
@@ -32,6 +34,25 @@ public:
 
     LidarPointProcessing() = default;
 
+    // Nastavení kalibrace (T_CL v metrech + maska robota v metrech).
+    void configure(const LidarCalibration &calib)
+    {
+        T_CL_         = calib.T_CL;
+        mask_front_x_ = calib.mask_front_x;
+        mask_x_min_   = calib.mask_x_min;
+        mask_y_min_   = calib.mask_y_min;
+        mask_y_max_   = calib.mask_y_max;
+        has_calibration_ = true;
+
+        std::cout << "[LidarPointProcessing] calibration configured: "
+                  << "mask_front_x=" << mask_front_x_
+                  << " x_min=" << mask_x_min_
+                  << " y_min=" << mask_y_min_
+                  << " y_max=" << mask_y_max_
+                  << std::endl;
+    }
+
+
     // Aktualizace z nového cloud-u (v lidar frame, v metrech).
     void updateCloud(const unilidar_sdk2::PointCloudUnitree &cloud_in)
     {
@@ -43,13 +64,14 @@ public:
         // 2) Zápis bodů do ring bufferu.
         for (const auto &pt : cloud_robot.points) {
             Sample s;
-            s.x = pt.x;           // už ve tvém měřítku (cm) díky Ms=100 v transformMatrix
+            // Pozn.: už v cm díky Ms v processingTransform()
+            s.x = pt.x;
             s.y = pt.y;
             s.z = pt.z;
             s.intensity = pt.intensity;
-            s.ftime = base_stamp; 
-            s.rtime = static_cast<double>(pt.time); // point.time je relativní od cloud.stamp :contentReference[oaicite:2]{index=2}
-            s.ring = pt.ring;
+            s.ftime = base_stamp;
+            s.rtime = static_cast<double>(pt.time);
+            s.ring  = pt.ring;
 
             pushSample(s);
         }
@@ -112,7 +134,8 @@ public:
 private:
     // ---------- Geometrie / transformace -----------------------------------
 
-    static const Eigen::Matrix4f &transformMatrix()
+    // Výchozí (původní) transformace, pokud není k dispozici kalibrace.
+    static const Eigen::Matrix4f &defaultTransformMatrix()
     {
         static const Eigen::Matrix4f M = [] {
             const float deg  = static_cast<float>(M_PI) / 180.0f;
@@ -138,26 +161,47 @@ private:
             Ms(0,0) = Ms(1,1) = Ms(2,2) = 100.0f;   // škálování 100× (m → cm)
 
             Eigen::Matrix4f T  = Eigen::Matrix4f::Identity();
-            T(2,3) = 0.0f;   // případný posun v +z
+            T(2,3) = 0.0f;
 
             Eigen::Matrix4f Tx = T * Ms * Mz * Ry * Rz;  // aplikace na column vektory
-            std::cout << "LidarPointProcessing::Tx =\n" << Tx << "\n\n";
+            std::cout << "LidarPointProcessing::default Tx =\n" << Tx << "\n\n";
             return Tx;
         }();
         return M;
     }
 
-    static bool ignoreBox(float x, float y)
+    // Transformace použitá pro zpracování (pokud je kalibrace → Ms * T_CL, jinak default).
+    Eigen::Matrix4f processingTransform() const
     {
-        // Kvádr robota ve cm v rámce robota; body uvnitř ignorujeme.
-        return (y > -20.0f && y <  20.0f &&
-                x <  20.0f && x > -50.0f);
+        if (has_calibration_) {
+            Eigen::Matrix4f Ms = Eigen::Matrix4f::Identity();
+            Ms(0,0) = Ms(1,1) = Ms(2,2) = 100.0f;   // m → cm
+            return Ms * T_CL_;
+        } else {
+            return defaultTransformMatrix();
+        }
     }
 
-    static unilidar_sdk2::PointCloudUnitree
-    transformCloud(const unilidar_sdk2::PointCloudUnitree &src)
+    // Maska robota – vstup v cm (proto dělení 100.0 v případě kalibrace).
+    bool ignoreBox(float x_cm, float y_cm) const
     {
-        const Eigen::Matrix4f &T = transformMatrix();
+        if (has_calibration_) {
+            const float x = x_cm / 100.0f;  // zpět do metrů
+            const float y = y_cm / 100.0f;
+
+            return (x >= mask_x_min_   && x <= mask_front_x_ &&
+                    y >= mask_y_min_   && y <= mask_y_max_);
+        } else {
+            // původní fixní kvádr v cm
+            return (y_cm > -20.0f && y_cm <  20.0f &&
+                    x_cm <  20.0f && x_cm > -50.0f);
+        }
+    }
+
+    unilidar_sdk2::PointCloudUnitree
+    transformCloud(const unilidar_sdk2::PointCloudUnitree &src) const
+    {
+        const Eigen::Matrix4f T = processingTransform();
         unilidar_sdk2::PointCloudUnitree dst;
         dst.stamp   = src.stamp;
         dst.id      = src.id;
@@ -180,13 +224,14 @@ private:
             o.y = q.y();
             o.z = q.z();
             o.intensity = pt.intensity;
-            o.time      = pt.time;   // stále relativní od cloud.stamp
+            o.time      = pt.time;   // relativní od cloud.stamp
             o.ring      = pt.ring;
             dst.points.push_back(o);
         }
 
         return dst;
     }
+
 
     // ---------- Ring buffer -------------------------------------------------
 
@@ -288,7 +333,18 @@ private:
     }
 
 private:
+
+    // Kalibrace LiDARu → rámec C (v metrech) + maska robota (v metrech)
+    Eigen::Matrix4f T_CL_        = Eigen::Matrix4f::Identity();
+    float           mask_front_x_ = 0.0f;
+    float           mask_x_min_   = 0.0f;
+    float           mask_y_min_   = 0.0f;
+    float           mask_y_max_   = 0.0f;
+    bool            has_calibration_ = false;
+
+    // ---------- Ring buffer -------------------------------------------------
     std::array<Sample, kCapacity> buffer_{};
-    std::uint16_t head_{0};   // index pro další zápis (automaticky přeteče mod 2^16)
-    std::size_t   size_{0};   // počet platných prvků (<= kCapacity)
+    std::uint16_t head_{0};
+    std::size_t   size_{0};
+
 };

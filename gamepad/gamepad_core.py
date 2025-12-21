@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # pygame čtení + výpočty + ring buffer + toggling režimu SELECT
-import os, time, threading, json, pygame
+import os, time, threading, pygame
 
 # --- Konstants ---
 POLL_PERIOD_SEC = 0.025          # 25 ms

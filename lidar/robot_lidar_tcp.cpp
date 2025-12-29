@@ -102,6 +102,9 @@ void handle_client(int sock) {
                 } else {
                     send_line(sock, "-1 -1");   // vzdálenost zatím není známa
                 }
+            } else if (line == "CALIBRATE") {
+                bool ok = lidar.calibrate();
+                send_line(sock, ok ? "OK CALIBRATED" : "ERR CALIBRATE");
             } else if (line == "CORIDORS") {
                 
             } else if (line.rfind("MODE ", 0) == 0) {

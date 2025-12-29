@@ -277,7 +277,7 @@ private:
     void loopRead() {
         LidarRawLogger raw_logger;
 
-        while (running_.load(std::memory_oder_reaxed)) 
+        while (running_.load(std::memory_order_relaxed)) {
             int type = reader_.runParse();
             uint64_t mono_ts_ns = getMonotonicTimeNs();
 

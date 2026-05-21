@@ -236,11 +236,13 @@ private:
 
         point_buffer_.pushCloud(cloud, calibration_.T_CL);
 
+        /*
         float cloud_min = distance_evaluator_.distance(point_buffer_);
         if (cloud_min >= 0.0f) {
             latest_.store(cloud_min, std::memory_order_relaxed);
             seq_.fetch_add(1u, std::memory_order_relaxed);
         }
+        */
     }
 
     void processIMUData() {

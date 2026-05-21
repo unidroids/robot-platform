@@ -111,6 +111,15 @@ def handle_client(conn: socket.socket, addr):
                             start_manual_workflow(client_conn=conn)
                             safe_send(conn, "OK MANUAL WORKFLOW STARTED\n")
 
+                    # ---- WORKFLOW – AUTO ------------------------------------
+                    elif cmd == "AUTO":
+                        running = _any_workflow_running()
+                        if running:
+                            safe_send(conn, f"ERR: workflow {running} je právě aktivní\n")
+                        else:
+                            start_auto_workflow(client_conn=conn)
+                            safe_send(conn, "OK AUTO WORKFLOW STARTED\n")
+
                     # ---- WORKFLOW – DEMO ------------------------------------
                     elif cmd == "DEMO":
                         running = _any_workflow_running()
@@ -128,15 +137,6 @@ def handle_client(conn: socket.socket, addr):
                         else:
                             start_point_workflow(client_conn=conn)
                             safe_send(conn, "OK TO POINT WORKFLOW STARTED\n")
-
-                    # ---- WORKFLOW – AUTO ------------------------------------
-                    elif cmd == "AUTO":
-                        running = _any_workflow_running()
-                        if running:
-                            safe_send(conn, f"ERR: workflow {running} je právě aktivní\n")
-                        else:
-                            start_auto_workflow(client_conn=conn)
-                            safe_send(conn, "OK AUTO WORKFLOW STARTED\n")
 
                     # ---- WORKFLOW – SET-POINT (uložení aktuálního bodu) -----
                     elif cmd == "SET-POINT":

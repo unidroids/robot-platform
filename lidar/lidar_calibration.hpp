@@ -214,8 +214,10 @@ public:
         }
 
         std::cout << "[CALIBRATE] data stream check: "
-                  << (has_imu ? "IMU OK " : "IMU MISSING ")
-                  << (has_cloud ? "CLOUD OK" : "CLOUD MISSING") << std::endl;
+                  << (has_imu < 100 ? "IMU MISSING" : "IMU OK") << " (" << has_imu << ") "
+                  << (has_cloud < 100 ? "CLOUD MISSING" : "CLOUD OK") << " (" << has_cloud << ")" << std::endl;
+        
+        if (has_imu < 100 || has_cloud < 100) return false;
 
         std::vector<Eigen::Vector3f> acc_samples;
         acc_samples.reserve(5000);
@@ -667,9 +669,10 @@ public:
 
 
 
-        // ***** 4) Hledání roviny země v ROI: x∈[0.30,0.70]
+        // ***** 4) Hledání roviny země v ROI: x∈[0.30,0.70] a výpočet normály roviny země
         std::vector<float> z_vals;
         z_vals.reserve(100000);
+        // tpoints obsahuje všechny body (i mimo ROI), filtrujeme až při průchodu
         std::vector<Eigen::Vector3f> tpoints;
         tpoints.reserve(100000);
 
@@ -737,9 +740,68 @@ public:
             return false;
         }
 
+
+        // 4a) Určení normály roviny země (PCA na inliers)
+        Eigen::Vector3f centroid = Eigen::Vector3f::Zero();
+        std::vector<Eigen::Vector3f> inliers;
+        inliers.reserve(count_ok);
+
+        for (const auto &p : tpoints) {
+            // Znovu filtrujeme ROI (tpoints obsahuje vše)
+            if (p.x() < roi_x_min || p.x() > roi_x_max) continue;
+            if (std::fabs(p.y()) > roi_y_abs) continue;
+            // Z-inlier check vůči mediánu
+            if (std::fabs(p.z() - h) > max_dev) continue;
+
+            inliers.push_back(p);
+            centroid += p;
+        }
+
+        if (inliers.empty()) {
+            std::cerr << "[CALIBRATE] no inliers for normal computation" << std::endl;
+            return false;
+        }
+        centroid /= static_cast<float>(inliers.size());
+
+        Eigen::Matrix3f cov = Eigen::Matrix3f::Zero();
+        for (const auto &p : inliers) {
+            Eigen::Vector3f d = p - centroid;
+            cov += d * d.transpose();
+        }
+        cov /= static_cast<float>(inliers.size());
+
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver(cov);
+        // Normála odpovídá vlastnímu vektoru s nejmenším vlastním číslem (sloupec 0)
+        Eigen::Vector3f normal = solver.eigenvectors().col(0);
+
+        // Orientace normály nahoru (ve směru Z)
+        if (normal.z() < 0) {
+            normal = -normal;
+        }
+        std::cout << "[CALIBRATE] ground normal: " << normal.transpose() << std::endl;
+
+        // 4b) Oprava transformační matice (zarovnání normály s osou Z)
+        Eigen::Quaternionf q_corr = Eigen::Quaternionf::FromTwoVectors(normal, Eigen::Vector3f::UnitZ());
+        Eigen::Matrix3f R_corr = q_corr.toRotationMatrix();
+
+        // Aktualizujeme R_CL o korekci
+        R_CL = R_corr * R_CL;
+
+        // Přepočítáme výšku h v novém rámci (střední hodnota Z inlierů po rotaci)
+        double sum_z_new = 0.0;
+        for (const auto &p : inliers) {
+            // p je v původním R_CL rámci, aplikujeme R_corr
+            Eigen::Vector3f p_new = R_corr * p;
+            sum_z_new += p_new.z();
+        }
+        float h_new = static_cast<float>(sum_z_new / inliers.size());
+        std::cout << "[CALIBRATE] corrected height h=" << h << " -> h_new=" << h_new << std::endl;
+
         Eigen::Matrix4f T_CL = Eigen::Matrix4f::Identity();
         T_CL.block<3,3>(0,0) = R_CL;
-        T_CL(2,3) = -h; // země → z_C = 0
+        T_CL(2,3) = -h_new; // země → z_C = 0
+
+
 
         // 5) Detekce obrysu robota (z≥5 cm, r≤1 m)
         const float r_max        = 0.7f;

@@ -23,6 +23,22 @@ Tým **Unidroids** je novým účastníkem soutěže **Robotour 2025**. Náš ro
 * **Komunikace:** sockety (mezi službami), HTTP pouze pro externí API (FastAPI)
 * **Záznamy:** logování obrazu, lidarových dat, pohybu a GNSS do /robot/data/logs
 
+## 🔌 Služby a porty
+
+| Služba       | Port | Popis                                         |
+| ------------ | ---- | --------------------------------------------- |
+| **CAMERA**   | 9001 | Snímání obrazu, segmentace a logování         |
+| **LIDAR**    | 9002 | Zpracování dat z L2 lidaru                    |
+| **DRIVE**    | 9003 | Řízení podvozku (hoverboard)                  |
+| **JOURNEY**  | 9004 | Hlavní orchestrátor workflow                  |
+| **GAMEPAD**  | 9005 | Poskytuje informace z gamepadu                |
+| **GNSS**     | 9006 | Zpracování polohy (F9R) a IMU                 |
+| **PERFECT**  | 9007 | PointPerfect NTRIP klient (korekční data)     |
+| **PILOT**    | 9008 | Autonomní řízení a sledování trasy            |
+| **FUSION**   | 9009 | Lokální fúze polohy a odometrie               |
+| **HEADING**  | 9010 | Výpočet orientace (externí kompas/IMU)        |
+
+
 ## 🎥 Registrační video
 
 YouTube video: [ROBOTOUR 2025 REGISTRATION – Unidroids](https://www.youtube.com/watch?v=jIPX0ZO7tB0)

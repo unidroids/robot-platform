@@ -64,6 +64,35 @@ async def set_latest_waypoints():
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@router.get("/journey/load-route/{route_id}")
+async def load_route(route_id: str):
+    try:
+        waypoints_dir = "/opt/projects/robotour/journey/waypoints"
+        route_file = os.path.join(waypoints_dir, "_route.json")
+        
+        # Bezpečnostní kontrola proti path traversal
+        if ".." in route_id or "/" in route_id or "\\" in route_id:
+            return JSONResponse(status_code=400, content={"error": "Neplatný formát parametru route_id."})
+            
+        source_file = os.path.join(waypoints_dir, f"_route-{route_id}.json")
+        
+        if not os.path.exists(source_file):
+            return JSONResponse(status_code=404, content={"error": f"Zdrojový soubor trasy nebyl nalezen: _route-{route_id}.json"})
+            
+        # Pokud existuje aktuální _route.json, vytvoříme zálohu s přesností na sekundy
+        if os.path.exists(route_file):
+            ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            backup_file = route_file.replace(".json", f"_{ts}.json")
+            shutil.copy2(route_file, backup_file)
+            
+        # Přepsání aktuálního _route.json vybranými daty
+        os.makedirs(os.path.dirname(route_file), exist_ok=True)
+        shutil.copy2(source_file, route_file)
+        
+        return {"action": "load-route", "status": "ok", "route_id": route_id, "source": source_file, "destination": route_file}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @router.get("/journey/{action}")
 async def journey_action(action: str):
     action = action.lower()

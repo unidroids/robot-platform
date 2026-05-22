@@ -209,12 +209,16 @@ def _auto_workflow():
                     pass
                 last_status_ts = now
 
-            if (_unsafe(hacc_mm, dist_cm) or brake_phase) and not _safe_to_go(hacc_mm, dist_cm):
-                _safe_send_to_client("STATE: UNSAFE -> HALT\n")
-                _send_and_report(PORT_DRIVE, "HALT", expect_response=True)
-                brake_phase = True
-                route_sent = False
-                time.sleep(0.2)
+            if _unsafe(hacc_mm, dist_cm):
+                if not brake_phase:
+                    _safe_send_to_client("STATE: UNSAFE -> HALT\n")
+                    _send_and_report(PORT_DRIVE, "HALT", expect_response=True)
+                    brake_phase = True
+                time.sleep(0.10)
+                continue
+
+            if brake_phase and not _safe_to_go(hacc_mm, dist_cm):
+                time.sleep(0.10)
                 continue
 
             if _safe_to_go(hacc_mm, dist_cm):

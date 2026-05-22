@@ -3,6 +3,8 @@ import sys
 import json
 import traceback
 
+from data.waypoints_data import WayPointsData
+
 def ensure_running(f, pilot):
     if not pilot.running:
         f.write(b"ERR: PILOT not started, use START first\n")
@@ -58,6 +60,7 @@ def client_thread(sock, addr, pilot):
                 # --- doména pilot ---
                 elif line.startswith("NAVIGATE"):
                     # NAVIGATE <start_lon> <start_lat> <end_lon> <end_lat> <end_radius>
+                    print(f"[Clinet] NAVIGATE payload:{line}")
                     if not ensure_running(f, pilot):
                         continue
                     try:
@@ -72,8 +75,26 @@ def client_thread(sock, addr, pilot):
                         goal_lon = float(parts[4])
                         goal_radius = float(parts[5])
                         # Pilot očekává (lon, lat); výpočty si uvnitř přemapují na (lat, lon)
-                        pilot.navigate(start_lat, start_lon, goal_lat, goal_lon, goal_radius)
+                        pilot.navigate_to_point(start_lat, start_lon, goal_lat, goal_lon, goal_radius)
                         f.write(b'OK NAVIGATE\n')
+                    except Exception as e:
+                        f.write(f"ERR: {e}\n".encode())
+                        traceback.print_exc()
+                    f.flush()
+
+                elif line.startswith("WAYPOINTS"):
+                    print(f"[Clinet] WAYPOINTS payload:{line}")
+                    if not ensure_running(f, pilot):
+                        continue
+                    try:
+                        payload = line[9:].strip() # Odstraní slovo "WAYPOINTS"
+                        if not payload:
+                            f.write(b'ERR: WAYPOINTS expects JSON payload\n')
+                            f.flush()
+                            continue
+                        route = WayPointsData.from_json(payload)
+                        pilot.navigate_way_points(route, goal_radius=1.0)
+                        f.write(b'OK WAYPOINTS\n')
                     except Exception as e:
                         f.write(f"ERR: {e}\n".encode())
                         traceback.print_exc()

@@ -13,6 +13,7 @@ from data.nav_fusion_data import NavFusionData
 
 from geo_utils import heading_gnss_to_enu, lla_to_ecef, ecef_to_enu
 from near_waypoint import NearWaypoint
+from data.waypoints_data import WayPointsData, Waypoint
 
 from data_loger import DataLogger
 
@@ -118,25 +119,35 @@ class Pilot:
 
     # ---------------------- navigační vlákno -----------------
 
-    def _navigate_thread(self, fusion: FusionClient, drive: DriveClient, start_lat, start_lon, goal_lat, goal_lon, goal_radius,):
+    def _navigate_thread(self, fusion: FusionClient, drive: DriveClient, route: WayPointsData, goal_radius: float):
         """
         Navigační smyčka:
         - čte GNSS NavFusionData (10 Hz)
-        - vybere near point na přímce S–E s L_near
-        - vyhodnotí waypoint/cíl
+        - vybere near point na aktuálním úseku (segmentu) routy s L_near
+        - vyhodnotí waypoint/cíl a případně přepne na další segment
         - vypočte korekci rychlostí kol
         - odešle rychlosti kol do služby drive
         """
-        S_lat, S_lon = float(start_lat), float(start_lon)
-        E_lat, E_lon = float(goal_lat), float(goal_lon)
         GOAL_RADIUS = float(goal_radius)
 
-        print(f"[PILOT] Navigation started: from (lat={S_lat}, lon={S_lon}) "
-              f"to (lat={E_lat}, lon={E_lon}) within radius {GOAL_RADIUS}m")
+        if not route or len(route.waypoints) < 2:
+            print("[PILOT] Error: Route must contain at least 2 waypoints.")
+            return
 
         L_NEAR = 2  # lookahead pro near point (m)
         B = 0.58     # rozchod kol (m)
-        nearwaypoint = NearWaypoint(S_lat=S_lat, S_lon=S_lon, E_lat=E_lat, E_lon=E_lon, L_near_m=L_NEAR)
+
+        total_waypoints = len(route.waypoints)
+        current_idx = 0
+
+        def init_segment(idx):
+            S = route.waypoints[idx]
+            E = route.waypoints[idx+1]
+            print(f"[PILOT] Navigating segment {idx+1}/{total_waypoints-1}: "
+                  f"from (lat={S.lat:.6f}, lon={S.lon:.6f}) to (lat={E.lat:.6f}, lon={E.lon:.6f})")
+            return NearWaypoint(S_lat=S.lat, S_lon=S.lon, E_lat=E.lat, E_lon=E.lon, L_near_m=L_NEAR)
+
+        nearwaypoint = init_segment(current_idx)
 
 
         max_erros = 5
@@ -166,7 +177,7 @@ class Pilot:
               "raw_speed,smooth_speed,speed_acc," # speed
               "last_gyroZ,smooth_gyroZ,gyroZ_acc," # gyroZ
               "gnssFixOK,drUsed," # fix types
-              "distance_to_goal_m,abs_distance_to_goal_m,heading_to_near_gnss_deg," # near point
+              "segment_idx,distance_to_goal_m,abs_distance_to_goal_m,heading_to_near_gnss_deg," # near point
               "heading_error_deg," # heading error
               "left_speed,right_speed,kappa,drive_mode," # drive commands
               "heading_comp_deg,smooth_heading_comp_deg" # heading compensation
@@ -206,8 +217,8 @@ class Pilot:
                     f"{nav.gyroZ:.2f},{nav.gyroZ:.2f},{nav.gyroZAcc:.2f}," # gyroZ
                     # fix types "gnssFixOK,drUsed," 
                     f"{int(nav.gnssFixOK)},{int(nav.drUsed)}," # fix types
-                    # near point "distance_to_goal_m,abs_distance_to_goal_m,heading_to_near_gnss_deg," 
-                    f"{distance_to_goal_m:.2f},{abs_distance_to_goal_m:.2f},{heading_to_near_gnss_deg:.2f},"
+                    # near point "segment_idx,distance_to_goal_m,abs_distance_to_goal_m,heading_to_near_gnss_deg," 
+                    f"{current_idx},{distance_to_goal_m:.2f},{abs_distance_to_goal_m:.2f},{heading_to_near_gnss_deg:.2f},"
                     # heading error "heading_error_deg,"
                     f"{heading_error:.2f},"
                     # drive commands "left_speed,right_speed,kappa,drive_mode," 
@@ -219,12 +230,18 @@ class Pilot:
                 # 2) Zjisti near point
                 (distance_to_goal_m, abs_distance_to_goal_m, heading_to_near_gnss_deg) = nearwaypoint.update(R_lat=nav.lat, R_lon=nav.lon)
 
-                # 3) Ověř zda jsi v cíli
-                if abs_distance_to_goal_m <= GOAL_RADIUS:
-                    print(f"[PILOT] Goal reached -> stop. Distance to goal: {distance_to_goal_m:.2f} m")
-                    drive.send_break()
-                    self._set_state(mode="GOAL_REACHED", last_note="Goal reached")
-                    break
+                # 3) Ověř zda jsi v cíli aktuálního segmentu (i pokud jsme jej lehce přejeli)
+                if abs_distance_to_goal_m <= GOAL_RADIUS or distance_to_goal_m < 0.0:
+                    if current_idx + 1 < total_waypoints - 1:
+                        current_idx += 1
+                        nearwaypoint = init_segment(current_idx)
+                        print(f"[PILOT] Waypoint {current_idx} reached, switching to next segment. (dist: {abs_distance_to_goal_m:.2f} m)")
+                        continue
+                    else:
+                        print(f"[PILOT] Final goal reached -> stop. Distance to goal: {distance_to_goal_m:.2f} m")
+                        drive.send_break()
+                        self._set_state(mode="GOAL_REACHED", last_note="Goal reached")
+                        break
                 
                 # 4) Ověř zda existje near point
                 if not heading_to_near_gnss_deg:
@@ -307,7 +324,14 @@ class Pilot:
                 #result = drive.send_pwm(1,1) # testovací duty cycle
                 print("[Pilot]", pwm, left_speed, right_speed, result, heading_error, loop_dt_ms)
                 #print(f"[PILOT] Drive command sent: PWM={pwm}, left_speed={left_speed} cm/s, right_speed={right_speed} cm/s")
-                # TODO: check result?
+                
+                # 8) Handle chybu v komunikaci
+                if result != "OK":
+                    try:
+                        drive.send_break()
+                    except:
+                        pass    
+                    raise RuntimeError(f"Drive service failed with result: {result}")
 
             except Exception as e:
                 drive.send_break()
@@ -318,6 +342,10 @@ class Pilot:
                 if error_count >= max_erros:
                     print("[PILOT] Maximum error count reached, stopping navigation.")
                     self._set_state(mode="GOAL_NOT_REACHED", last_note="Max errors reached")
+                    try:
+                        drive.send_break()
+                    except:
+                        pass    
                     break
 
         drive.send_break()
@@ -328,7 +356,7 @@ class Pilot:
 
     # ---------------------- API pro řízení -------------------
 
-    def navigate(self, start_lat, start_lon, goal_lat, goal_lon, goal_radius):
+    def navigate_way_points(self, route: WayPointsData, goal_radius: float = 1.0):
         fusion = self.fusion_client
         drive = self.drive_client
         with self._lock:
@@ -339,10 +367,22 @@ class Pilot:
             self._stop_event.clear()
             self._thread = threading.Thread(
                 target=self._navigate_thread,
-                args=(fusion, drive, start_lat, start_lon, goal_lat, goal_lon, goal_radius,),
+                args=(fusion, drive, route, goal_radius),
                 daemon=True
             )
             self._thread.start()
+
+
+    def navigate_to_point(self, start_lat, start_lon, goal_lat, goal_lon, goal_radius:float = 1.0):
+        # Zabalené pro zpětnou kompatibilitu do struktury route o 2 bodech
+        route = WayPointsData(
+            waypoints=[
+                Waypoint(lat=float(start_lat), lon=float(start_lon), curvature=0.0, path_width_m=0.0, rel_azimuth_deg=0.0, corridors=[]),
+                Waypoint(lat=float(goal_lat),  lon=float(goal_lon),  curvature=0.0, path_width_m=0.0, rel_azimuth_deg=0.0, corridors=[])
+            ]
+        )
+        self.navigate_way_points(route, float(goal_radius))
+
 
 if __name__ == "__main__":
     print(f"Sign test {_sign(-30)} {_sign(0)} {_sign(30)}") 

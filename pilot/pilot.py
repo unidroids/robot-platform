@@ -326,12 +326,13 @@ class Pilot:
                 #print(f"[PILOT] Drive command sent: PWM={pwm}, left_speed={left_speed} cm/s, right_speed={right_speed} cm/s")
                 
                 # 8) Handle chybu v komunikaci
-                if result != "OK":
-                    try:
-                        drive.send_break()
-                    except:
-                        pass    
-                    raise RuntimeError(f"Drive service failed with result: {result}")
+                #if result != "OK":
+                #    if result.startswith("ERROR RuntimeError: Command error CE=3"):
+                #        pass
+                #    elif result.startswith("ERROR RuntimeError: Command error CE=4"):
+                #        pass
+                #    else:
+                #        raise RuntimeError(f"Drive service failed with result: {result}")
 
             except Exception as e:
                 drive.send_break()

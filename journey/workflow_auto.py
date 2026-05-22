@@ -3,6 +3,8 @@ import time
 import socket
 import json
 import re
+
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -95,14 +97,6 @@ def _gnss_hacc_mm() -> Optional[float]:
 def _pilot_status() -> str:
     resp = _send_and_report(PORT_PILOT, "STATUS")
     return resp.strip().upper()
-
-
-def _emergency_brake_5s() -> None:
-    _send_and_report(PORT_DRIVE, "HALT", expect_response=True)
-    t_end = time.time() + 5.0
-    while time.time() < t_end and not _stop_requested.is_set():
-        time.sleep(0.1)
-    _send_and_report(PORT_DRIVE, "BREAK", expect_response=True)
 
 
 def _safe_to_go(hacc_mm: Optional[float], dist_cm: Optional[float]) -> bool:
@@ -215,44 +209,51 @@ def _auto_workflow():
                     pass
                 last_status_ts = now
 
-            if _unsafe(hacc_mm, dist_cm):
-                _safe_send_to_client("STATE: UNSAFE -> CLEAR + PWM 0 0 (5s)\n")
-                _emergency_brake_5s()
+            if (_unsafe(hacc_mm, dist_cm) or brake_phase) and not _safe_to_go(hacc_mm, dist_cm):
+                _safe_send_to_client("STATE: UNSAFE -> HALT\n")
+                _send_and_report(PORT_DRIVE, "HALT", expect_response=True)
                 brake_phase = True
                 route_sent = False
+                time.sleep(0.2)
                 continue
 
-            if _safe_to_go(hacc_mm, dist_cm) and not route_sent:
-                start_lat = None
-                start_lon = None
-                resp = _send_and_report(PORT_FUSION, "DATA")
-                try:
-                    start_payload = json.loads(resp[resp.find("{"):resp.rfind("}")+1])
-                    start_lat = float(start_payload.get("lat", 0.0))
-                    start_lon = float(start_payload.get("lon", 0.0))
-                except Exception:
-                    _safe_send_to_client("ERROR: Nelze načíst aktuální GNSS pozici pro WAYPOINTS.\n")
-                    continue
-
-                try:
-                    route = _read_route()
-                    start_wp = Waypoint(
-                        lat=start_lat,
-                        lon=start_lon,
-                        curvature=0.0,
-                        path_width_m=1.0,
-                        rel_azimuth_deg=0.0,
-                        corridors=[]
-                    )
-                    route.waypoints.insert(0, start_wp)
-                    
-                    cmd = f"WAYPOINTS {route.to_json()}"
-                    _send_and_report(PORT_PILOT, cmd)
-                    route_sent = True
+            if _safe_to_go(hacc_mm, dist_cm):
+                if brake_phase:
+                    _safe_send_to_client("STATE: SAFE -> BREAK\n")
+                    _send_and_report(PORT_DRIVE, "BREAK", expect_response=True)
                     brake_phase = False
-                    _safe_send_to_client("SENT: WAYPOINTS <route_json>\n")
-                except Exception as ex:
-                    _safe_send_to_client(f"ERROR: Selhalo načtení nebo odeslání _route.json: {ex}\n")
+
+                if not route_sent:
+                    start_lat = None
+                    start_lon = None
+                    resp = _send_and_report(PORT_FUSION, "DATA")
+                    try:
+                        start_payload = json.loads(resp[resp.find("{"):resp.rfind("}")+1])
+                        start_lat = float(start_payload.get("lat", 0.0))
+                        start_lon = float(start_payload.get("lon", 0.0))
+                    except Exception:
+                        _safe_send_to_client("ERROR: Nelze načíst aktuální GNSS pozici pro WAYPOINTS.\n")
+                        continue
+
+                    try:
+                        route = _read_route()
+                        start_wp = Waypoint(
+                            lat=start_lat,
+                            lon=start_lon,
+                            curvature=0.0,
+                            path_width_m=1.0,
+                            rel_azimuth_deg=0.0,
+                            corridors=[]
+                        )
+                        route.waypoints.insert(0, start_wp)
+                        
+                        cmd = f"WAYPOINTS {route.to_json()}"
+                        _send_and_report(PORT_PILOT, cmd)
+                        route_sent = True
+                        brake_phase = False
+                        _safe_send_to_client("SENT: WAYPOINTS <route_json>\n")
+                    except Exception as ex:
+                        _safe_send_to_client(f"ERROR: Selhalo načtení nebo odeslání _route.json: {ex}\n")
 
             time.sleep(0.10)
 
@@ -261,6 +262,13 @@ def _auto_workflow():
     except Exception as e:
         log_event(f"AUTO WORKFLOW ERROR: {e}")
         _safe_send_to_client(f"WORKFLOW ERROR: {e}\n")
+        #trace
+        log_event(f"AUTO WORKFLOW ERROR: {traceback.format_exc()}")
+        _safe_send_to_client(f"WORKFLOW ERROR: {traceback.format_exc()}\n")
+
+    except KeyboardInterrupt:
+        log_event("AUTO stop requested")
+        _safe_send_to_client("WORKFLOW AUTO STOP\n  }")
 
     finally:
         try:

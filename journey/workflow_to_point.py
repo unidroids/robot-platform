@@ -117,23 +117,6 @@ def _pilot_status() -> str:
     return resp.strip().upper()
 
 
-def _emergency_brake_5s() -> None:
-    """Pošle CLEAR na PILOT a 5 s drží PWM 0 0 (50 ms interval)."""
-    _send_and_report(PORT_DRIVE, "HALT", expect_response=True)
-    #try:
-    #    _send_and_report(PORT_PILOT, "CLEAR")
-    #except Exception:
-    #    pass
-
-
-    t_end = time.time() + 5.0
-    while time.time() < t_end and not _stop_requested.is_set():
-    #    _send_and_report(PORT_DRIVE, "HALT", expect_response=False)
-        time.sleep(0.05)
-
-    _send_and_report(PORT_DRIVE, "BREAK", expect_response=True)
-
-
 def _safe_to_go(hacc_mm: Optional[float], dist_cm: Optional[float]) -> bool:
     return (hacc_mm is not None and hacc_mm < 500.0) and (dist_cm is not None and dist_cm > 50.0)
 
@@ -256,35 +239,44 @@ def _point_workflow():
 
             # d) Bezpečnostní logika
             if _unsafe(hacc_mm, dist_cm):
-                _safe_send_to_client("STATE: UNSAFE -> CLEAR + PWM 0 0 (5s)\n")
-                _emergency_brake_5s()
-                brake_phase = True
-                waypoint_sent = False
+                if not brake_phase:
+                    _safe_send_to_client("STATE: UNSAFE -> HALT\n")
+                    _send_and_report(PORT_DRIVE, "HALT", expect_response=True)
+                    brake_phase = True
+                    waypoint_sent = False
+                continue
+
+            if brake_phase and not _safe_to_go(hacc_mm, dist_cm):
                 continue
 
             # e) Když je bezpečno a ještě jsme neposlali waypoint (nebo po brzde)
-            if _safe_to_go(hacc_mm, dist_cm) and not waypoint_sent:
-                # Získej aktuální GNSS pozici jako start
-                start_lat = None
-                start_lon = None
-                # Ověř, že hacc_mm je validní a načti aktuální GNSS pozici
-                resp = _send_and_report(PORT_FUSION, "DATA")
-                try:
-                    start_payload = json.loads(resp[resp.find("{"):resp.rfind("}")+1])
-                    start_lat = float(start_payload.get("lat", 0.0))
-                    start_lon = float(start_payload.get("lon", 0.0))
-                except Exception:
-                    _safe_send_to_client("ERROR: Nelze načíst aktuální GNSS pozici pro NAVIGATE.\n")
-                    continue
+            if _safe_to_go(hacc_mm, dist_cm):
+                if brake_phase:
+                    _safe_send_to_client("STATE: SAFE -> BREAK\n")
+                    _send_and_report(PORT_DRIVE, "BREAK", expect_response=True)
+                    brake_phase = False
 
-                # Cíl z ini souboru
-                goal_lat, goal_lon, radius = _read_point_ini()
+                if not waypoint_sent:
+                    # Získej aktuální GNSS pozici jako start
+                    start_lat = None
+                    # Ověř, že hacc_mm je validní a načti aktuální GNSS pozici
+                    resp = _send_and_report(PORT_FUSION, "DATA")
+                    try:
+                        start_payload = json.loads(resp[resp.find("{"):resp.rfind("}")+1])
+                        start_lat = float(start_payload.get("lat", 0.0))
+                        start_lon = float(start_payload.get("lon", 0.0))
+                    except Exception:
+                        _safe_send_to_client("ERROR: Nelze načíst aktuální GNSS pozici pro NAVIGATE.\n")
+                        continue
 
-                cmd = f"NAVIGATE {start_lat:.7f} {start_lon:.7f} {goal_lat:.7f} {goal_lon:.7f} {radius:.3f}"
-                _send_and_report(PORT_PILOT, cmd)
-                waypoint_sent = True
-                brake_phase = False
-                _safe_send_to_client(f"SENT: {cmd}\n")
+                    # Cíl z ini souboru
+                    goal_lat, goal_lon, radius = _read_point_ini()
+
+                    cmd = f"NAVIGATE {start_lat:.7f} {start_lon:.7f} {goal_lat:.7f} {goal_lon:.7f} {radius:.3f}"
+                    _send_and_report(PORT_PILOT, cmd)
+                    waypoint_sent = True
+                    brake_phase = False
+                    _safe_send_to_client(f"SENT: {cmd}\n")
 
             time.sleep(0.10)
 

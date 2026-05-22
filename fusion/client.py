@@ -114,8 +114,13 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
             except Exception as e:
                 print(f"[CLIENT ERROR] {e}")
                 traceback.print_exc()
-                f.write(f"ERROR: {e}\n".encode())
-                f.flush()
+                try: 
+                    f.write(f"ERROR: {e}\n".encode())
+                    f.flush()
+                except Exception:
+                    pass
+                finally:
+                    break
                 
     except Exception as e:
         print(f"[SERVER] Client error: {e}")

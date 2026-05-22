@@ -13,7 +13,6 @@ from data.nav_fusion_data import NavFusionData
 
 from geo_utils import heading_gnss_to_enu, lla_to_ecef, ecef_to_enu
 from near_waypoint import NearWaypoint
-from pp_velocity import PPVelocityPlanner
 
 from data_loger import DataLogger
 
@@ -138,14 +137,7 @@ class Pilot:
         L_NEAR = 2  # lookahead pro near point (m)
         B = 0.58     # rozchod kol (m)
         nearwaypoint = NearWaypoint(S_lat=S_lat, S_lon=S_lon, E_lat=E_lat, E_lon=E_lon, L_near_m=L_NEAR)
-        pp_velocity = PPVelocityPlanner(
-            a_y_max=0.5,        # m/s^2
-            L=L_NEAR,              # m
-            b=B,              # m
-            max_speed_cm_s=60.0,# cm/s
-            min_wheel_speed_cm_s=20.0, # cm/s
-            min_turn_radius_m=0.29,  # m
-        )
+
 
         max_erros = 5
         error_count = 0
@@ -244,39 +236,76 @@ class Pilot:
                 # 5) Spočti chybu heading robota vůči near point
                 heading_error = _wrap_angle_deg(heading_to_near_gnss_deg - nav.heading) 
 
-                # 6) Vypočti nové rychlosti kola
-                if (abs(heading_error) > 60):
-                    # turn in place
-                    s = _sign(heading_error)
-                    left_speed, right_speed = 30 * s, -30 * s
-                    #heading_comp_deg = -s * 90.0
-                    drive_mode = "TURN_IN_PLACE"
-                elif abs(heading_error) > 15:
-                    # slow turn one wheel stopped
-                    if heading_error < 0:
-                        left_speed, right_speed = 0, 30    # doleva
-                        #heading_comp_deg = +heading_one_wheeel_comp_deg
-                    else:
-                        left_speed, right_speed = 30, 0    # doprava
-                        #heading_comp_deg = -heading_one_wheeel_comp_deg
-                    drive_mode = "SLOW_TURN_ONE_WHEEL"
+                # 6) Plynulý výpočet rychlostí kol
+                max_fwd_speed = 100.0  # cm/s (maximální dopředná rychlost)
+                max_spin_speed = 40.0 # cm/s (maximální rychlost kola při točení na místě)
+                a_y_max = 1.0         # m/s^2 (limit bočního zrychlení)
+                
+                err_abs = abs(heading_error)
+                
+                # a) Zpomalování u cíle (začínáme brzdit 3 metry od cíle)
+                dist_factor = 1.0
+                if abs_distance_to_goal_m < 3.0:
+                    dist_factor = max(0.2, abs_distance_to_goal_m / 3.0)
+                
+                # b) Dopředná rychlost (v_center) klesá s chybou natočení
+                if err_abs < 15.0:
+                    v_center = max_fwd_speed
+                elif err_abs < 60.0:
+                    v_center = max_fwd_speed * (1.0 - (err_abs - 15.0) / 45.0)
                 else:
-                    # PP velocity planning
-                    left_speed, right_speed, kappa = pp_velocity.calculate(alpha_deg=-heading_error)
-                    #heading_comp_deg = math.atan(0.3 * kappa) * (180.0 / math.pi)  # small angle approx 
-                    drive_mode = "PP_VELOCITY"
+                    v_center = 0.0
+                    
+                v_center *= dist_factor
+
+                # Pure Pursuit geometrie (kappa je požadované zakřivení cesty)
+                alpha_rad = math.radians(-heading_error)
+                kappa = 2.0 * math.sin(alpha_rad) / L_NEAR
+                
+                # Limit dopředné rychlosti vůči bočnímu zrychlení
+                if abs(kappa) > 0.001:
+                    v_ay_limit = math.sqrt(a_y_max / abs(kappa)) * 100.0 # převod m/s -> cm/s
+                    v_center = min(v_center, v_ay_limit)
+
+                # c) Rotační rychlost (v_turn) jako plynulý blend mezi Pure Pursuit a otáčením na místě
+                # 1. Pure Pursuit (skvělé pro sledování plynulé křivky v pohybu)
+                v_turn_pp = v_center * kappa * B / 2.0
+                
+                # 2. Spin / točení na místě (P-regulátor pro velké úhly)
+                spin_mag = max_spin_speed * min(1.0, err_abs / 60.0)
+                v_turn_spin = math.copysign(spin_mag, -heading_error)
+                
+                # 3. Smíchání (blend_factor je 0 pro úhel 0°, 1 pro úhel >= 60°)
+                blend_factor = min(1.0, err_abs / 60.0)
+                v_turn = (1.0 - blend_factor) * v_turn_pp + blend_factor * v_turn_spin
+                
+                drive_mode = "BLENDED"
+                
+                # d) Mix do rychlostí kol
+                left_speed = v_center - v_turn
+                right_speed = v_center + v_turn
+                
+                # e) Absolutní omezení rychlostí, abychom nepřekročili limity motorů
+                abs_limit = 100.0 # cm/s
+                max_wheel = max(abs(left_speed), abs(right_speed))
+                if max_wheel > abs_limit:
+                    left_speed = (left_speed / max_wheel) * abs_limit
+                    right_speed = (right_speed / max_wheel) * abs_limit
+
+                left_speed = round(left_speed)
+                right_speed = round(right_speed)
 
                 # smooth heading compensation
                 #smooth_heading_comp_deg = 0.8 * smooth_heading_comp_deg + 0.2 * heading_comp_deg
                 #print(f"[PILOT] Heading error: {heading_error:.2f} deg, heading_comp: {heading_comp_deg:.2f} deg, smooth_comp: {smooth_heading_comp_deg:.2f} deg")
 
                 # 7) Odešli rychlosti kol do drive služby
-                pwm = 70 # pevné PWM pro nyní  (left_speed + right_speed)
+                pwm = 100 # pevné PWM pro nyní  (left_speed + right_speed)
                 result = drive.send_drive(pwm, left_speed, right_speed)
                 #result = drive.send_drive(pwm, 40, -40) # testovací pevná rychlost
                 #result = drive.send_drive(pwm, -30, 30) # testovací pevná rychlost
                 #result = drive.send_pwm(1,1) # testovací duty cycle
-                print("[Pilot]", pwm, left_speed, right_speed, result)
+                print("[Pilot]", pwm, left_speed, right_speed, result, heading_error, loop_dt_ms)
                 #print(f"[PILOT] Drive command sent: PWM={pwm}, left_speed={left_speed} cm/s, right_speed={right_speed} cm/s")
                 # TODO: check result?
 

@@ -52,6 +52,7 @@ sudo systemctl restart robot-gnss
 sudo systemctl restart robot-pointperfect
 sudo systemctl restart robot-fusion
 sudo systemctl restart robot-drive
+sudo systemctl restart robot-pilot
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 

@@ -208,7 +208,7 @@ if __name__ == "__main__":
 
     # Společná základna
     R = (50.000000, 14.000000)
-    L = 1.0  # L_near_m
+    L = 2.0  # L_near_m
 
     # 0) DVA PRŮSEČÍKY: vodorovná přímka skrz R, E napravo
     cls = NearWaypoint(S_lat=R[0], S_lon=R[1],

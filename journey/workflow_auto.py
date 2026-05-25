@@ -100,18 +100,18 @@ def _pilot_status() -> str:
 
 
 def _safe_to_go(hacc_mm: Optional[float], dist_cm: Optional[float]) -> bool:
-    return (hacc_mm is not None and hacc_mm < 500.0) and (dist_cm is not None and dist_cm > 50.0)
+    return (hacc_mm is not None and hacc_mm < 800.0) and (dist_cm is not None and dist_cm > 60.0)
 
 
 def _unsafe(hacc_mm: Optional[float], dist_cm: Optional[float]) -> bool:
-    if hacc_mm is not None and hacc_mm > 800.0:
+    if hacc_mm is not None and hacc_mm > 1200.0:
         return True
-    if dist_cm is not None and dist_cm < 40.0:
+    if dist_cm is not None and dist_cm < 50.0:
         return True
     return False
 
 
-def _await_gnss_ok(threshold_mm: float = 300.0, timeout_s: float = 120.0, poll_s: float = 0.5) -> bool:
+def _await_gnss_ok(threshold_mm: float = 500.0, timeout_s: float = 120.0, poll_s: float = 0.5) -> bool:
     t0 = time.time()
     while not _stop_requested.is_set() and (time.time() - t0) < timeout_s:
         hacc = _gnss_hacc_mm()
@@ -123,7 +123,7 @@ def _await_gnss_ok(threshold_mm: float = 300.0, timeout_s: float = 120.0, poll_s
     return False
 
 
-def _await_lidar_ok(timeout_s: float = 30.0, poll_s: float = 0.2) -> bool:
+def _await_lidar_ok(timeout_s: float = 30.0, poll_s: float = 0.5) -> bool:
     t0 = time.time()
     while not _stop_requested.is_set() and (time.time() - t0) < timeout_s:
         d = _distance_cm()
@@ -152,8 +152,8 @@ def _auto_workflow():
         _send_and_report(PORT_DRIVE,  "START")
 
         _safe_send_to_client("WAIT GNSS(hAcc<300mm)...\n")
-        if not _await_gnss_ok(threshold_mm=300.0, timeout_s=120.0, poll_s=0.5):
-            _safe_send_to_client("ERROR: GNSS not ready (hAcc >= 300mm) within timeout.\n")
+        if not _await_gnss_ok(threshold_mm=800.0, timeout_s=120.0, poll_s=0.5):
+            _safe_send_to_client("ERROR: GNSS not ready (hAcc >= 800mm) within timeout.\n")
             return
 
         # --- Skupina 2: PILOT + LIDAR (až když je GNSS OK) ---
@@ -164,7 +164,7 @@ def _auto_workflow():
         _send_and_report(PORT_LIDAR,  "START")
 
         _safe_send_to_client("VALIDATE GNSS & LIDAR...\n")
-        gnss_still_ok = _await_gnss_ok(threshold_mm=300.0, timeout_s=60.0, poll_s=1.0)
+        gnss_still_ok = _await_gnss_ok(threshold_mm=800.0, timeout_s=60.0, poll_s=1.0)
         lidar_ok      = _await_lidar_ok(timeout_s=60.0, poll_s=1.0)
         if not (gnss_still_ok and lidar_ok):
             if not gnss_still_ok:

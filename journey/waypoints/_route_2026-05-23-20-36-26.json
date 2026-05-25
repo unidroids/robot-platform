@@ -2,32 +2,24 @@
   "version": 1,
   "waypoints": [
     {
-      "lat": 49.55452593333334,
-      "lon": 12.742440833333333,
+      "lat": 49.554232,
+      "lon": 12.742055033333333,
       "curvature": 0.0,
       "path_width_m": 1.0,
       "rel_azimuth_deg": 0.0,
       "corridors": []
     },
     {
-      "lat": 49.55456616666667,
-      "lon": 12.7425972,
+      "lat": 49.5542906,
+      "lon": 12.742127766666666,
       "curvature": 0.0,
       "path_width_m": 1.0,
       "rel_azimuth_deg": 0.0,
       "corridors": []
     },
     {
-      "lat": 49.5545777,
-      "lon": 12.742581066666666,
-      "curvature": 0.0,
-      "path_width_m": 1.0,
-      "rel_azimuth_deg": 0.0,
-      "corridors": []
-    },
-    {
-      "lat": 49.5545437,
-      "lon": 12.742453666666666,
+      "lat": 49.5542032,
+      "lon": 12.742145066666668,
       "curvature": 0.0,
       "path_width_m": 1.0,
       "rel_azimuth_deg": 0.0,

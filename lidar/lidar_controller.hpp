@@ -16,6 +16,8 @@
 #include <limits>
 #include <cstdint>
 #include <iomanip>
+#include <filesystem>
+#include <sstream>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -159,13 +161,15 @@ public:
         return dist_out >= 0.0f;
     }
 
-    bool getReflectivityImage(std::string &saved_path_out, const std::string &filename = "reflectivity.pgm") {
+    bool getReflectivityImage(std::string &saved_path_out) {
         std::lock_guard<std::mutex> lg(mtx_);
         if (point_buffer_.size() == 0) {
             return false;
         }
         LidarReflectivityEvaluator evaluator;
         auto img = evaluator.evaluate(point_buffer_);
+        
+        std::string filename = evaluator.makeReflectivityPath();
         if (img.savePGM(filename)) {
             saved_path_out = filename;
             return true;

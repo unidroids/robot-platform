@@ -6,6 +6,10 @@
 #include <fstream>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 #include "point_buffer.hpp"
 
 // Evaluator pro generování černobílého (grayscale) obrázku odrazivosti (intensity).
@@ -64,5 +68,36 @@ public:
         }
 
         return img;
+    }
+    std::string makeReflectivityPath(const std::string &base_dir = "/data/robot/lidar") const {
+        namespace fs = std::filesystem;
+
+        using clock = std::chrono::system_clock;
+        const auto now = clock::now();
+        const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             now.time_since_epoch()) % 1000;
+
+        const std::time_t t = clock::to_time_t(now);
+        std::tm tm{};
+        localtime_r(&t, &tm);
+
+        std::ostringstream date_ss;
+        date_ss << std::put_time(&tm, "%Y-%m-%d");
+
+        std::ostringstream hour_ss;
+        hour_ss << "reflect-" << std::setw(2) << std::setfill('0') << tm.tm_hour;
+
+        fs::path dir = fs::path(base_dir) / date_ss.str() / hour_ss.str();
+        fs::create_directories(dir);
+
+        std::ostringstream file_ss;
+        file_ss << "reflect-"
+                << std::setw(2) << std::setfill('0') << tm.tm_min << "-"
+                << std::setw(2) << std::setfill('0') << tm.tm_sec << "-"
+                << std::setw(3) << std::setfill('0') << ms.count()
+                << ".pgm";
+
+        fs::path file_path = dir / file_ss.str();
+        return file_path.string();
     }
 };

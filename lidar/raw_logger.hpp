@@ -118,25 +118,31 @@ private:
     {
         namespace fs = std::filesystem;
 
-        // systémový čas pro jméno souboru
-        const auto now = std::chrono::system_clock::now();
-        const std::time_t t = std::chrono::system_clock::to_time_t(now);
+        using clock = std::chrono::system_clock;
+        const auto now = clock::now();
+        const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             now.time_since_epoch()) % 1000;
 
+        const std::time_t t = clock::to_time_t(now);
         std::tm tm{};
         // POSIX varianta; na Windows by bylo potřeba localtime_s
         localtime_r(&t, &tm);
 
-        std::ostringstream date_dir_ss;
-        date_dir_ss << base_dir << '/'
-                    << std::put_time(&tm, "%Y-%m-%d");
+        std::ostringstream date_ss;
+        date_ss << std::put_time(&tm, "%Y-%m-%d");
 
-        fs::path date_dir_path{date_dir_ss.str()};
-        fs::create_directories(date_dir_path);
+        fs::path dir = fs::path(base_dir) / date_ss.str() / "_raw";
+        fs::create_directories(dir);
 
         std::ostringstream file_ss;
-        file_ss << "raw-" << std::put_time(&tm, "%H-%M-%S") << ".dat";
+        file_ss << "raw-"
+                << std::setw(2) << std::setfill('0') << tm.tm_hour << "-"
+                << std::setw(2) << std::setfill('0') << tm.tm_min << "-"
+                << std::setw(2) << std::setfill('0') << tm.tm_sec << "-"
+                << std::setw(3) << std::setfill('0') << ms.count()
+                << ".dat";
 
-        fs::path file_path = date_dir_path / file_ss.str();
+        fs::path file_path = dir / file_ss.str();
         return file_path.string();
     }
 

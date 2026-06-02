@@ -40,7 +40,7 @@ public:
             const auto &pt = points[i];
 
             // Oříznutí podle X (0 až 3m = 0 až 300cm) a Y (-1 až 1m = -100 až 100cm)
-            if (pt.x < 0.0f || pt.x > 300.0f || pt.y < -100.0f || pt.y > 100.0f) {
+            if (pt.x < 0.0f || pt.x > 300.0f || pt.y < -100.0f || pt.y > 100.0f || pt.z > 15.0f) {
                 continue;
             }
 
@@ -50,11 +50,13 @@ public:
             int row = 299 - static_cast<int>(std::floor(pt.x));
             // Y osa určuje boční offset (šířka obrázku, sloupec)
             int col = static_cast<int>(std::floor(pt.y + 100.0f));
+            // Z osa určuje korekci jasnosti (2~1  15~0)
+            float correction = pt.z < 3.0f ? 1.0f : 1.0f - (pt.z / 15.0f);
 
             // Bezpečný zápis do obrazových dat
             if (row >= 0 && row < img.height && col >= 0 && col < img.width) {
                 std::size_t idx = static_cast<std::size_t>(row * img.width + col);
-                uint8_t val = static_cast<uint8_t>(std::clamp(pt.intensity, 0.0f, 255.0f));
+                uint8_t val = static_cast<uint8_t>(std::clamp(pt.intensity, 0.0f, 255.0f)) * correction;
                 if (val > img.data[idx]) {
                     img.data[idx] = val;
                 }

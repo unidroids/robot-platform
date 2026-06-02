@@ -88,7 +88,7 @@ def handle_client(conn, addr):
                 print(f"📥 Příkaz: '{cmd}'")
 
                 if cmd == "PING": # PING - communication test
-                    conn.sendall(b"PONG\n")
+                    conn.sendall(b"PONG CAMERA\n")
 
                 elif cmd == "HI": # PING - communication test
                     conn.sendall(b"HI\n")

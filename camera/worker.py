@@ -70,7 +70,7 @@ def load_fisheye_maps(w: int, h: int):
 # -------------------------------
 # Utility – GStreamer pipeline
 # -------------------------------
-def gst_pipeline(sensor_id: int, f: int, w: int = 1000, h: int = 800, fps: int = 5) -> str:
+def gst_pipeline(sensor_id: int, f: int, w: int = 1640, h: int = 1232, fps: int = 5) -> str:
     return (
         f"nvarguscamerasrc sensor-id={sensor_id} ! "
         f"video/x-raw(memory:NVMM), width={w}, height={h}, framerate={fps}/1 ! "
@@ -85,7 +85,7 @@ def camera_loop_thread():
     global loop_running, frame_seq
     print("📷 Smyčka kamer spuštěna")
 
-    width, height = 1000 - 200, 800
+    #width, height = 1000 - 200, 800
     capL = cv2.VideoCapture(gst_pipeline(0, 3), cv2.CAP_GSTREAMER)
     capR = cv2.VideoCapture(gst_pipeline(1, 1), cv2.CAP_GSTREAMER)
 
@@ -94,7 +94,7 @@ def camera_loop_thread():
         loop_running = False
         return
 
-    load_fisheye_maps(width, height)
+    #load_fisheye_maps(width, height)
 
     try:
         while loop_running and not shutdown_flag.is_set():
@@ -128,7 +128,7 @@ def log_loop_thread():
     global log_running, frame_seq
     print("📝 Logovací vlákno spuštěno")
 
-    path = "/robot/data/logs/camera"
+    path = "/data/robot/cameras"
     os.makedirs(path, exist_ok=True)
     last_seq = 0
 

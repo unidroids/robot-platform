@@ -107,6 +107,13 @@ void handle_client(int sock) {
                 send_line(sock, ok ? "OK CALIBRATED" : "ERR CALIBRATE");
             } else if (line == "CORIDORS") {
                 
+            } else if (line == "REFLECTIVITY") {
+                std::string path;
+                if (lidar.getReflectivityImage(path)) {
+                    send_line(sock, "OK IMAGE " + path);
+                } else {
+                    send_line(sock, "ERR IMAGE");
+                }
             } else if (line.rfind("MODE ", 0) == 0) {
                 std::string arg = line.substr(5);
                 char *end = nullptr;

@@ -27,6 +27,7 @@
 #include "lidar_calibration.hpp"
 #include "point_buffer.hpp"
 #include "distance_evaluator.hpp"
+#include "reflectivity_image_evaluator.hpp"
 #include "imu_buffer.hpp"
 #include "imu_stats.hpp"
 #include "raw_logger.hpp"
@@ -156,6 +157,20 @@ public:
     bool getDistance(float &dist_out) {
         dist_out = distance_evaluator_.distance(point_buffer_);
         return dist_out >= 0.0f;
+    }
+
+    bool getReflectivityImage(std::string &saved_path_out, const std::string &filename = "reflectivity.pgm") {
+        std::lock_guard<std::mutex> lg(mtx_);
+        if (point_buffer_.size() == 0) {
+            return false;
+        }
+        LidarReflectivityEvaluator evaluator;
+        auto img = evaluator.evaluate(point_buffer_);
+        if (img.savePGM(filename)) {
+            saved_path_out = filename;
+            return true;
+        }
+        return false;
     }
 
     ImuStatistics getImuStats() const {

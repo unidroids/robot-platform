@@ -63,9 +63,31 @@ async def info():
         ip = socket.gethostbyname(hostname)
     except:
         ip = "unknown"
+    
+    ips = []
+    interfaces = {}
+    try:
+        import psutil
+        for iface, addrs in psutil.net_if_addrs().items():
+            iface_ips = []
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    iface_ips.append(addr.address)
+                    ips.append(addr.address)
+            if iface_ips:
+                interfaces[iface] = iface_ips
+    except:
+        try:
+            ips = subprocess.check_output(["hostname", "-I"]).decode().strip().split()
+        except:
+            ips = []
+        interfaces = {"default": ips}
+
     return {
         "hostname": hostname,
         "ip": ip,
+        "ips": ips,
+        "interfaces": interfaces,
         "system": platform.system(),
         "release": platform.release(),
         "cpu_count": os.cpu_count()

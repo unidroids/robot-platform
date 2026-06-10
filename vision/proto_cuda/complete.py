@@ -30,7 +30,7 @@ print("🚀 Startuji Vision Mikroslužbu (TensorRT Edice)...")
 
 # Načtení zkompilovaného enginu! (Nezapomeň na task='pose')
 print("🧠 Načítám model cara.engine...")
-model = YOLO('cara.engine', task='pose')
+model = YOLO('cara-single.engine', task='pose')
 
 def prepare_cuda_grid(npz_path, side, target_w=TARGET_W, target_h=TARGET_H, device='cuda'):
     """Připraví a ZMENŠÍ BEV mapu pro bleskovou transformaci."""
@@ -92,37 +92,66 @@ def vision_worker(side, grid):
             if (time.time() - capture_time) * 1000 > 100:
                 continue
                 
+            # --- START DETAILNÍHO PROFILOVÁNÍ ---
+            t_start = time.time()
+            
             # 1. Rychlé kopírování z RAM
             raw_frame = img_data.copy()
+            t_cpu_copy = (time.time() - t_start) * 1000
             
-            # 2. CUDA TRANSFORMACE (Bilinear)
-            # Tensor převádíme na .half() pro TensorRT
+            # 2. PŘENOS RAM -> GPU (Včetně permute a normalizace)
+            t_gpu_start = time.time()
             img_tensor = torch.from_numpy(raw_frame).permute(2, 0, 1).unsqueeze(0).to('cuda', non_blocking=True).half() / 255.0
+            torch.cuda.synchronize()
+            t_gpu_transfer = (time.time() - t_gpu_start) * 1000
+            
+            # 3. BEV TRANSFORMACE (Grid Sample v CUDA)
+            t_bev_start = time.time()
             bev_640 = F.grid_sample(img_tensor, grid, mode='bilinear', align_corners=True)
+            torch.cuda.synchronize()
+            t_bev = (time.time() - t_bev_start) * 1000
             
-            # 3. YOLO TENSOR-RT INFERENCE
+            # 4. YOLO TENSOR-RT INFERENCE
+            t_ai_start = time.time()
             results = model.predict(bev_640, verbose=False, device=0)
-            r = results[0]
+            torch.cuda.synchronize()
+            t_ai = (time.time() - t_ai_start) * 1000
             
-            # 4. EXTRAKCE BODŮ DO REÁLNÉHO SVĚTA (Metry)
+            # 5. EXTRAKCE BODŮ DO REÁLNÉHO SVĚTA (Post-processing na CPU)
+            t_post_start = time.time()
+            r = results[0]
             line_data = {"side": side, "frame": frame_seq, "points": []}
             
             if r.keypoints is not None and len(r.keypoints) > 0:
-                # Ošetření: Vezmeme jen body, které mají nenulovou souřadnici (YOLO občas vrací 0,0 pro nejisté body)
                 points_px = r.keypoints.xy[0].cpu().numpy()
-                
                 for px_x, px_y in points_px:
                     if px_x == 0 and px_y == 0: continue
-                    
                     robot_x_meters = (px_x - IMAGE_CENTER_X) * PIXEL_TO_METERS
                     robot_y_meters = (IMAGE_BOTTOM_Y - px_y) * PIXEL_TO_METERS
                     line_data["points"].append({"x": round(float(robot_x_meters), 3), "y": round(float(robot_y_meters), 3)})
             
-            # TADY: Odeslání dat přes UDP. Prozatím jen vypíšeme do konzole (každý 30. snímek)
-            latency = (time.time() - capture_time) * 1000
+            t_post = (time.time() - t_post_start) * 1000
+            total_latency = (time.time() - capture_time) * 1000
 
-            # --- VIZUÁLNÍ KONTROLA (Uloží každý 2. snímek) ---
-            if int(frame_seq) % 2 == 0:
+            # --- VÝPIS STATISTIK A LATENCE (Každý 20. snímek) ---
+            if int(frame_seq) % 20 == 0:
+                pts_count = len(line_data['points'])
+                print(f"\n[{side}] Frame {frame_seq} | Nalezeno bodů: {pts_count}")
+                
+                if pts_count > 0:
+                    closest = line_data['points'][0]
+                    print(f"   📍 Nejbližší bod trasy: {closest['y']}m před, {closest['x']}m do strany")
+                
+                print(f"📊 [ROZPAD LATENCE] Capture time: {capture_time}, Capture frame seq: {frame_seq}")
+                print(f"  └─ 1. CPU kopie z SHM:        {t_cpu_copy:.2f} ms")
+                print(f"  └─ 2. Přenos RAM -> GPU:      {t_gpu_transfer:.2f} ms")
+                print(f"  └─ 3. BEV Transformace (CUDA):{t_bev:.2f} ms")
+                print(f"  └─ 4. TensorRT (YOLO):        {t_ai:.2f} ms")
+                print(f"  └─ 5. Post-processing (CPU):  {t_post:.2f} ms")
+                print(f"⚡ Celková latence (hw->ai):     {total_latency:.2f} ms")
+
+            # --- VIZUÁLNÍ KONTROLA (Uloží každý 2. snímek) --- vypnuto
+            if int(frame_seq) % 2 == 0 and False:
                 
                 # 1. Extrakce Tensoru z GPU zpět do OpenCV obrázku
                 # - squeeze(0): odstraní Batch rozměr
@@ -171,12 +200,6 @@ def vision_worker(side, grid):
                 print(f"   📸 Uložen kontrolní snímek: {save_path}")
 
 
-            if int(frame_seq) % 20 == 0:
-                pts_count = len(line_data['points'])
-                print(f"[{side}] Frame {frame_seq} | Nalezeno bodů: {pts_count} | Celková latence hw->ai: {latency:.2f} ms")
-                if pts_count > 0:
-                    closest = line_data['points'][0] # První bod je ten "nejblíž" k robotovi
-                    print(f"   📍 Nejbližší bod trasy: {closest['y']}m před, {closest['x']}m do strany")
 
     shm.close()
 

@@ -148,7 +148,7 @@ def log_loop_thread():
             cv2.imwrite(filename, combined, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
             print(f"💾 Uloženo: {filename}")
 
-        time.sleep(3)
+        time.sleep(1)
 
     print("🛑 Logovací vlákno ukončeno")
 

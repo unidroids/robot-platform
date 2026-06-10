@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 venv-robotour/
+yolo_env/
 
 # VS Code metadata
 .vscode/
@@ -41,3 +42,8 @@ gnss*/point_perfect/*.ubx
 **/cache/
 osm/prototype/cache/
 cache/
+
+#pytotche
+**/*.onnx
+**/*.pt
+**/*.bin

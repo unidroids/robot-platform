@@ -1,0 +1,1 @@
+yolo export model=best.pt format=engine device=0 half=True imgsz=480,640

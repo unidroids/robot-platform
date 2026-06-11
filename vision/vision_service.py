@@ -184,17 +184,37 @@ class VisionService:
                 img_tensor = torch.from_numpy(raw_frame).permute(2, 0, 1).unsqueeze(0).to('cuda', non_blocking=True).half() / 255.0
                 bev_640 = F.grid_sample(img_tensor, grid, mode='bilinear', align_corners=True)
                 
-                results = self.model.predict(bev_640, verbose=False, device=0)
+                results = self.model.predict(bev_640, conf=0.25, verbose=False, device=0)
                 r = results[0]
                 
                 out_points = []
                 if r.keypoints is not None and len(r.keypoints) > 0:
-                    points_px = r.keypoints.xy[0].cpu().numpy()
-                    for px_x, px_y in points_px:
-                        if px_x == 0 and px_y == 0: continue
-                        robot_x_meters = (IMAGE_BOTTOM_Y - px_y) * PIXEL_TO_METERS
-                        robot_y_meters = (IMAGE_CENTER_X - px_x) * PIXEL_TO_METERS
-                        out_points.append({"x": round(float(robot_x_meters), 3), "y": round(float(robot_y_meters), 3)})
+                    box_confs = r.boxes.conf.cpu().numpy() if r.boxes else [1.0] * len(r.keypoints)
+                    kp_confs_all = r.keypoints.conf.cpu().numpy() if r.keypoints.conf is not None else None
+                    
+                    for i in range(len(r.keypoints)):
+                        points_px = r.keypoints.xy[i].cpu().numpy()
+                        line_conf = float(box_confs[i]) if i < len(box_confs) else 1.0
+                        
+                        line_points = []
+                        for k, (px_x, px_y) in enumerate(points_px):
+                            if px_x == 0 and px_y == 0: continue
+                            
+                            kp_conf = float(kp_confs_all[i][k]) if kp_confs_all is not None else 1.0
+                            
+                            robot_x_meters = (IMAGE_BOTTOM_Y - px_y) * PIXEL_TO_METERS
+                            robot_y_meters = (IMAGE_CENTER_X - px_x) * PIXEL_TO_METERS
+                            line_points.append({
+                                "x": round(float(robot_x_meters), 3), 
+                                "y": round(float(robot_y_meters), 3),
+                                "conf": round(kp_conf, 3)
+                            })
+                        
+                        if line_points:
+                            out_points.append({
+                                "line_conf": round(line_conf, 3),
+                                "points": line_points
+                            })
                 
                 # --- Odeslání ---
                 msg_data = {

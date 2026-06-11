@@ -123,22 +123,25 @@ class DriveService:
         self._tx_fail = 0
         self._last_ack_nack_data: Optional[Tuple[int, int, int, int, int]] = None
         self._last_ack_nack_error: Optional[Tuple[int, int]] = None
+        self._active_token: Optional[str] = None
 
     # --------------- lifecycle ---------------
-    def start(self) -> str:
-        """Spustí službu: otevře UART + dispatcher a *pošle* cmd=2 (START motorů)."""
+    def start(self, token: Optional[str] = None) -> str:
+        """Spustí službu: otevře UART + dispatcher a *pošle* cmd=2 (START motorů). Volitelně nastaví aktivní token."""
         with self._lock:
+            if token is not None:
+                self._active_token = token
             if self._running:
                 # idempotentní start – přesto pošleme znovu START motorů
                 # self._send_cmd(2, 125, 125, 125, 125)  # neutrální p1..p4 (nepovinné)
-                return "RUNNING"
+                return f"RUNNING (token={self._active_token})"
             self._ser.start()
             self._disp.start()
             self._running = True
             self._started_at = time.monotonic()
         # dle specifikace po startu UI/servisy poslat START motorů (cmd=2)
         #self.motors_on()
-        return "RUNNING"
+        return f"RUNNING (token={self._active_token})"
 
     def stop(self) -> str:
         """Zastaví službu: pošle cmd=1 (STOP motorů) a zavře UART/dispatcher."""
@@ -186,6 +189,11 @@ class DriveService:
     def is_running(self) -> bool:
         with self._lock:
             return self._running
+
+    def check_token(self, token: str) -> bool:
+        """Ověří, zda daný token odpovídá aktivnímu tokenu."""
+        with self._lock:
+            return self._active_token == token
 
     # --------------- API – jednoduché příkazy ---------------
     def ping(self) -> str:

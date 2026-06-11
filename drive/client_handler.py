@@ -39,15 +39,14 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
     peer = f"{addr[0]}:{addr[1]}"
     #_send_line(conn, "HELLO DRIVE 9003")
 
+    verified = False
     buf = bytearray()
     try:
         while True:
             line = _recv_line(conn, buf)
             if line is None:
-                # timeout: pokračuj
                 continue
             if line == "":
-                # protistrana ukončila spojení
                 break
 
             cmdline = line.strip()
@@ -63,8 +62,16 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                     _send_line(conn, svc.ping())
 
                 elif cmd == "START":
-                    state = svc.start()
+                    tok = args[0] if len(args) > 0 else None
+                    state = svc.start(token=tok)
                     _send_line(conn, f"OK {state}")
+
+                elif cmd == "TOKEN":
+                    if len(args) != 1:
+                        _send_line(conn, "ERROR BAD_ARGS use: TOKEN <token>")
+                    else:
+                        verified = svc.check_token(args[0])
+                        _send_line(conn, "OK VERIFIED" if verified else "ERROR INVALID_TOKEN")
 
                 elif cmd == "STOP":
                     state = svc.stop()
@@ -87,8 +94,11 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                     _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "ON":
-                    ok = svc.motors_on()
-                    _send_line(conn, "OK" if ok else "ERROR")
+                    if not verified:
+                        _send_line(conn, "ERROR UNAUTHORIZED token not verified")
+                    else:
+                        ok = svc.motors_on()
+                        _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "HALT":
                     ok = svc.halt()
@@ -99,7 +109,9 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                     _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "DRIVE":
-                    if len(args) != 3:
+                    if not verified:
+                        _send_line(conn, "ERROR UNAUTHORIZED token not verified")
+                    elif len(args) != 3:
                         _send_line(conn, "ERROR BAD_ARGS use: DRIVE <max_pwm> <vL> <vR>")
                     else:
                         max_pwm = int(args[0])
@@ -109,7 +121,9 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                         _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "PWM":
-                    if len(args) != 2:
+                    if not verified:
+                        _send_line(conn, "ERROR UNAUTHORIZED token not verified")
+                    elif len(args) != 2:
                         _send_line(conn, "ERROR BAD_ARGS use: PWM <pwmL> <pwmR>")
                     else:
                         pwmL = int(args[0])

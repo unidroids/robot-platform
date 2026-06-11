@@ -9,6 +9,9 @@ sudo mkdir -p "$LOG_DIR"
 sudo touch "$LOG_FILE"
 sudo chmod 664 "$LOG_FILE"
 
+echo "🐳 Sestavuji lokální Docker obraz (robotour-vision)..."
+sudo docker build -t robotour-vision /opt/projects/robotour/vision
+
 echo "🛠️ Vytvářím systemd službu: robot-vision.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
@@ -26,11 +29,11 @@ Environment=PYTHONUNBUFFERED=1
 
 # před spuštěním ukonči libovolný proces, který drží port 9011
 ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9011/tcp || true'
-# Ukonči případný zamrzlý docker kontejner
-ExecStartPre=-/usr/bin/docker rm -f robot-vision
+# Ukonči případný zamrzlý docker kontejner (potichu, pokud neexistuje)
+ExecStartPre=/bin/bash -c 'docker inspect robot-vision >/dev/null 2>&1 && docker rm -f robot-vision || true'
 ExecStartPre=/bin/sleep 0.5
 
-ExecStart=/usr/bin/docker run --name robot-vision --rm --ipc=host --net=host --runtime nvidia -v /tmp:/tmp -v /data:/data -v /opt/projects/robotour:/opt/projects/robotour -w /opt/projects/robotour/vision ultralytics/ultralytics:latest-jetson-jetpack6 python3 main.py
+ExecStart=/usr/bin/docker run --name robot-vision --rm --ipc=host --net=host --runtime nvidia -v /tmp:/tmp -v /data:/data -v /opt/projects/robotour:/opt/projects/robotour -w /opt/projects/robotour/vision robotour-vision python3 main.py
 
 # Systemd čisté ukončení - zastaví docker kontejner s 5s timeoutem
 ExecStop=/usr/bin/docker stop -t 5 robot-vision

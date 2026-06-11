@@ -29,9 +29,9 @@ def handle_client(conn, addr):
 
                 # --- základní příkazy ---
                 if cmd == "PING":
-                    conn.sendall(b"PONG CAMERA\n")
+                    conn.sendall(b"PONG\n")
 
-                elif cmd in ("START"):
+                elif cmd in ("RUN", "START"):
                     ok1 = worker.start_camera_loop()
                     ok2 = worker.start_log_loop()
                     msg = []
@@ -45,7 +45,7 @@ def handle_client(conn, addr):
                     conn.sendall(b"STOPPED\n")
 
                 elif cmd == "STATUS":
-                    # TODO: vrať reálný stav, aktuální číslo snímku
+                    # TODO: vrať reálný stav (RUNNING/IDLE)
                     conn.sendall(b"IDLE\n")
 
                 elif cmd == "EXIT":
@@ -53,13 +53,12 @@ def handle_client(conn, addr):
                     return
 
                 elif cmd == "SHUTDOWN":
-                    # TODO: ukončení workerů a serveru
+                    worker.shutdown_flag.set()
                     conn.sendall(b"SHUTTING DOWN\n")
                     return
 
                 # --- doménové příkazy ---
                 elif cmd == "QR":
-                    #TODO:Přijde vyjmout, bude v budoucnu řešeno v rámci služby vision
                     if not worker.start_qr_worker():
                         conn.sendall(b"QR:LOOP NOT RUNNING\n")
                         continue
@@ -79,6 +78,11 @@ def handle_client(conn, addr):
                     else:
                         conn.sendall(b"QR:TIMEOUT\n")
                         print("[client] QR TIMEOUT")
+
+                elif cmd == "LCAM":
+                    conn.sendall(b"OK\n")
+                elif cmd == "RCAM":
+                    conn.sendall(b"OK\n")
 
                 else:
                     conn.sendall(b"ERR Unknown cmd\n")

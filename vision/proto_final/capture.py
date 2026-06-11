@@ -48,7 +48,7 @@ def create_shm(side):
 
 context = zmq.Context()
 zmq_pub = context.socket(zmq.PUB)
-zmq_pub.bind("ipc:///tmp/vision_sync")
+zmq_pub.bind("ipc:///tmp/robot-camera")
 
 # Globální stavy
 shm_L = create_shm('left')
@@ -60,10 +60,16 @@ img_data_R = np.ndarray((H_BEV, W_BEV, CHANNELS), dtype=np.uint8, buffer=shm_R.b
 frame_seq_L = 0
 frame_seq_R = 0
 
+# Globální reference na pipeliny pro přístup k Base Time
+pipeline_L = None
+pipeline_R = None
+
 # --- 3. CALLBACKY PRO GStreamer ---
 def on_new_sample(sink, side):
     """Asynchronní callback volaný GStreamerem, když dorazí nový snímek (10Hz)."""
-    global frame_seq_L, frame_seq_R
+    global frame_seq_L, frame_seq_R, pipeline_L, pipeline_R
+    
+    cb_start_time = time.monotonic()
     
     sample = sink.emit("pull-sample")
     if not sample:
@@ -73,12 +79,13 @@ def on_new_sample(sink, side):
     result, mapinfo = buf.map(Gst.MapFlags.READ)
     
     if result:
-        # Původně time.time(), nyní používáme Presentation Time Stamp z metadat GStreameru
-        capture_time = buf.pts / 1e9 if buf.pts != Gst.CLOCK_TIME_NONE else time.time()
-        #if buf.pts == Gst.CLOCK_TIME_NONE:
-        #    print(f"time = {time.time()}, capture_time = {capture_time}, frame_seq = {frame_seq_L if side == 'left' else frame_seq_R}, side = {side}", flush=True)
-        #else:
-        #    print(f"buf.pts = {buf.pts}, capture_time = {capture_time}, frame_seq = {frame_seq_L if side == 'left' else frame_seq_R}, side = {side}", flush=True)
+        # Převedeme PTS na absolutní systémový monotónní čas
+        base_time = pipeline_L.get_base_time() if side == 'left' and pipeline_L else \
+                    pipeline_R.get_base_time() if side == 'right' and pipeline_R else 0
+                    
+        capture_time = (base_time + buf.pts) / 1e9 if buf.pts != Gst.CLOCK_TIME_NONE else time.monotonic()
+        gst_delay = (cb_start_time - capture_time) * 1000
+        
         # Očekáváme BGR formát, data překopírujeme přímo do numpy pole namapovaného na SHM
         raw_frame = np.ndarray(
             (H_BEV, W_BEV, CHANNELS),
@@ -86,6 +93,7 @@ def on_new_sample(sink, side):
             buffer=mapinfo.data
         )
         
+        t_copy_start = time.monotonic()
         if side == 'left':
             struct.pack_into('q d', shm_L.buf, 0, -1, capture_time) # zámek
             np.copyto(img_data_L, raw_frame)
@@ -93,13 +101,17 @@ def on_new_sample(sink, side):
             zmq_pub.send_string(f"left/{frame_seq_L}/{capture_time}")
             frame_seq_L += 1
             if frame_seq_L % 20 == 0:
-                print(f"✅ Zpracováno {frame_seq_L} levých a {frame_seq_R} pravých snímků", flush=True)
+                copy_delay = (time.monotonic() - t_copy_start) * 1000
+                print(f"✅ L {frame_seq_L} | Zpoždění GStreameru: {gst_delay:.2f} ms | SHM Kopie: {copy_delay:.2f} ms", flush=True)
         else:
             struct.pack_into('q d', shm_R.buf, 0, -1, capture_time) # zámek
             np.copyto(img_data_R, raw_frame)
             struct.pack_into('q d', shm_R.buf, 0, frame_seq_R, capture_time) # odemčení
             zmq_pub.send_string(f"right/{frame_seq_R}/{capture_time}")
             frame_seq_R += 1
+            if frame_seq_R % 20 == 0:
+                copy_delay = (time.monotonic() - t_copy_start) * 1000
+                print(f"✅ R {frame_seq_R} | Zpoždění GStreameru: {gst_delay:.2f} ms | SHM Kopie: {copy_delay:.2f} ms", flush=True)
             
         buf.unmap(mapinfo)
     
@@ -131,6 +143,8 @@ def main():
 
     print("🚀 Inicializuji kamery a GStreamer pipeline přes `gi`...")
     
+    global pipeline_L, pipeline_R
+    
     # --- LEVÁ KAMERA ---
     pipe_str_L = get_gst_camera_pipeline(0, 3, LOG_FILE_PATTERN_L, "appsink_L")
     pipeline_L = Gst.parse_launch(pipe_str_L)
@@ -143,13 +157,13 @@ def main():
     appsink_R = pipeline_R.get_by_name("appsink_R")
     appsink_R.connect("new-sample", on_new_sample, 'right')
 
-    start_time = time.time()
+    start_time = time.monotonic()
 
     print(f"🟢 Spouštím levou kameru... Logy do: {LOG_DIR_L}")
     pipeline_L.set_state(Gst.State.PLAYING)
     
     # Posun pro střídavé zpracování
-    while time.time() - start_time < 0.03:
+    while time.monotonic() - start_time < 0.03:
         continue
     
     print(f"🟢 Spouštím pravou kameru... Logy do: {LOG_DIR_R}")

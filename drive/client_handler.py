@@ -94,7 +94,7 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                     _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "ON":
-                    if not verified:
+                    if svc.is_token_required() and not verified:
                         _send_line(conn, "ERROR UNAUTHORIZED token not verified")
                     else:
                         ok = svc.motors_on()
@@ -109,7 +109,7 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                     _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "DRIVE":
-                    if not verified:
+                    if svc.is_token_required() and not verified:
                         _send_line(conn, "ERROR UNAUTHORIZED token not verified")
                     elif len(args) != 3:
                         _send_line(conn, "ERROR BAD_ARGS use: DRIVE <max_pwm> <vL> <vR>")
@@ -121,7 +121,7 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                         _send_line(conn, "OK" if ok else "ERROR")
 
                 elif cmd == "PWM":
-                    if not verified:
+                    if svc.is_token_required() and not verified:
                         _send_line(conn, "ERROR UNAUTHORIZED token not verified")
                     elif len(args) != 2:
                         _send_line(conn, "ERROR BAD_ARGS use: PWM <pwmL> <pwmR>")

@@ -127,10 +127,9 @@ class DriveService:
 
     # --------------- lifecycle ---------------
     def start(self, token: Optional[str] = None) -> str:
-        """Spustí službu: otevře UART + dispatcher a *pošle* cmd=2 (START motorů). Volitelně nastaví aktivní token."""
+        """Spustí službu: otevře UART + dispatcher a *pošle* cmd=2 (START motorů). Nastaví aktivní token (pokud None, limitace je zrušena)."""
         with self._lock:
-            if token is not None:
-                self._active_token = token
+            self._active_token = token
             if self._running:
                 # idempotentní start – přesto pošleme znovu START motorů
                 # self._send_cmd(2, 125, 125, 125, 125)  # neutrální p1..p4 (nepovinné)
@@ -189,6 +188,11 @@ class DriveService:
     def is_running(self) -> bool:
         with self._lock:
             return self._running
+
+    def is_token_required(self) -> bool:
+        """Vrátí True, pokud je aktuálně vyžadován token pro řízení."""
+        with self._lock:
+            return self._active_token is not None
 
     def check_token(self, token: str) -> bool:
         """Ověří, zda daný token odpovídá aktivnímu tokenu."""

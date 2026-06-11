@@ -48,8 +48,8 @@ async def vision_stream():
                 try:
                     topic, json_str = msg.split("/", 1)
                     # json_str obsahuje: {"time": ..., "side": ..., "frame": ..., "pose": [...]}
-                    # Rovnou přepošleme klientovi přes SSE
-                    yield f"data: {json_str}\n\n"
+                    # sse_starlette automaticky přidá prefix "data: ", takže yieldíme jen samotný JSON
+                    yield json_str
                 except Exception as e:
                     print(f"⚠️ [Vision API] Chyba parsování JSONu: {e}")
                     

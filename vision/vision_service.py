@@ -92,6 +92,10 @@ class VisionService:
         # ZMQ PUB
         pub = context.socket(zmq.PUB)
         pub.bind("ipc:///tmp/robot-vision")
+        try:
+            os.chmod("/tmp/robot-vision", 0o777)
+        except Exception as e:
+            print(f"⚠️ [Vision] Nelze nastavit oprávnění na ZMQ socket: {e}")
         
         shm_left = None
         shm_right = None
@@ -242,7 +246,6 @@ class VisionService:
                     "frame": zmq_frame_seq,
                     "pose": out_points
                 }
-                pub.send_string(f"vision/test")
                 pub.send_string(f"vision/{json.dumps(msg_data)}")
 
         except Exception as e:

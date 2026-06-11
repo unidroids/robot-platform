@@ -133,8 +133,8 @@
         <div id="controls">
             <button onclick="visionCmd('ping')">Ping</button>
             <button onclick="visionCmd('status')">Status</button>
-            <button onclick="visionCmd('start')">Start AI</button>
-            <button onclick="visionCmd('stop')">Stop AI</button>
+            <button onclick="visionCmd('start')">Start</button>
+            <button onclick="visionCmd('stop')">Stop</button>
             <hr />
             <button onclick="startVisionStream()">🔁 Stream ZMQ</button>
             <button onclick="stopVisionStream()">⏹ Stop Stream</button>
@@ -196,16 +196,27 @@
                     const rawData = JSON.stringify(data);
                     logOutput(`📡 Frame: ${data.frame} | Side: ${data.side} | Lines: ${lineCount}\nData: ${rawData}`);
 
-                    // Vykreslení
-                    const linesGroup = document.getElementById("linesGroup");
-                    linesGroup.innerHTML = ""; // Vyčištění starých čar
+                    // Vykreslení rozdělíme na levou a pravou kameru, aby se nepřepisovaly!
+                    const groupId = data.side === "left" ? "linesGroupLeft" : "linesGroupRight";
+                    let groupEl = document.getElementById(groupId);
+                    if (!groupEl) {
+                        groupEl = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                        groupEl.setAttribute("id", groupId);
+                        document.getElementById("visionSvg").appendChild(groupEl);
+                    }
+
+                    // Vyčištění starých čar pro danou kameru
+                    while (groupEl.firstChild) {
+                        groupEl.removeChild(groupEl.firstChild);
+                    }
 
                     if (data.pose && data.pose.length > 0) {
                         data.pose.forEach((lineObj, idx) => {
                             const points = lineObj.points;
                             if (!points || points.length === 0) return;
 
-                            const colors = ["#00ff00", "#0088ff", "#ffaa00", "#ff00ff"];
+                            // Levá kamera zelená/modrá, pravá kamera oranžová/fialová
+                            const colors = data.side === "left" ? ["#00ff00", "#0088ff"] : ["#ffaa00", "#ff00ff"];
                             const color = colors[idx % colors.length];
 
                             let d = "";
@@ -220,7 +231,7 @@
                                 circle.setAttribute("cy", sy);
                                 circle.setAttribute("r", 4);
                                 circle.setAttribute("fill", color);
-                                linesGroup.appendChild(circle);
+                                groupEl.appendChild(circle);
                             });
 
                             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -229,19 +240,20 @@
                             path.setAttribute("stroke", color);
                             path.setAttribute("stroke-width", "3");
                             path.setAttribute("stroke-linecap", "round");
-                            linesGroup.insertBefore(path, linesGroup.firstChild);
+                            groupEl.insertBefore(path, groupEl.firstChild);
                         });
                     } else {
+                        // Vypíšeme "Žádná data" bokem, aby to nepřekáželo
                         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                        text.setAttribute("x", 200);
+                        text.setAttribute("x", data.side === "left" ? 100 : 300);
                         text.setAttribute("y", 150);
                         text.setAttribute("fill", "gray");
                         text.setAttribute("text-anchor", "middle");
-                        text.textContent = "Žádná data (pose je prázdné)";
-                        linesGroup.appendChild(text);
+                        text.textContent = data.side + ": prázdné";
+                        groupEl.appendChild(text);
                     }
                 } catch (e) {
-                    logOutput("📡 " + event.data);
+                    logOutput("📡 Chyba zobrazení: " + e.message);
                 }
             };
 

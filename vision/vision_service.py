@@ -115,11 +115,14 @@ class VisionService:
                 socks = dict(poller.poll(500))
                 
                 if sub not in socks:
-                    continue # Žádná zpráva, jedeme znovu
+                    print("⚠️ [Vision] Timeout polleru, žádná ZMQ zpráva z kamery za posledních 500ms")
+                    continue
                     
                 msg = sub.recv_string()
                 parts = msg.split('/')
-                if len(parts) != 3: continue
+                if len(parts) != 3: 
+                    print(f"⚠️ [Vision] Neplatný formát ZMQ zprávy: {msg}")
+                    continue
                 
                 side = parts[0]
                 zmq_frame_seq = int(parts[1])
@@ -133,12 +136,18 @@ class VisionService:
                 
                 # Zpožděné připojení k SHM
                 if side == 'left' and shm_left is None:
+                    print(f"🔄 [Vision] Zkouším prvotní připojení k SHM (left)...")
                     shm_left, img_data_left = try_connect_shm('left')
                 if side == 'right' and shm_right is None:
+                    print(f"🔄 [Vision] Zkouším prvotní připojení k SHM (right)...")
                     shm_right, img_data_right = try_connect_shm('right')
                     
-                if side == 'left' and shm_left is None: continue
-                if side == 'right' and shm_right is None: continue
+                if side == 'left' and shm_left is None:
+                    print(f"⚠️ [Vision] SHM pro 'left' neexistuje. Přeskakuji frame {zmq_frame_seq}")
+                    continue
+                if side == 'right' and shm_right is None:
+                    print(f"⚠️ [Vision] SHM pro 'right' neexistuje. Přeskakuji frame {zmq_frame_seq}")
+                    continue
                 
                 # Výběr referencí
                 shm = shm_left if side == 'left' else shm_right
@@ -148,12 +157,18 @@ class VisionService:
                 # Lock-free čtení
                 retries = 0
                 read_success = False
+                seq_before = -1
                 while retries < 20:
                     seq_before = struct.unpack_from('q d', shm.buf, 0)[0]
-                    if seq_before == -1 or seq_before != zmq_frame_seq:
+                    
+                    if seq_before == -1 or seq_before < zmq_frame_seq:
                         time.sleep(0.005)
                         retries += 1
                         continue
+                        
+                    if seq_before > zmq_frame_seq:
+                        print(f"⚠️ [Vision] Ztráta framu! ZMQ: {zmq_frame_seq}, SHM je už napřed: {seq_before} ({side})")
+                        break
                         
                     raw_frame = img_data.copy()
                     
@@ -179,6 +194,7 @@ class VisionService:
                     except Exception as e:
                         print(f"[{side}] Reconnect selhal: {e}")
                     continue
+
 
                 # --- AI Inference ---
                 img_tensor = torch.from_numpy(raw_frame).permute(2, 0, 1).unsqueeze(0).to('cuda', non_blocking=True).half() / 255.0
@@ -216,6 +232,9 @@ class VisionService:
                                 "points": line_points
                             })
                 
+                if zmq_frame_seq % 20 == 0:
+                    print(f"✅ [Vision] Zpracováno: {side} {zmq_frame_seq}, nalezeno linek: {len(out_points)}")
+                
                 # --- Odeslání ---
                 msg_data = {
                     "time": capture_time,
@@ -223,6 +242,7 @@ class VisionService:
                     "frame": zmq_frame_seq,
                     "pose": out_points
                 }
+                pub.send_string(f"vision/test")
                 pub.send_string(f"vision/{json.dumps(msg_data)}")
 
         except Exception as e:

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SERVICE_FILE="/etc/systemd/system/robot-cameras.service"
+SERVICE_FILE="/etc/systemd/system/robot-camera.service"
 LOG_DIR="/data/logs/camera"
 LOG_FILE="$LOG_DIR/cameras.log"
 
@@ -9,7 +9,7 @@ sudo mkdir -p "$LOG_DIR"
 sudo touch "$LOG_FILE"
 sudo chmod 664 "$LOG_FILE"
 
-echo "🛠️ Vytvářím systemd službu: robot-cameras.service"
+echo "🛠️ Vytvářím systemd službu: robot-camera.service"
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
@@ -40,8 +40,8 @@ RestartSec=2
 WantedBy=multi-user.target
 EOF
 
-echo "🔁 Aktivuji službu robot-cameras.service"
+echo "🔁 Aktivuji službu robot-camera.service"
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
-sudo systemctl enable --now robot-cameras.service
+sudo systemctl enable --now robot-camera.service
 echo "   tail -f $LOG_FILE"

@@ -10,7 +10,7 @@ CAM_PORT = 9001
 
 CAM_CMD_MAP = {
     "status": "PING",
-    "start" : "RUN",
+    "start" : "START",
     "stop"  : "STOP",
     "qr"    : "QR",
     "lcam"  : "LCAM",

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="cs">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Robotour - Vision Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            box-sizing: border-box;
+            border: 1px solid black;
+        }
+
+        /* Levý sloupec - textový log */
+        #output {
+            flex: 1;
+            background-color: #ffffdd;
+            padding: 1rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            box-sizing: border-box;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        /* Prostřední sloupec - zobrazení SVG */
+        #scan-viewport {
+            flex: 1.5;
+            background-color: #000000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left: 1px solid black;
+            border-right: 1px solid black;
+            box-sizing: border-box;
+        }
+
+        svg {
+            background-color: #111;
+            max-height: 95vh;
+            max-width: 95%;
+            height: auto;
+            width: auto;
+            display: block;
+        }
+
+        .grid-line {
+            stroke: #444;
+            stroke-width: 1;
+            stroke-dasharray: 4;
+        }
+
+        .robot {
+            fill: red;
+        }
+
+        .point {
+            fill: blue;
+        }
+
+        /* Pravý sloupec - ovládání */
+        #controls {
+            flex: 1;
+            background-color: #eeeeee;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 0.8rem;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid #ccc;
+            margin: 0.5rem 0;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="wrapper">
+        <!-- Levý sloupec: Log -->
+        <div id="output">Vision Test - Výstup připraven</div>
+
+        <!-- Prostřední sloupec: Obrázek/SVG -->
+        <div id="scan-viewport">
+            <svg id="visionSvg" viewBox="0 0 400 300">
+                <!-- Grid Lines -->
+                <line x1="0" y1="0" x2="0" y2="300" class="grid-line" />
+                <line x1="100" y1="0" x2="100" y2="300" class="grid-line" />
+                <line x1="200" y1="0" x2="200" y2="300" class="grid-line" style="stroke:#888;" /> <!-- střed -->
+                <line x1="300" y1="0" x2="300" y2="300" class="grid-line" />
+                <line x1="400" y1="0" x2="400" y2="300" class="grid-line" />
+
+                <!-- X lines (každý metr hloubky: 0, 1, 2, 3) -->
+                <line x1="0" y1="300" x2="400" y2="300" class="grid-line" />
+                <line x1="0" y1="200" x2="400" y2="200" class="grid-line" />
+                <line x1="0" y1="100" x2="400" y2="100" class="grid-line" />
+                <line x1="0" y1="0" x2="400" y2="0" class="grid-line" />
+
+                <!-- Zde budeme generovat čáry -->
+                <g id="linesGroup"></g>
+
+                <!-- Robot ikona (uprostřed dole) -->
+                <rect x="185" y="280" width="30" height="20" class="robot" rx="4" />
+                <polygon points="200,270 185,280 215,280" fill="red" />
+            </svg>
+        </div>
+
+        <!-- Pravý sloupec: Ovládání -->
+        <div id="controls">
+            <button onclick="visionCmd('ping')">Ping</button>
+            <button onclick="visionCmd('status')">Status</button>
+            <button onclick="visionCmd('start')">Start AI</button>
+            <button onclick="visionCmd('stop')">Stop AI</button>
+            <hr />
+            <button onclick="startVisionStream()">🔁 Stream ZMQ</button>
+            <button onclick="stopVisionStream()">⏹ Stop Stream</button>
+            <hr />
+            <button onclick="location.href='/'">⏮ Zpět na hlavní panel</button>
+        </div>
+    </div>
+
+    <script>
+        const svgW = 400;
+        const svgH = 300;
+
+        function mapXtoSvgY(x) {
+            return svgH - (x / 3.0) * svgH;
+        }
+
+        function mapYtoSvgX(y) {
+            return (svgW / 2) - (y / 2.0) * (svgW / 2);
+        }
+
+        let eventSource = null;
+        let logLines = [];
+
+        function logOutput(text) {
+            logLines.push(text);
+            if (logLines.length > 30) {
+                logLines.shift();
+            }
+            const outputEl = document.getElementById("output");
+            outputEl.textContent = logLines.join("\n");
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+
+        async function visionCmd(cmd) {
+            try {
+                const r = await fetch(`/vision/${cmd}`);
+                if (!r.ok) throw new Error(await r.text());
+                const data = await r.json();
+                logOutput(`✅ ${cmd}:\n` + data.response);
+            } catch (e) {
+                logOutput(`❌ ${cmd}: ` + e.message);
+            }
+        }
+
+        function startVisionStream() {
+            if (eventSource) {
+                logOutput("⚠️ Stream už běží");
+                return;
+            }
+
+            eventSource = new EventSource("/vision_stream");
+
+            eventSource.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    const lineCount = data.pose ? data.pose.length : 0;
+
+                    // Vytvoříme zkrácený výpis (nebo plný, ale na jednom řádku)
+                    const rawData = JSON.stringify(data);
+                    logOutput(`📡 Frame: ${data.frame} | Side: ${data.side} | Lines: ${lineCount}\nData: ${rawData}`);
+
+                    // Vykreslení
+                    const linesGroup = document.getElementById("linesGroup");
+                    linesGroup.innerHTML = ""; // Vyčištění starých čar
+
+                    if (data.pose && data.pose.length > 0) {
+                        data.pose.forEach((lineObj, idx) => {
+                            const points = lineObj.points;
+                            if (!points || points.length === 0) return;
+
+                            const colors = ["#00ff00", "#0088ff", "#ffaa00", "#ff00ff"];
+                            const color = colors[idx % colors.length];
+
+                            let d = "";
+                            points.forEach((pt, i) => {
+                                const sx = mapYtoSvgX(pt.y);
+                                const sy = mapXtoSvgY(pt.x);
+                                if (i === 0) d += `M ${sx} ${sy} `;
+                                else d += `L ${sx} ${sy} `;
+
+                                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                                circle.setAttribute("cx", sx);
+                                circle.setAttribute("cy", sy);
+                                circle.setAttribute("r", 4);
+                                circle.setAttribute("fill", color);
+                                linesGroup.appendChild(circle);
+                            });
+
+                            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                            path.setAttribute("d", d);
+                            path.setAttribute("fill", "none");
+                            path.setAttribute("stroke", color);
+                            path.setAttribute("stroke-width", "3");
+                            path.setAttribute("stroke-linecap", "round");
+                            linesGroup.insertBefore(path, linesGroup.firstChild);
+                        });
+                    } else {
+                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                        text.setAttribute("x", 200);
+                        text.setAttribute("y", 150);
+                        text.setAttribute("fill", "gray");
+                        text.setAttribute("text-anchor", "middle");
+                        text.textContent = "Žádná data (pose je prázdné)";
+                        linesGroup.appendChild(text);
+                    }
+                } catch (e) {
+                    logOutput("📡 " + event.data);
+                }
+            };
+
+            eventSource.onerror = function () {
+                logOutput("❌ Chyba ve streamu");
+                stopVisionStream();
+            };
+        }
+
+        function stopVisionStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                logOutput("🛑 Stream zastaven");
+            } else {
+                logOutput("⚠️ Stream neběží");
+            }
+        }
+
+        function forceFullScreenLayout() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            document.documentElement.style.width = w + "px";
+            document.documentElement.style.height = h + "px";
+            document.body.style.width = w + "px";
+            document.body.style.height = h + "px";
+        }
+
+        window.addEventListener("load", () => {
+            forceFullScreenLayout();
+        });
+
+        window.addEventListener("resize", () => {
+            forceFullScreenLayout();
+        });
+    </script>
+</body>
+
+</html>

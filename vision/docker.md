@@ -1,0 +1,1 @@
+docker run -it --ipc=host --net=host --runtime nvidia -v /tmp:/tmp -v /data:/data -v /opt/projects/robotour:/opt/projects/robotour -w /opt/projects/robotour/vision ultralytics/ultralytics:latest-jetson-jetpack6 bash

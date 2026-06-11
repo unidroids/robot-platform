@@ -121,9 +121,14 @@ class CameraService:
         LOG_DIR = "/data/robot/camera"
         os.makedirs(LOG_DIR, exist_ok=True)
         
-        LOG_TIME_STR = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        LOG_DIR_L = os.path.join(LOG_DIR, f"{LOG_TIME_STR}_left")
-        LOG_DIR_R = os.path.join(LOG_DIR, f"{LOG_TIME_STR}_right")
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H-%M-%S")
+        
+        BASE_LOG_DIR = os.path.join(LOG_DIR, date_str, time_str)
+        LOG_DIR_L = os.path.join(BASE_LOG_DIR, f"left")
+        LOG_DIR_R = os.path.join(BASE_LOG_DIR, f"right")
+        
         os.makedirs(LOG_DIR_L, exist_ok=True)
         os.makedirs(LOG_DIR_R, exist_ok=True)
         

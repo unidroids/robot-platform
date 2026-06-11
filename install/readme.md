@@ -29,17 +29,23 @@ chmod +x lidar_service_register.sh lidar_service_unregister.sh
 ./lidar_service_register.sh
 systemctl status robot-lidar
 
- chmod +x gamepad_service_register.sh gamepad_service_unregister.sh 
+chmod +x gamepad_service_register.sh gamepad_service_unregister.sh 
+
+chmod +x vision_register.sh vision_unregister.sh
+./vision_register.sh
+systemctl status robot-vision
 
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
+./vision_unregister.sh
 
 # status
 systemctl status fastapi-server
 systemctl status zeroconf
 systemctl status robot-cameras
 systemctl status robot-lidar
+systemctl status robot-vision
 
 # restart
 sudo systemctl restart fastapi-server
@@ -53,6 +59,7 @@ sudo systemctl restart robot-pointperfect
 sudo systemctl restart robot-fusion
 sudo systemctl restart robot-drive
 sudo systemctl restart robot-pilot
+sudo systemctl restart robot-vision
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 
@@ -66,5 +73,8 @@ tail -f /data/logs/camera/cameras.log
 
 nano /data/logs/lidar/lidar.log
 tail -f /data/logs/lidar/lidar.log
+
+nano /data/logs/vision/vision.log
+tail -f /data/logs/vision/vision.log
 
 tail -f /data/logs/drive/drive.log

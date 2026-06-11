@@ -3,7 +3,9 @@ import socket
 import threading
 import signal
 from client import handle_client
-from worker import shutdown_flag, stop_all
+from camera_service import service
+
+shutdown_event = threading.Event()
 
 HOST = "127.0.0.1"
 PORT = 9001
@@ -12,9 +14,9 @@ client_threads = []
 client_threads_lock = threading.Lock()
 
 def sigint_handler(signum, frame):
-    print("\n🧯 SIGINT zachycen, ukončuji server...")
-    stop_all()
-    shutdown_flag.set()
+    print("\n🧯 SIGINT zachycen, ukončuji server a kameru...")
+    service.stop()
+    shutdown_event.set()
 
 def start_server():
     signal.signal(signal.SIGINT, sigint_handler)
@@ -26,14 +28,14 @@ def start_server():
     print(f"📷 robot-cameras server naslouchá na {HOST}:{PORT}")
 
     try:
-        while not shutdown_flag.is_set():
+        while not shutdown_event.is_set():
             server.settimeout(1.0)
             try:
                 conn, addr = server.accept()
             except socket.timeout:
                 continue
             print(f"📡 Klient připojen: {addr}")
-            t = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
+            t = threading.Thread(target=handle_client, args=(conn, addr, shutdown_event), daemon=True)
             t.start()
             with client_threads_lock:
                 client_threads.append(t)

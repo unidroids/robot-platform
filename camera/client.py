@@ -2,7 +2,7 @@
 import traceback
 import time
 import socket
-import worker  # << důležité: import celého modulu
+from camera_service import service
 
 def read_line(conn) -> str:
     buffer = b""
@@ -13,11 +13,11 @@ def read_line(conn) -> str:
         buffer += chunk
     return buffer.decode("utf-8").strip().upper()
 
-def handle_client(conn, addr):
+def handle_client(conn, addr, shutdown_event):
     try:
         conn.settimeout(2.0)
         with conn:
-            while not worker.shutdown_flag.is_set():
+            while not shutdown_event.is_set():
                 try:
                     cmd = read_line(conn)
                 except socket.timeout:
@@ -32,53 +32,30 @@ def handle_client(conn, addr):
                     conn.sendall(b"PONG CAMERA\n")
 
                 elif cmd in ("START"):
-                    ok1 = worker.start_camera_loop()
-                    ok2 = worker.start_log_loop()
-                    msg = []
-                    msg.append("LOOP OK" if ok1 else "LOOP ALREADY")
-                    msg.append("LOG OK" if ok2 else "LOG ALREADY")
-                    conn.sendall((" ".join(msg) + "\n").encode())
+                    if service.start():
+                        conn.sendall(b"STARTED\n")
+                    else:
+                        conn.sendall(b"ALREADY RUNNING\n")
 
                 elif cmd == "STOP":
-                    worker.stop_camera_loop()
-                    worker.stop_log_loop()
-                    conn.sendall(b"STOPPED\n")
+                    if service.stop():
+                        conn.sendall(b"STOPPED\n")
+                    else:
+                        conn.sendall(b"NOT RUNNING\n")
 
                 elif cmd == "STATUS":
-                    # TODO: vrať reálný stav, aktuální číslo snímku
-                    conn.sendall(b"IDLE\n")
+                    status = service.get_status()
+                    conn.sendall(f"{status}\n".encode())
 
                 elif cmd == "EXIT":
                     conn.sendall(b"BYE\n")
                     return
 
                 elif cmd == "SHUTDOWN":
-                    # TODO: ukončení workerů a serveru
+                    service.stop()
+                    shutdown_event.set()
                     conn.sendall(b"SHUTTING DOWN\n")
                     return
-
-                # --- doménové příkazy ---
-                elif cmd == "QR":
-                    #TODO:Přijde vyjmout, bude v budoucnu řešeno v rámci služby vision
-                    if not worker.start_qr_worker():
-                        conn.sendall(b"QR:LOOP NOT RUNNING\n")
-                        continue
-
-                    print("🧾 QR worker spuštěn (čekám na výsledek)")
-                    deadline = time.time() + 120
-                    if worker.qr_ready.wait(timeout=deadline - time.time()):
-                        # ČTI POD ZÁMKEM a z modulu
-                        with worker.qr_lock:
-                            result = worker.qr_result
-                        if result:
-                            conn.sendall(f"QR:{result}\n".encode())
-                            print(f"[client] QR FOUND: {result}")
-                        else:
-                            conn.sendall(b"QR:NONE\n")
-                            print("[client] QR NONE (žádný kód)")
-                    else:
-                        conn.sendall(b"QR:TIMEOUT\n")
-                        print("[client] QR TIMEOUT")
 
                 else:
                     conn.sendall(b"ERR Unknown cmd\n")

@@ -78,16 +78,18 @@
 <body>
     <div id="wrapper">
         <div id="viewer">
-            <div id="camOutput">⬅ Výstup z kamery, QR kód nebo log</div>
-            <img id="cameraImg" src="" alt="Kamera" />
+            <div id="camOutput">Výstup z kamery</div>
         </div>
 
         <div id="controls">
+            <button onclick="camCmd('ping')">Ping</button>
             <button onclick="camCmd('status')">Status</button>
+            <hr />
             <button onclick="camCmd('start')">Start</button>
+            <hr />
             <button onclick="camCmd('lcam')">Levá kamera</button>
             <button onclick="camCmd('rcam')">Pravá kamera</button>
-            <button onclick="camCmd('qr')">QR Code</button>
+            <hr />
             <button onclick="camCmd('stop')">Stop</button>
             <hr />
             <button onclick="location.href='/'">⏮ Zpět na hlavní panel</button>
@@ -95,7 +97,6 @@
     </div>
 
     <script>
-        const img = document.getElementById("cameraImg");
         const result = document.getElementById("camOutput");
 
         async function camCmd(cmd) {
@@ -105,12 +106,6 @@
                 const data = await r.json();
                 log(`✅ Odpověď na  ${cmd}:\n` + JSON.stringify(data, null, 2));
 
-                // pro streamovací příkazy přepni <img> na příslušný endpoint
-                if (cmd === 'lcam' || cmd === 'rcam') {
-                    img.src = `/camera/${cmd}_stream?ts=` + Date.now();   // cache-buster
-                    img.style.display = "block";
-                    //viewer.style.display = "none";
-                }
             } catch (e) {
                 log("❌ " + e.message);
             }

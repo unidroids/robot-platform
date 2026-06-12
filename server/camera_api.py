@@ -9,10 +9,10 @@ CAM_HOST = "127.0.0.1"
 CAM_PORT = 9001
 
 CAM_CMD_MAP = {
-    "status": "PING",
+    "ping": "PING",
+    "status": "STATUS",
     "start" : "START",
     "stop"  : "STOP",
-    "qr"    : "QR",
     "lcam"  : "LCAM",
     "rcam"  : "RCAM",
 }

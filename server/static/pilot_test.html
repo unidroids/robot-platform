@@ -13,11 +13,14 @@
             background-color: #222;
             color: #eee;
             font-family: sans-serif;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
         }
 
         #wrapper {
             width: 100%;
-            height: 100vh;
+            height: 100%;
             display: flex;
             flex-direction: row;
             box-sizing: border-box;
@@ -68,13 +71,35 @@
             border-radius: 4px;
             font-weight: bold;
         }
-        
-        button.primary { background-color: #4CAF50; color: white; }
-        button.warning { background-color: #ff9800; color: white; }
-        button.danger { background-color: #e64d4d; color: white; }
-        button.info { background-color: #2196F3; color: white; }
-        button.default { background-color: #555; color: white; }
-        button:hover { filter: brightness(1.1); }
+
+        button.primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        button.warning {
+            background-color: #ff9800;
+            color: white;
+        }
+
+        button.danger {
+            background-color: #e64d4d;
+            color: white;
+        }
+
+        button.info {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        button.default {
+            background-color: #555;
+            color: white;
+        }
+
+        button:hover {
+            filter: brightness(1.1);
+        }
     </style>
 </head>
 
@@ -87,12 +112,12 @@
             </div>
             <div id="output">Načítám výstup z logu...</div>
         </div>
-        
+
         <div id="controls">
-            <button class="info" onclick="pilotCmd('status')">Zjištění Statusu</button>
             <button class="default" onclick="pilotCmd('ping')">Ping</button>
+            <button class="info" onclick="pilotCmd('status')">Status</button>
             <hr style="border-color: #555; width: 100%;" />
-            <button class="primary" onclick="pilotCmd('start')">▶️ START (Testovací jízda)</button>
+            <button class="primary" onclick="pilotCmd('start')">▶️ START</button>
             <button class="danger" onclick="pilotCmd('stop')">⏹️ STOP</button>
             <hr style="border-color: #555; width: 100%;" />
             <button class="warning" onclick="pilotCmd('pause')">⏸️ PAUSE</button>
@@ -103,40 +128,51 @@
     </div>
 
     <script>
+        function forceFullScreenLayout() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            document.documentElement.style.width = w + "px";
+            document.documentElement.style.height = h + "px";
+            document.body.style.width = w + "px";
+            document.body.style.height = h + "px";
+        }
+        window.addEventListener("load", forceFullScreenLayout);
+        window.addEventListener("resize", forceFullScreenLayout);
+
         const outputDiv = document.getElementById("output");
         const apiStatus = document.getElementById("api-status");
-        
+
         // SSE for tailing log
         const eventSource = new EventSource("/pilot/log");
-        
-        eventSource.onopen = function() {
+
+        eventSource.onopen = function () {
             outputDiv.innerHTML = "";
             apiStatus.textContent = "Služba API: ONLINE";
             apiStatus.style.color = "#4CAF50";
         };
-        
-        eventSource.onerror = function() {
+
+        eventSource.onerror = function () {
             apiStatus.textContent = "Služba API: OFFLINE / RECONNECTING";
             apiStatus.style.color = "#e64d4d";
         };
 
-        eventSource.onmessage = function(e) {
+        eventSource.onmessage = function (e) {
             // Vytvoříme řádek
             const line = document.createElement("div");
             line.textContent = e.data;
-            
+
             // Barvičky podle obsahu
-            if(e.data.includes("❌") || e.data.includes("Chyba")) line.style.color = "#ff4444";
-            else if(e.data.includes("⚠️") || e.data.includes("PŘEKÁŽKA") || e.data.includes("Ztráta")) line.style.color = "#ffaa00";
-            else if(e.data.includes("🚀") || e.data.includes("OK ->")) line.style.color = "#44ff44";
-            else if(e.data.includes("🛑") || e.data.includes("⏸️")) line.style.color = "#ff8888";
+            if (e.data.includes("❌") || e.data.includes("Chyba")) line.style.color = "#ff4444";
+            else if (e.data.includes("⚠️") || e.data.includes("PŘEKÁŽKA") || e.data.includes("Ztráta")) line.style.color = "#ffaa00";
+            else if (e.data.includes("🚀") || e.data.includes("OK ->")) line.style.color = "#44ff44";
+            else if (e.data.includes("🛑") || e.data.includes("⏸️")) line.style.color = "#ff8888";
             else line.style.color = "#cccccc";
 
             // Vložíme navrch! (reverse order)
             outputDiv.prepend(line);
-            
+
             // Omezení historie na 200 řádků
-            if(outputDiv.childNodes.length > 200) {
+            if (outputDiv.childNodes.length > 200) {
                 outputDiv.removeChild(outputDiv.lastChild);
             }
         };
@@ -146,14 +182,14 @@
                 const r = await fetch(`/pilot/cmd/${cmd}`);
                 if (!r.ok) throw new Error(await r.text());
                 const data = await r.json();
-                
+
                 // Dočasně vypíšeme zprávu od serveru taky do logu navrch (modře)
                 const line = document.createElement("div");
                 line.style.color = "#44ccff";
                 line.style.fontWeight = "bold";
                 line.textContent = `[API Command] ${cmd.toUpperCase()} -> ${data.response}`;
                 outputDiv.prepend(line);
-                
+
             } catch (e) {
                 const line = document.createElement("div");
                 line.style.color = "#ff4444";

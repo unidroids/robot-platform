@@ -9,6 +9,7 @@ import subprocess
 import socket
 import platform
 import os
+from datetime import datetime
 
 from camera_api import router as camera_router
 from lidar_api import router as lidar_router
@@ -88,6 +89,7 @@ async def info():
         interfaces = {"default": ips}
 
     return {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "hostname": hostname,
         "ip": ip,
         "ips": ips,

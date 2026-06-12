@@ -12,6 +12,12 @@ chmod 664 /data/logs/fastapi/zeroconf.log
 touch /data/logs/fastapi/cameras.log
 chmod 664 /data/logs/fastapi/cameras.log
 
+mkdir -p /data/logs/logger
+chown user:user /data/logs/logger
+chmod 755 /data/logs/logger
+touch /data/logs/logger/logger.log
+chmod 664 /data/logs/logger/logger.log
+
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
 ./register_fastapi.sh
@@ -39,10 +45,15 @@ chmod +x pilot_vision_register.sh pilot_vision_unregister.sh
 ./pilot_vision_register.sh
 systemctl status robot-pilot-vision
 
+chmod +x logger_register.sh logger_unregister.sh
+./logger_register.sh
+systemctl status robot-logger
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
 ./vision_unregister.sh
+./logger_unregister.sh
 
 # status
 systemctl status fastapi-server
@@ -51,6 +62,7 @@ systemctl status robot-cameras
 systemctl status robot-lidar
 systemctl status robot-vision
 systemctl status robot-pilot-vision
+systemctl status robot-logger
 
 # restart
 sudo systemctl restart fastapi-server
@@ -66,6 +78,7 @@ sudo systemctl restart robot-drive
 sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-vision
+sudo systemctl restart robot-logger
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 
@@ -87,3 +100,6 @@ tail -f /data/logs/drive/drive.log
 
 nano /data/logs/pilot_vision/pilot_vision.log
 tail -f /data/logs/pilot_vision/pilot_vision.log
+
+nano /data/logs/logger/logger.log
+tail -f /data/logs/logger/logger.log

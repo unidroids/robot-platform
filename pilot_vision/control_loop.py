@@ -51,22 +51,11 @@ class ControlLoop:
     def resume(self):
         self.is_paused = False
 
-    def _calculate_steering(self, pose_lines, lidar_dist=5000.0):
-        if not pose_lines:
+    def _calculate_steering(self, target_pt, lidar_dist=5000.0):
+        if not target_pt:
             return None
 
-        best_line = max(pose_lines, key=lambda l: l.get("line_conf", 0.0))
-        pts = best_line.get("points", [])
-        if not pts:
-            return None
-
-        pts.sort(key=lambda pt: pt.get('x', 0))
-        # Vezmeme bod kousek dále před robotem pro lepší pure pursuit
-        mid_idx = min(len(pts) - 1, len(pts) * 2 // 3)
-        target_pt = pts[mid_idx]
-        
-        target_x = target_pt.get('x', 0.0)
-        target_y = target_pt.get('y', 0.0)
+        target_x, target_y = target_pt
 
         import math
         L_NEAR = math.hypot(target_x, target_y)
@@ -80,7 +69,7 @@ class ControlLoop:
         max_fwd_speed = 100.0  # cm/s
         max_spin_speed = 40.0  # cm/s
         a_y_max = 1.0          # m/s^2
-        B = 0.5                # Rozvor kol v metrech
+        B = 0.58               # Rozvor kol v metrech
 
         # Zpomalení dle vzdálenosti bodu (na kameře)
         dist_factor = min(1.0, max(0.3, L_NEAR / 2.0))
@@ -129,10 +118,7 @@ class ControlLoop:
         print(f"🏎️ [ControlLoop] Smyčka spuštěna (10 Hz) s tokenem: '{self.active_token}'")
         self.drive.set_token(self.active_token)
         
-        # Pro setrvačnost při ztrátě
-        last_speed = 0.0
-        last_steer = 0.0
-        lost_frames = 0
+        # Odstranena promenna lost_frames, protoze setrvacnost resi PursuitPointTracker
         
         try:
             while not self.shutdown_event.is_set():
@@ -165,27 +151,19 @@ class ControlLoop:
                     continue
 
                 # 3) Normální vyhodnocení čáry
-                control = self._calculate_steering(snap["vision_pose_lines"], dist)
-                
-                # Výchozí hodnoty pro log
-                cur_target_x = 0.0
-                cur_target_y = 0.0
+                if not snap.get("pursuit_ready", False):
+                    pursuit_state = snap.get("pursuit_state", "UNKNOWN")
+                    print(f"⚠️ [ControlLoop] PursuitPoint (stav {pursuit_state}) není ready. ZASTAVUJI!")
+                    self.drive.send_drive(100, 0, 0)
+                    self._sleep_until_next_frame(start_time)
+                    continue
+
+                control = self._calculate_steering(snap["pursuit_target"], dist)
                 
                 if control is not None:
                     left, right, cur_target_x, cur_target_y = control
-                    last_speed = left # Použijeme left pro setrvačnost (zjednodušení)
-                    last_steer = right
-                    lost_frames = 0
                 else:
-                    lost_frames += 1
-                    if lost_frames < 5:
-                        print(f"⚠️ [ControlLoop] Ztráta čáry (setrvačnost {lost_frames}/5).")
-                        left = last_speed
-                        right = last_steer
-                    else:
-                        print(f"⚠️ [ControlLoop] Dlouhodobá ztráta čáry. ZASTAVUJI!")
-                        left = 0
-                        right = 0
+                    left, right, cur_target_x, cur_target_y = 0, 0, 0.0, 0.0
                 
                 # Odeslání
                 try:

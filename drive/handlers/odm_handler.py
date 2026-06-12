@@ -4,6 +4,9 @@ from __future__ import annotations
 import socket
 import traceback
 from typing import Optional
+import zmq
+import json
+import os
 
 __all__ = ["OdmHandler"]
 
@@ -38,6 +41,15 @@ class OdmHandler:
 
         self._lastest: Optional[bytes] = None  # záměrně název podle zadání
 
+        # 0) ZMQ publisher pro odometrii
+        self._zmq_context = zmq.Context.instance()
+        self._zmq_pub = self._zmq_context.socket(zmq.PUB)
+        self._zmq_pub.bind("ipc:///tmp/robot-odometry")
+        #try:
+        #    os.chmod("/tmp/robot-odometry", 0o777)
+        #except Exception as e:
+        #    print(f"⚠️ [OdmHandler] Nelze nastavit oprávnění na ZMQ socket: {e}")
+
         if autoconnect:
             self._ensure_socket()
 
@@ -56,9 +68,32 @@ class OdmHandler:
         # 2) poslat na fusion
         self._send_odm(send_message, wait)
 
+        # 3) poslat na zmq (pilot-vision atd.)
+        self._send_zmq(send_message)
+
     def get_lastest(self) -> Optional[bytes]:
         """Vrátí naposledy přijatá ODM data (nebo None)."""
         return self._lastest
+
+    def _send_zmq(self, send_message: bytes):
+        """Vyparsuje ts, left, right a pošle jako JSON na ZMQ s topicem 'speed'."""
+        try:
+            decoded = send_message.decode('ascii', errors='ignore')
+            parts = decoded.split(',')
+            if len(parts) >= 5:
+                ts_mono = parts[0]
+                left_speed = parts[3]
+                right_speed = parts[4]
+                
+                msg_data = {
+                    "ts": int(ts_mono),
+                    "left": int(left_speed),
+                    "right": int(right_speed)
+                }
+                # Pošleme s prefixem 'speed/' pro snadné filtrování odběratelem
+                self._zmq_pub.send_string(f"speed/{json.dumps(msg_data)}")
+        except Exception as e:
+            print(f"[OdmHandler] Chyba při odesílání na ZMQ: {e}")
 
     # --- interní pomocné metody ---
 
@@ -116,6 +151,8 @@ class OdmHandler:
     def __del__(self):
         # best-effort úklid
         self._close_socket()
+        if hasattr(self, '_zmq_pub') and self._zmq_pub is not None:
+            self._zmq_pub.close()
 
 
 # --- jednoduchý lokální test bez sítě ---

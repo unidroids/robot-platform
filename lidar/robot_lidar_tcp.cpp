@@ -9,6 +9,7 @@
 // -----------------------------------------------------------------
 
 #include "lidar_controller.hpp"   // náš wrapper
+#include "lidar_publisher.hpp"
 
 #include <atomic>
 #include <cerrno>
@@ -32,6 +33,8 @@ constexpr const char *kBindAddr = "127.0.0.1";
 // Globální stav
 // ------------------------------------------------------
 static LidarController lidar;          // jediná instance (safe)
+static LidarPublisher lidar_pub(&lidar);
+
 std::atomic<bool> shutting_down{false};
 std::atomic<int>  listen_fd{-1};
 
@@ -173,6 +176,8 @@ int main() {
 
     std::cout << "📡 robot-lidar TCP server naslouchá na " << kBindAddr << ":" << kPort << std::endl;
 
+    lidar_pub.start();
+
     while (!shutting_down.load()) {
         sockaddr_in cli{}; socklen_t len=sizeof(cli);
         int cs = accept(listen_sock, (sockaddr*)&cli, &len);
@@ -181,6 +186,7 @@ int main() {
     }
 
     close_all_clients();
+    lidar_pub.stop();
     std::cout << "🛑 robot-lidar server ukončen." << std::endl;
     return 0;
 }

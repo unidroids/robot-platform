@@ -18,6 +18,7 @@ from journey_api import router as journey_router
 from gamepad_api import router as gamepad_router
 from vision_api import router as vision_router
 from pilot_api import router as pilot_router
+from logger_api import router as logger_router
 
 from nocache import NoCacheMiddleware
 
@@ -32,6 +33,7 @@ app.include_router(journey_router)
 app.include_router(gamepad_router)
 app.include_router(vision_router)
 app.include_router(pilot_router)
+app.include_router(logger_router)
 
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):

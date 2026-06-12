@@ -31,9 +31,11 @@ Environment=PYTHONUNBUFFERED=1
 ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9011/tcp || true'
 # Ukonči případný zamrzlý docker kontejner (potichu, pokud neexistuje)
 ExecStartPre=/bin/bash -c 'docker inspect robot-vision >/dev/null 2>&1 && docker rm -f robot-vision || true'
+# Smaž případný starý ZMQ socket, pokud ho vlastnil root (+ znamená pustit pod právy roota i když máme User=user)
+ExecStartPre=+/bin/rm -f /tmp/robot-vision
 ExecStartPre=/bin/sleep 0.5
 
-ExecStart=/usr/bin/docker run --name robot-vision --rm --ipc=host --net=host --runtime nvidia -v /tmp:/tmp -v /data:/data -v /opt/projects/robotour:/opt/projects/robotour -w /opt/projects/robotour/vision robotour-vision python3 main.py
+ExecStart=/usr/bin/docker run --name robot-vision --rm --user 1000:1000 -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro -e HOME=/tmp --ipc=host --net=host --runtime nvidia -v /tmp:/tmp -v /data:/data -v /opt/projects/robotour:/opt/projects/robotour -w /opt/projects/robotour/vision robotour-vision python3 main.py
 
 # Systemd čisté ukončení - zastaví docker kontejner s 5s timeoutem
 ExecStop=/usr/bin/docker stop -t 5 robot-vision

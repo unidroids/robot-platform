@@ -56,6 +56,18 @@ def handle_client(conn, addr, shutdown_event):
                     status = service.get_status()
                     conn.sendall(f"{status}\n".encode())
 
+                elif cmd == "PAUSE":
+                    if service.pause():
+                        conn.sendall(b"OK PAUSED\n")
+                    else:
+                        conn.sendall(b"OK ALREADY PAUSED OR STOPPED\n")
+
+                elif cmd == "RESUME":
+                    if service.resume():
+                        conn.sendall(b"OK RESUMED\n")
+                    else:
+                        conn.sendall(b"OK ALREADY RUNNING OR STOPPED\n")
+
                 elif cmd == "EXIT":
                     conn.sendall(b"BYE\n")
                     return

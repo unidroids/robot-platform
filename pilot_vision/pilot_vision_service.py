@@ -37,8 +37,26 @@ class PilotVisionService:
         self.active_token = None
         return True
 
+    def pause(self) -> bool:
+        if not self.control.is_running or self.control.is_paused:
+            return False
+        
+        print("⏸️ [PilotVisionService] Pozastavuji (PAUSE)...")
+        self.control.pause()
+        return True
+
+    def resume(self) -> bool:
+        if not self.control.is_running or not self.control.is_paused:
+            return False
+            
+        print("▶️ [PilotVisionService] Obnovuji (RESUME)...")
+        self.control.resume()
+        return True
+
     def get_status(self) -> str:
         if self.control.is_running and self.receiver.is_running:
+            if self.control.is_paused:
+                return f"PAUSED TOKEN={self.active_token}"
             return f"RUNNING TOKEN={self.active_token}"
         return "STOPPED"
 

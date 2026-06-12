@@ -14,6 +14,7 @@ class ControlLoop:
         self.shutdown_event = threading.Event()
         self.active_token = None
         self.drive = DriveClient()
+        self.is_paused = False
         
         self.loop_counter = 0
 
@@ -39,6 +40,16 @@ class ControlLoop:
 
     def update_token(self, token: str):
         self.active_token = token
+
+    def pause(self):
+        self.is_paused = True
+        try:
+            self.drive.send_break()
+        except:
+            pass
+
+    def resume(self):
+        self.is_paused = False
 
     def _calculate_steering(self, pose_lines):
         if not pose_lines:
@@ -83,6 +94,10 @@ class ControlLoop:
                 
                 self.drive.set_token(self.active_token)
                 self.loop_counter += 1
+                
+                if self.is_paused:
+                    self._sleep_until_next_frame(start_time)
+                    continue
                 
                 # Snímek aktuálního stavu
                 snap = self.state.get_snapshot()

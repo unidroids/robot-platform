@@ -35,6 +35,10 @@ chmod +x vision_register.sh vision_unregister.sh
 ./vision_register.sh
 systemctl status robot-vision
 
+chmod +x pilot_vision_register.sh pilot_vision_unregister.sh
+./pilot_vision_register.sh
+systemctl status robot-pilot-vision
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
@@ -46,6 +50,7 @@ systemctl status zeroconf
 systemctl status robot-cameras
 systemctl status robot-lidar
 systemctl status robot-vision
+systemctl status robot-pilot-vision
 
 # restart
 sudo systemctl restart fastapi-server
@@ -59,6 +64,7 @@ sudo systemctl restart robot-pointperfect
 sudo systemctl restart robot-fusion
 sudo systemctl restart robot-drive
 sudo systemctl restart robot-pilot
+sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-vision
 
 # vypis
@@ -78,3 +84,6 @@ nano /data/logs/vision/vision.log
 tail -f /data/logs/vision/vision.log
 
 tail -f /data/logs/drive/drive.log
+
+nano /data/logs/pilot_vision/pilot_vision.log
+tail -f /data/logs/pilot_vision/pilot_vision.log

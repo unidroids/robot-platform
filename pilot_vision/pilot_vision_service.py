@@ -21,6 +21,7 @@ class PilotVisionService:
             self.control.update_token(token)
             return False
 
+        self.state.reset()
         self.active_token = token
         print(f"🚀 [PilotVisionService] Startuji služby (Token: {token})")
         self.receiver.start()
@@ -34,6 +35,7 @@ class PilotVisionService:
         print("🛑 [PilotVisionService] Zastavuji služby...")
         self.control.stop()
         self.receiver.stop()
+        self.state.reset()
         self.active_token = None
         return True
 

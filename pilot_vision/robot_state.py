@@ -112,6 +112,17 @@ class RobotState:
         self.odom_speed_right = 0
         self.last_odom_time = 0.0
         
+    def reset(self):
+        with self._lock:
+            self.vision_pose_lines = []
+            self.last_vision_time = 0.0
+            self.pursuit_tracker.reset()
+            self.lidar_distance = -1.0
+            self.last_lidar_time = 0.0
+            self.odom_speed_left = 0
+            self.odom_speed_right = 0
+            self.last_odom_time = 0.0
+
     def update_vision(self, pose_lines):
         with self._lock:
             self.vision_pose_lines = pose_lines

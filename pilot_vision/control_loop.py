@@ -51,7 +51,7 @@ class ControlLoop:
     def resume(self):
         self.is_paused = False
 
-    def _calculate_steering(self, pose_lines):
+    def _calculate_steering(self, pose_lines, lidar_dist=5000.0):
         if not pose_lines:
             return None
 
@@ -61,23 +61,69 @@ class ControlLoop:
             return None
 
         pts.sort(key=lambda pt: pt.get('x', 0))
-        mid_idx = len(pts) // 2
+        # Vezmeme bod kousek dále před robotem pro lepší pure pursuit
+        mid_idx = min(len(pts) - 1, len(pts) * 2 // 3)
         target_pt = pts[mid_idx]
         
         target_x = target_pt.get('x', 0.0)
         target_y = target_pt.get('y', 0.0)
 
-        min_speed = 30
-        max_speed = 120
-        base_speed = int(min_speed + (target_x / 3.0) * (max_speed - min_speed))
-        base_speed = max(min_speed, min(max_speed, base_speed))
-        
-        if abs(target_y) > 0.5:
-            base_speed = int(base_speed * 0.7)
+        import math
+        L_NEAR = math.hypot(target_x, target_y)
+        if L_NEAR < 0.01:
+            return 0, 0, target_x, target_y
 
-        P_gain = 40.0
-        steer = target_y * P_gain
-        return base_speed, steer
+        heading_error_rad = math.atan2(target_y, target_x)
+        heading_error_deg = math.degrees(heading_error_rad)
+        err_abs = abs(heading_error_deg)
+
+        max_fwd_speed = 100.0  # cm/s
+        max_spin_speed = 40.0  # cm/s
+        a_y_max = 1.0          # m/s^2
+        B = 0.5                # Rozvor kol v metrech
+
+        # Zpomalení dle vzdálenosti bodu (na kameře)
+        dist_factor = min(1.0, max(0.3, L_NEAR / 2.0))
+        
+        # Zpomalení dle LiDARu (mezi 50 a 150 cm)
+        lidar_factor = 1.0
+        if 50.0 <= lidar_dist < 150.0:
+            lidar_factor = max(0.2, (lidar_dist - 50.0) / 100.0)
+
+        if err_abs < 15.0:
+            v_center = max_fwd_speed
+        elif err_abs < 60.0:
+            v_center = max_fwd_speed * (1.0 - (err_abs - 15.0) / 45.0)
+        else:
+            v_center = 0.0
+
+        v_center *= (dist_factor * lidar_factor)
+
+        # Pure Pursuit
+        kappa = 2.0 * target_y / (L_NEAR**2)
+
+        if abs(kappa) > 0.001:
+            v_ay_limit = math.sqrt(a_y_max / abs(kappa)) * 100.0
+            v_center = min(v_center, v_ay_limit)
+
+        v_turn_pp = v_center * kappa * B / 2.0
+        
+        spin_mag = max_spin_speed * min(1.0, err_abs / 60.0)
+        v_turn_spin = math.copysign(spin_mag, target_y)
+        
+        blend_factor = min(1.0, err_abs / 60.0)
+        v_turn = (1.0 - blend_factor) * v_turn_pp + blend_factor * v_turn_spin
+        
+        left_speed = v_center - v_turn
+        right_speed = v_center + v_turn
+
+        abs_limit = 100.0
+        max_wheel = max(abs(left_speed), abs(right_speed))
+        if max_wheel > abs_limit:
+            left_speed = (left_speed / max_wheel) * abs_limit
+            right_speed = (right_speed / max_wheel) * abs_limit
+
+        return int(round(left_speed)), int(round(right_speed)), target_x, target_y
 
     def _run(self):
         print(f"🏎️ [ControlLoop] Smyčka spuštěna (10 Hz) s tokenem: '{self.active_token}'")
@@ -119,36 +165,38 @@ class ControlLoop:
                     continue
 
                 # 3) Normální vyhodnocení čáry
-                control = self._calculate_steering(snap["vision_pose_lines"])
+                control = self._calculate_steering(snap["vision_pose_lines"], dist)
+                
+                # Výchozí hodnoty pro log
+                cur_target_x = 0.0
+                cur_target_y = 0.0
+                
                 if control is not None:
-                    base_speed, steer = control
-                    last_speed = base_speed
-                    last_steer = steer
+                    left, right, cur_target_x, cur_target_y = control
+                    last_speed = left # Použijeme left pro setrvačnost (zjednodušení)
+                    last_steer = right
                     lost_frames = 0
                 else:
                     lost_frames += 1
                     if lost_frames < 5:
                         print(f"⚠️ [ControlLoop] Ztráta čáry (setrvačnost {lost_frames}/5).")
-                        base_speed = last_speed
-                        steer = last_steer
+                        left = last_speed
+                        right = last_steer
                     else:
                         print(f"⚠️ [ControlLoop] Dlouhodobá ztráta čáry. ZASTAVUJI!")
-                        base_speed = 0
-                        steer = 0
-
-                left = int(max(-50, min(200, base_speed + steer)))
-                right = int(max(-50, min(200, base_speed - steer)))
+                        left = 0
+                        right = 0
                 
                 # Odeslání
                 try:
-                    #self.drive.send_drive(100, left, right)
-                    print(f"🚀 [ControlLoop] OK -> Lidar: {dist:.1f}cm, Odom: {snap['odom_speed_left']}/{snap['odom_speed_right']}, Motor: L={left} R={right}")
+                    self.drive.send_drive(100, left, right)
+                    print(f"🚀 [ControlLoop] OK -> Lidar:{dist:.1f}cm Odom:{snap['odom_speed_left']}/{snap['odom_speed_right']} X:{cur_target_x:.2f}m Y:{cur_target_y:.2f}m Motor:L={left} R={right}")
                 except Exception as e:
                     print(f"⚠️ [ControlLoop] Chyba komunikace s Drive: {e}")
 
                 # Pozitivní výpis (každý 10. průchod -> cca každou 1 vteřinu)
                 if self.loop_counter % 10 == 0:
-                    print(f"🚀 [ControlLoop] OK -> Lidar: {dist:.1f}cm, Odom: {snap['odom_speed_left']}/{snap['odom_speed_right']}, Motor: L={left} R={right}")
+                    print(f"🚀 [ControlLoop] OK -> Lidar:{dist:.1f}cm Odom:{snap['odom_speed_left']}/{snap['odom_speed_right']} X:{cur_target_x:.2f}m Y:{cur_target_y:.2f}m Motor:L={left} R={right}")
 
                 self._sleep_until_next_frame(start_time)
 

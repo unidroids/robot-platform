@@ -18,7 +18,7 @@ class PursuitPointTracker:
         self.init_points = []
         self.lost_frames = 0
         
-    def _get_1m_point(self, pts):
+    def _get_2m_point(self, pts):
         if not pts:
             return None
             
@@ -31,8 +31,8 @@ class PursuitPointTracker:
             else:
                 d = math.hypot(x - last_x, y - last_y)
                 
-            if dist + d >= 1.0:
-                remain = 1.0 - dist
+            if dist + d >= 2.0:
+                remain = 2.0 - dist
                 ratio = remain / d if d > 0 else 0
                 interp_x = last_x + ratio * (x - last_x)
                 interp_y = last_y + ratio * (y - last_y)
@@ -46,16 +46,16 @@ class PursuitPointTracker:
     def update(self, pose_lines):
         valid_lines = [l for l in pose_lines if l.get("line_conf", 0.0) > 0.5]
         
-        points_1m = []
+        points_2m = []
         for l in valid_lines:
             pts = l.get("points", [])
-            pt = self._get_1m_point(pts)
+            pt = self._get_2m_point(pts)
             if pt:
-                points_1m.append(pt)
+                points_2m.append(pt)
                 
         if self.state == "INIT":
-            if points_1m:
-                self.init_points.extend(points_1m)
+            if points_2m:
+                self.init_points.extend(points_2m)
             self.msg_count += 1
             if self.msg_count >= 40:
                 if self.init_points:
@@ -69,13 +69,13 @@ class PursuitPointTracker:
 
         best_pt = None
         min_dist = float('inf')
-        for pt in points_1m:
+        for pt in points_2m:
             d = math.hypot(pt[0] - self.x_pamet, pt[1] - self.y_pamet)
             if d < min_dist:
                 min_dist = d
                 best_pt = pt
                 
-        if best_pt and min_dist <= 0.40:
+        if best_pt and min_dist <= 0.25:
             self.x_pamet = best_pt[0] * 0.3 + self.x_pamet * 0.7
             self.y_pamet = best_pt[1] * 0.3 + self.y_pamet * 0.7
             self.lost_frames = 0

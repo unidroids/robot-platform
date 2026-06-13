@@ -66,7 +66,7 @@ class ControlLoop:
         heading_error_deg = math.degrees(heading_error_rad)
         err_abs = abs(heading_error_deg)
 
-        max_fwd_speed = 100.0  # cm/s
+        max_fwd_speed = 200.0  # cm/s
         max_spin_speed = 40.0  # cm/s
         a_y_max = 1.0          # m/s^2
         B = 0.58               # Rozvor kol v metrech
@@ -106,7 +106,7 @@ class ControlLoop:
         left_speed = v_center - v_turn
         right_speed = v_center + v_turn
 
-        abs_limit = 100.0
+        abs_limit = 200.0
         max_wheel = max(abs(left_speed), abs(right_speed))
         if max_wheel > abs_limit:
             left_speed = (left_speed / max_wheel) * abs_limit

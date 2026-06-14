@@ -17,6 +17,7 @@ GNSS_CMD_MAP = {
     "start" : "START",
     "stop"  : "STOP",
     "data"  : "DATA",
+    "heading": "HEADING",
 }
 
 def send_to_service(host: str, port: int, cmd: str, timeout=2.0) -> str:
@@ -43,6 +44,10 @@ async def gnss_action(action: str):
     if action == "data":
         resp = await asyncio.to_thread(send_to_service, "127.0.0.1", SERVICES["gnss"], cmd)
         return {"action": action, "results": {"gnss": resp}}
+    
+    if action == "heading":
+        resp = await asyncio.to_thread(send_to_service, "127.0.0.1", SERVICES["heading"], cmd)
+        return {"action": action, "results": {"heading": resp}}
     
     async def call_service(name, port):
         resp = await asyncio.to_thread(send_to_service, "127.0.0.1", port, cmd)

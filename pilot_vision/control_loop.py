@@ -186,7 +186,7 @@ class ControlLoop:
                 
                 # Odeslání
                 try:
-                    self.drive.send_drive(100, left, right)
+                    self.drive.send_drive(200, left, right)
                     #print(f"🚀 [ControlLoop] OK -> Lidar:{dist:.1f}cm Odom:{snap['odom_speed_left']}/{snap['odom_speed_right']} X:{cur_target_x:.2f}m Y:{cur_target_y:.2f}m Motor:L={left} R={right}")
                 except Exception as e:
                     print(f"⚠️ [ControlLoop] Chyba komunikace s Drive: {e}")

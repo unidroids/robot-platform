@@ -79,6 +79,7 @@ sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-vision
 sudo systemctl restart robot-logger
+sudo systemctl restart robot-heading
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 

@@ -80,7 +80,10 @@ class LoggerService:
             "ipc:///tmp/robot-camera",
             "ipc:///tmp/robot-vision",
             "ipc:///tmp/robot-lidar",
-            "ipc:///tmp/robot-odometry"
+            "ipc:///tmp/robot-odometry",
+            "ipc:///tmp/robot-gps",
+            "ipc:///tmp/robot-heading",
+            "ipc:///tmp/robot-imu"
         ]
         
         sockets = {}

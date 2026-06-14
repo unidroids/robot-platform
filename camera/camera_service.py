@@ -99,7 +99,7 @@ class CameraService:
             f"t. ! queue max-size-buffers=1 ! nvvidconv flip-method={flip_method} ! video/x-raw, format=BGRx ! "
             f"videoconvert ! video/x-raw, format=BGR ! appsink name={sink_name} drop=true sync=false max-buffers=1 emit-signals=true "
             f"t. ! queue max-size-buffers=1 ! nvvidconv flip-method={flip_method} ! video/x-raw, format=I420 ! "
-            f"videorate drop-only=true ! video/x-raw, framerate=1/1 ! "
+            f"videorate drop-only=true ! video/x-raw, framerate=5/1 ! "
             f"nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! "
             f"nvjpegenc quality=70 ! multifilesink location={log_file_pattern}"
         )

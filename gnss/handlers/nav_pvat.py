@@ -1,6 +1,7 @@
 import struct
 import time
 import threading
+import zmq
 from typing import Optional, Callable
 from data.nav_pvat_data import NavPvatData
 
@@ -26,6 +27,10 @@ class NavPvatHandler:
         self._lock = threading.Lock()
         self._last: Optional[NavPvatData] = None
         self.on_data = on_data
+
+        self._zmq_context = zmq.Context.instance()
+        self._zmq_pub = self._zmq_context.socket(zmq.PUB)
+        self._zmq_pub.bind("ipc:///tmp/robot-gps")
 
     def handle(self, msg_class: int, msg_id: int, payload: bytes) -> None:
         if len(payload) != self.NAV_PVAT_PAYLOAD_LEN:
@@ -66,6 +71,12 @@ class NavPvatHandler:
         )
         with self._lock:
             self._last = data
+
+        try:
+            self._zmq_pub.send_string(f"pvat/{data.to_json()}")
+        except Exception as e:
+            pass
+
         if self.on_data:
             self.on_data(data)
 

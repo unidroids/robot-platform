@@ -1,5 +1,6 @@
 import time
 import threading
+import zmq
 from typing import Optional, Callable
 from data.esf_raw_data import EsfRawData
 
@@ -29,6 +30,10 @@ class EsfRawHandler:
         self._lock = threading.Lock()
         self._last: Optional[EsfRawData] = None
         self.on_data = on_data
+
+        self._zmq_context = zmq.Context.instance()
+        self._zmq_pub = self._zmq_context.socket(zmq.PUB)
+        self._zmq_pub.bind("ipc:///tmp/robot-imu")
 
     def handle(self, msg_class: int, msg_id: int, payload: bytes) -> None:
         """RT-safe: žádné printy, minimální alokace."""
@@ -82,6 +87,12 @@ class EsfRawHandler:
         )
         with self._lock:
             self._last = esf_raw
+        
+        try:
+            self._zmq_pub.send_string(f"raw/{esf_raw.to_json()}")
+        except Exception as e:
+            pass
+
         if self.on_data:
             self.on_data(esf_raw)
 

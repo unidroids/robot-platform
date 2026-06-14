@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import socket
 import traceback
+import zmq
 from typing import Optional
 
 __all__ = ["UniHeadinAHandler"]
@@ -29,6 +30,10 @@ class UniHeadinAHandler:
 
         self._lastest: Optional[bytes] = None  
 
+        self._zmq_context = zmq.Context.instance()
+        self._zmq_pub = self._zmq_context.socket(zmq.PUB)
+        self._zmq_pub.bind("ipc:///tmp/robot-heading")
+
         if autoconnect:
             self._ensure_socket()
 
@@ -54,6 +59,11 @@ class UniHeadinAHandler:
 
         # 1) uložit na _lastest
         self._lastest = short
+
+        try:
+            self._zmq_pub.send(b"heading/" + short)
+        except Exception as e:
+            pass
 
         # 2) poslat na stream
         self._send_heading(short, wait)

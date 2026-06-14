@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, asdict
 from typing import Optional
 
 @dataclass(frozen=True, slots=True)
@@ -120,3 +121,7 @@ class NavPvatData:
         #   accRoll, accPitch, accHeading,
         #   gnssFixOK, diffSoln, vehRollValid, vehPitchValid, vehHeadingValid, carrSoln
         # ) = nav_pvat_data.get_fusion_data()
+
+    def to_json(self) -> str:
+        """Serializuje data do JSON řetězce."""
+        return json.dumps(asdict(self))

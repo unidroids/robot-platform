@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, asdict
 
 @dataclass(frozen=True, slots=True)
 class EsfRawData:
@@ -39,3 +40,7 @@ class EsfRawData:
         )
         # příklad použití:
         # (gx, gy, gz, ax, ay, az, sttag, mono) = esf_raw.get_fusion_data()
+
+    def to_json(self) -> str:
+        """Serializuje data do JSON řetězce."""
+        return json.dumps(asdict(self))

@@ -69,7 +69,7 @@ class ControlLoop:
         heading_error_deg = math.degrees(heading_error_rad)
         err_abs = abs(heading_error_deg)
 
-        max_fwd_speed = 180.0  # cm/s
+        max_fwd_speed = 250.0  # cm/s
         max_spin_speed = 40.0  # cm/s
         a_y_max = 0.2          # m/s^2 (dostředivé zrychlení)
         a_x_max = 0.2          # m/s^2 (dopředné zrychlení)

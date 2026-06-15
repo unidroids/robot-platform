@@ -38,10 +38,26 @@ def handle_client(conn, addr, shutdown_event):
 
                 elif cmd == "START":
                     tok = args[0] if len(args) > 0 else None
+                    max_speed = 150
+                    max_pwm = 150
+                    
+                    if len(args) > 1:
+                        try:
+                            max_speed = int(args[1])
+                            max_speed = max(50, min(200, max_speed))
+                        except ValueError:
+                            pass
+                    
+                    if len(args) > 2:
+                        try:
+                            max_pwm = int(args[2])
+                        except ValueError:
+                            pass
+
                     if not tok:
                         conn.sendall(b"ERR MISSING TOKEN\n")
                     else:
-                        if service.start(token=tok):
+                        if service.start(token=tok, max_speed=max_speed, max_pwm=max_pwm):
                             conn.sendall(b"OK STARTED\n")
                         else:
                             conn.sendall(b"OK RESTARTED WITH NEW TOKEN\n")

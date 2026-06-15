@@ -18,9 +18,13 @@ class ControlLoop:
         
         self.loop_counter = 0
         self.last_v_center = 0.0
+        self.max_speed = 150.0
+        self.max_pwm = 150
 
-    def start(self, token: str):
+    def start(self, token: str, max_speed: float = 150.0, max_pwm: int = 150):
         self.active_token = token
+        self.max_speed = float(max_speed)
+        self.max_pwm = int(max_pwm)
         if not self.is_running:
             self.shutdown_event.clear()
             self.thread = threading.Thread(target=self._run, daemon=True)
@@ -42,6 +46,10 @@ class ControlLoop:
 
     def update_token(self, token: str):
         self.active_token = token
+
+    def update_params(self, max_speed: float, max_pwm: int):
+        self.max_speed = float(max_speed)
+        self.max_pwm = int(max_pwm)
 
     def pause(self):
         self.is_paused = True
@@ -69,7 +77,7 @@ class ControlLoop:
         heading_error_deg = math.degrees(heading_error_rad)
         err_abs = abs(heading_error_deg)
 
-        max_fwd_speed = 250.0  # cm/s
+        max_fwd_speed = self.max_speed
         max_spin_speed = 40.0  # cm/s
         a_y_max = 0.2          # m/s^2 (dostředivé zrychlení)
         a_x_max = 0.2          # m/s^2 (dopředné zrychlení)
@@ -186,7 +194,7 @@ class ControlLoop:
                 
                 # Odeslání
                 try:
-                    self.drive.send_drive(200, left, right)
+                    self.drive.send_drive(self.max_pwm, left, right)
                     #print(f"🚀 [ControlLoop] OK -> Lidar:{dist:.1f}cm Odom:{snap['odom_speed_left']}/{snap['odom_speed_right']} X:{cur_target_x:.2f}m Y:{cur_target_y:.2f}m Motor:L={left} R={right}")
                 except Exception as e:
                     print(f"⚠️ [ControlLoop] Chyba komunikace s Drive: {e}")

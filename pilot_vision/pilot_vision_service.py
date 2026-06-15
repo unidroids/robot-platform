@@ -14,18 +14,19 @@ class PilotVisionService:
         
         self.active_token = None
 
-    def start(self, token: str) -> bool:
+    def start(self, token: str, max_speed: int = 150, max_pwm: int = 150) -> bool:
         if self.control.is_running and self.receiver.is_running:
             # Už běží, jen aktualizujeme token
             self.active_token = token
             self.control.update_token(token)
+            self.control.update_params(max_speed, max_pwm)
             return False
 
         self.state.reset()
         self.active_token = token
-        print(f"🚀 [PilotVisionService] Startuji služby (Token: {token})")
+        print(f"🚀 [PilotVisionService] Startuji služby (Token: {token}, MaxSpeed: {max_speed}, MaxPWM: {max_pwm})")
         self.receiver.start()
-        self.control.start(token)
+        self.control.start(token, max_speed, max_pwm)
         return True
 
     def stop(self) -> bool:

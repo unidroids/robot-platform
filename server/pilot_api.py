@@ -15,6 +15,10 @@ PILOT_CMD_MAP = {
     "ping": "PING",
     "status": "STATUS",
     "start": "START TEST_TOKEN",
+    "start_50": "START TEST_TOKEN 50 50",
+    "start_100": "START TEST_TOKEN 100 100",
+    "start_150": "START TEST_TOKEN 150 150",
+    "start_200": "START TEST_TOKEN 200 200",
     "stop": "STOP",
     "pause": "PAUSE",
     "resume": "RESUME"

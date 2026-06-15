@@ -9,4 +9,4 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir pyzmq pyzbar
 
 # Vygenerování YOLO konfigurace při sestavení, aby to nespamovalo logy při každém startu
-RUN yolo settings
+#RUN yolo settings

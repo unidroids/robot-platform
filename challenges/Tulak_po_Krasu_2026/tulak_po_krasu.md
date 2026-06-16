@@ -39,7 +39,7 @@ Získaný dataset o velikosti cca 1 000 fotografií si ale i tak žádal manuál
 </p>
 
 Samotné trénování modelu `yolov8n-pose` (rozlišení 640x480) proběhlo na grafické kartě RTX 4070. Padesát epoch zabralo jen zhruba 10 minut.  
-**Výsledek? Úctyhodná 98% přesnost detekce.** (Více detailů v `log/06_training.log`).  
+**Výsledek? Úctyhodná 98% přesnost detekce.** (Více detailů v [`log/06_training.log`](log/06_training.log)).  
 
 A má vůbec první natrénovaná neuronová síť byla na světě! 🎉
 
@@ -52,7 +52,7 @@ Snažit se zprovoznit přístup ke kamerám, OpenCV (`cv2`) a CUDA v jednom sdí
 Spásu nakonec přinesl funkční Docker kontejner přímo od vývojářů Ultralytics (autorů YOLO), který má v sobě vše potřebné a nativně využívá CUDA jádra. Tady se naplno vyplatila původní volba architektury nezávislých mikroslužeb. 
 
 Díky tomu systém aktuálně funguje v šikovně rozděleném režimu:
-1. **Služba pro kamery** běží v nativním prostředí, využívá GStreamer a ukládá výstup přímo do sdílené paměti. Střídá levý a pravý snímek rychlostí 10 Hz pro každou kameru (celkově 20 Hz).
+1. **Služba pro kamery** běží v nativním prostředí, využívá GStreamer a ukládá výstup přímo do sdílené paměti.
 2. **Služba Vision** běží izolovaně v Dockeru (`ultralytics/ultralytics:latest-jetson-jetpack6`).
 3. **Zbytek robota** běží ve standardním Python prostředí.
 

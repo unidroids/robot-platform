@@ -19,7 +19,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 ## 🧠 Softwarová architektura
 
 * **Operační systém:** Ubuntu (JetPack 6)
-* **Programovací jazyk:** Python 3.10
+* **Programovací jazyk:** Python 3.10.12
 * **Vývojové prostředí:** VSCode Remote – SSH (headless přes USB-C gadget mód)
 * **Struktura:** oddělené služby pro kamery, LiDAR, řízení, GNSS a centrální FastAPI server
 * **Komunikace:** 
@@ -39,7 +39,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **GAMEPAD**      | 9005 | Poskytuje informace z gamepadu                |
 | **GNSS**         | 9006 | Zpracování polohy (F9R) a IMU                 |
 | **PERFECT**      | 9007 | PointPerfect NTRIP klient (korekční data)     |
-| **PILOT**        | 9008 | Autonomní řízení a sledování trasy            |
+| **PILOT**        | 9008 | Autonomní řízení podle GPS                    |
 | **FUSION**       | 9009 | Lokální fúze polohy a odometrie               |
 | **HEADING**      | 9010 | Výpočet orientace (externí kompas/IMU)        |
 | **VISION**       | 9011 | Zpracování obrazu z kamer a detekce           |

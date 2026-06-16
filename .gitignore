@@ -50,3 +50,6 @@ cache/
 
 #ultralytics setting
 **/config/Ultralytics/*
+
+
+!chalenges/Tulak_po_Krasu_2026/log/06_training.log

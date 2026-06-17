@@ -4,7 +4,7 @@ U-blox F9R ZED-F9R-001 RTK GNSS
 
 ## RTK-FIX - ONLY
 
-Ukázka dostupnosti RTK-FIX na celé trase (vlevo). Inicializace, kdy senzor pošle RTK-FIX, ale pozice má zpožddění zobrazení (napravo). Celou dobu robot byl na cestě!
+Ukázka dostupnosti RTK-FIX na celé trase (vlevo). Inicializace, kdy senzor pošle RTK-FIX, ale aktualizace polohy má zpoždění (napravo). Celou dobu robot byl na cestě!
 
 <p align="center">
   <img src="img/rtk-fix.png" alt="RTK-FIX" width="41%" />

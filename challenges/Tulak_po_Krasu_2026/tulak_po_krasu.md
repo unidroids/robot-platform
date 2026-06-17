@@ -68,7 +68,7 @@ Před samotným závodem jsem si nebyl jistý, jak si síť poradí s novým pro
 
 Veškerá drobná zaváhání na trati byla způsobena pouze přesycením (saturací) snímače a špatným nastavením kamer, což je jasný prostor pro budoucí vylepšení. Jakmile se kamery světelným podmínkám přizpůsobily, `vision` modul čáru bezpečně sledoval.
 
-V sobotu, den před samotným závodem, se ještě ladil a opravoval algoritmus pro určování směru jízdy robota. A v neděli? To už proběhla jízda naostro! Výslekek: První místo 2,8km za 37 minut!
+V sobotu, den před samotným závodem, se ještě ladil a opravoval algoritmus pro určování směru jízdy robota. A v neděli? To už proběhla jízda naostro! Výslekek: První místo 2,8km za 37 minut! 🎉
 
 **Záznam nedělní jízdy:** [https://youtu.be/PN_RkdeMycw](https://youtu.be/PN_RkdeMycw)
 

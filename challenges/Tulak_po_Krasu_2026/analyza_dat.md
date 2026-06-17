@@ -11,7 +11,7 @@ Ukázka dostupnosti RTK-FIX na celé trase (vlevo). Inicializace, kdy senzor po�
   <img src="img/rtk-init.png" alt="RTK-FIX-INIT" width="49%" />
 </p>
 
-Interaktivní mapa (online náhled): [mapa_hacc.html](https://htmlpreview.github.io/?https://github.com/unidroids/robot-platform/blob/main/challenges/Tulak_po_Krasu_2026/mapa_hacc.html)
+Interaktivní mapa (online náhled): [mapa_hacc.html](https://raw.githack.com/unidroids/robot-platform/main/challenges/Tulak_po_Krasu_2026/mapa_hacc.html)
 *(má možnost výběru vrstev zobrazení OSM, Google, Seznam - ovládané vpravo nahoře)*
 
 

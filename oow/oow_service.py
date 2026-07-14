@@ -97,36 +97,36 @@ class OowBleServer:
 
     async def start(self):
         """Spustí a inicializuje BLE server."""
-        self.server = BlessServer(name="OOW_Officer_Server", loop=self.loop)
+        self.server = BlessServer(name="Tříkolka-OOW", loop=self.loop)
         self.server.read_request_func = self.read_request_handler
         self.server.write_request_func = self.write_request_handler
 
         # Přidání nové služby
         await self.server.add_new_service(SERVICE_UUID)
 
-        # Command Characteristic (Write Only)
+        # Command - povolíme oba režimy pro flexibilitu
         await self.server.add_new_characteristic(
             SERVICE_UUID,
             CHAR_COMMAND_UUID,
-            GATTCharacteristicProperties.write,
-            b"",
-            GATTAttributePermissions.writeable
-        )
-
-        # Heartbeat Characteristic (Write Only - optimálně write_without_response pro rychlost)
-        await self.server.add_new_characteristic(
-            SERVICE_UUID,
-            CHAR_HEARTBEAT_UUID,
             GATTCharacteristicProperties.write | GATTCharacteristicProperties.write_without_response,
             b"",
             GATTAttributePermissions.writeable
         )
 
-        # Telemetry Characteristic (Read Only)
+        # Heartbeat - striktně bez potvrzení pro rychlost
+        await self.server.add_new_characteristic(
+            SERVICE_UUID,
+            CHAR_HEARTBEAT_UUID,
+            GATTCharacteristicProperties.write_without_response,
+            b"",
+            GATTAttributePermissions.writeable
+        )
+
+        # Telemetry - přidáme NOTIFY, aby robot mohl data sám odesílat při změně
         await self.server.add_new_characteristic(
             SERVICE_UUID,
             CHAR_TELEMETRY_UUID,
-            GATTCharacteristicProperties.read,
+            GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify,
             self.get_telemetry_payload(),
             GATTAttributePermissions.readable
         )

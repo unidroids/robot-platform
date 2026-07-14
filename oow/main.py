@@ -1,6 +1,8 @@
 import asyncio
 import sys
 
+import signal
+
 from watchdog import OfficerWatchdog
 from oow_service import OowBleServer
 from oow_logger import OowLogger
@@ -29,6 +31,13 @@ async def main():
         shutdown_event=shutdown_event
     )
     
+    def signal_handler(sig_name):
+        print(f"[Main][INFO] System signal {sig_name} received, shutting down...")
+        shutdown_event.set()
+        
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, signal_handler, sig.name)
+    
     # Odeslat OFF hned po startu programu
     await watchdog.emit_off()
     
@@ -45,15 +54,33 @@ async def main():
         print(f"[Main][ERROR] Error in main loop: {e}")
     finally:
         print("[Main][INFO] Shutting down...")
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+            
         await tcp_server.stop()
-        # Ensure everything is stopped
-        if tcp_server.is_running:
-            tcp_server.is_running = False
-            watchdog.is_running = False
-            if getattr(tcp_server, 'watchdog_task', None):
+        
+        # Ujistíme se, že všechny služby jsou zastaveny bez ohledu na příznak is_running
+        tcp_server.is_running = False
+        watchdog.is_running = False
+        
+        if getattr(tcp_server, 'watchdog_task', None):
+            try:
+                tcp_server.watchdog_task.cancel()
                 await tcp_server.watchdog_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                print(f"[Main][ERROR] Error during watchdog cleanup: {e}")
+                
+        try:
             await ble_server.stop()
+        except Exception as e:
+            print(f"[Main][ERROR] Error stopping BLE server: {e}")
+            
+        try:
             logger_comp.stop()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     try:

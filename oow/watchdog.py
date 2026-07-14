@@ -49,7 +49,7 @@ class OfficerWatchdog:
             asyncio.create_task(self._send_zmq("RESUME"))
 
     def get_status(self):
-        if self.is_running and (time.time() - self.last_heartbeat) < 0.3:
+        if self.is_running and (time.time() - self.last_heartbeat) < 1.0:
             return "ON"
         return "OFF"
 
@@ -77,4 +77,4 @@ class OfficerWatchdog:
                     await self._send_zmq("OFF")
                 last_state = current_state
                 
-            await asyncio.sleep(0.05)  # Kontrola každých 50 ms
+            await asyncio.sleep(0.1)  # Kontrola každých 100 ms

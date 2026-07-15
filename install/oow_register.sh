@@ -16,7 +16,9 @@ sudo -u user "$VENV_BIN/pip" install -r "$WORK_DIR/requirements.txt"
 cat <<EOF | sudo tee "$SERVICE_FILE" > /dev/null
 [Unit]
 Description=Robotour 2025 – oow server (TCP 9013)
-After=network.target
+After=network.target bluetooth.service
+BindsTo=bluetooth.service
+StartLimitIntervalSec=0
 
 [Service]
 User=user
@@ -28,7 +30,7 @@ ExecStart=$VENV_BIN/python $WORK_DIR/main.py
 StandardOutput=append:$LOG_DIR/service.log
 StandardError=append:$LOG_DIR/service.log
 Restart=always
-RestartSec=1
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

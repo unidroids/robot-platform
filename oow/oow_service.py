@@ -59,35 +59,28 @@ class OowBleServer:
     def get_telemetry_payload(self) -> bytearray:
         """Sestavení telemetrických informací dle specifikace."""
         hostname = socket.gethostname()
+        route = ""
+        web = ""
         try:
-            ip = socket.gethostbyname(hostname)
-        except Exception:
-            ip = "unknown"
-        
-        ips = []
-        interfaces = {}
-        try:
-            for iface, addrs in psutil.net_if_addrs().items():
-                iface_ips = []
-                for addr in addrs:
-                    if addr.family == socket.AF_INET:
-                        iface_ips.append(addr.address)
-                        ips.append(addr.address)
-                if iface_ips:
-                    interfaces[iface] = iface_ips
-        except Exception:
-            try:
-                ips = subprocess.check_output(["hostname", "-I"]).decode().strip().split()
-            except Exception:
-                ips = []
-            interfaces = {"default": ips}
+            # Příklad výstupu: 8.8.8.8 via 192.168.188.1 dev wlP1p1s0 src 192.168.188.223 uid 1000
+            route_output = subprocess.check_output(["ip", "route", "get", "8.8.8.8"]).decode("utf-8").strip()
+            # Může to vrátit více řádků, zajímá nás většinou ten první
+            route = route_output.split("\n")[0]
+            
+            parts = route.split()
+            if "src" in parts:
+                src_index = parts.index("src")
+                if src_index + 1 < len(parts):
+                    ip_addr = parts[src_index + 1]
+                    web = f"http://{ip_addr}:8080"
+        except Exception as e:
+            print(f"[BLE_Service][WARNING] nepodařilo se získat ip route: {e}")
 
         info = {
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "hostname": hostname,
-            "ip": ip,
-            "ips": ips,
-            "interfaces": interfaces,
+            "route": route,
+            "web": web,
             "system": platform.system(),
             "release": platform.release(),
             "cpu_count": os.cpu_count(),

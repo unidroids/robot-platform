@@ -41,6 +41,17 @@ async def main():
     # Odeslat OFF hned po startu programu
     await watchdog.emit_off()
     
+    print("[Main][INFO] Starting services automatically...")
+    try:
+        logger_comp.start()
+        await ble_server.start()
+        tcp_server.watchdog_task = asyncio.create_task(watchdog.run_loop())
+        tcp_server.is_running = True
+    except Exception as e:
+        print(f"[Main][ERROR] Failed to start services: {e}")
+        logger_comp.stop()
+        sys.exit(1)
+    
     try:
         await tcp_server.start()
         print("[Main][INFO] OOW TCP Server is running. Press Ctrl+C to stop.")

@@ -47,43 +47,11 @@ class OowTcpServer:
                 if cmd == "PING":
                     writer.write(b"PONG OOW\n")
                     
-                elif cmd == "START":
-                    if not self.is_running:
-                        try:
-                            self.logger_comp.start()
-                            await self.ble_server.start()
-                            self.watchdog_task = asyncio.create_task(self.watchdog.run_loop())
-                            self.is_running = True
-                            writer.write(b"OK STARTED\n")
-                        except Exception as e:
-                            print(f"[TCP_Server][ERROR] Start failed: {e}")
-                            self.logger_comp.stop()
-                            try:
-                                await self.ble_server.stop()
-                            except Exception:
-                                pass
-                            self.is_running = False
-                            writer.write(f"ERR {str(e)}\n".encode())
-                    else:
-                        writer.write(b"OK ALREADY RUNNING\n")
-                        
-                elif cmd == "STOP":
-                    if self.is_running:
-                        try:
-                            self.is_running = False
-                            self.watchdog.is_running = False
-                            if self.watchdog_task:
-                                await self.watchdog_task
-                                self.watchdog_task = None
-                            await self.ble_server.stop()
-                            self.logger_comp.stop()
-                            await self.watchdog.emit_off()
-                            writer.write(b"OK STOPPED\n")
-                        except Exception as e:
-                            print(f"[TCP_Server][ERROR] Stop failed: {e}")
-                            writer.write(f"ERR {str(e)}\n".encode())
-                    else:
-                        writer.write(b"OK ALREADY STOPPED\n")
+                elif cmd == "RESTART":
+                    writer.write(b"RESTARTING PROCESS\n")
+                    await writer.drain()
+                    self.shutdown_event.set()
+                    break
                         
                 elif cmd == "STATUS":
                     status = "RUNNING" if self.is_running else "IDLE"
@@ -98,17 +66,6 @@ class OowTcpServer:
                     break
                     
                 elif cmd == "SHUTDOWN":
-                    if self.is_running:
-                        try:
-                            self.is_running = False
-                            self.watchdog.is_running = False
-                            if self.watchdog_task:
-                                await self.watchdog_task
-                            await self.ble_server.stop()
-                            self.logger_comp.stop()
-                            await self.watchdog.emit_off()
-                        except Exception as e:
-                            print(f"[TCP_Server][ERROR] Error during shutdown: {e}")
                     writer.write(b"SHUTTING DOWN\n")
                     await writer.drain()
                     self.shutdown_event.set()

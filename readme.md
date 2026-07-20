@@ -12,6 +12,8 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | Kamery             | 2× Waveshare IMX219, 200°, CSI (stereo pohled dolů)              |
 | LiDAR              | Unitree L2 (Ethernet)                                            |
 | GNSS               | C102-F9R GNSS + IMU (USB)                                        |
+| Kompas             | 10-axis IMU (USB)                                                |
+| Dual GNSS Heading  | UM982 + 2x heliacal antána (USB)                                 |
 | Mobilní základna   | Hoverboard s upraveným firmware (řízení přes USB sériovou linku) |
 | Ovládání           | Gamepad a Android telefon (Infinix Smart 8)                      |
 | Úložiště           | SSD Lexar NM620 2TB (Jetson root + data)                         |
@@ -43,6 +45,9 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **FUSION**       | 9009 | Lokální fúze polohy a odometrie               |
 | **HEADING**      | 9010 | Výpočet orientace (externí kompas/IMU)        |
 | **VISION**       | 9011 | Zpracování obrazu z kamer a detekce           |
+| **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv ze senzorů (ZMQ) do logu |
+| **OOW**          | 9013 | Out of World (BLE server, watchdog, příkazy z mobilní aplikace) |
+| **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
 
 
@@ -56,7 +61,7 @@ Architektura je rozdělena na obecné jádro a specifické mise. Dokumentaci a z
 ## 📁 Struktura projektu
 
 ```
-/robot/opt/projects/robotour
+/robot-platform/
 ├── server/          # socket + HTTP servery
 ├── journey/         # plánování a workflow
 ├── camera/          # čtení, segmentace a logování kamer
@@ -65,4 +70,4 @@ Architektura je rozdělena na obecné jádro a specifické mise. Dokumentaci a z
 └── install/         # systemd skripty, udev, konfigurace
 ```
 
-Repozitář: [https://github.com/unidroids/robotour2025](https://github.com/unidroids/robotour2025)
+Repozitář: [https://github.com/unidroids/robot-platform/](https://github.com/unidroids/robot-platform/)

@@ -18,6 +18,12 @@ chmod 755 /data/logs/logger
 touch /data/logs/logger/logger.log
 chmod 664 /data/logs/logger/logger.log
 
+mkdir -p /data/logs/compass
+chown user:user /data/logs/compass
+chmod 755 /data/logs/compass
+touch /data/logs/compass/compass.log
+chmod 664 /data/logs/compass/compass.log
+
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
 ./register_fastapi.sh
@@ -49,11 +55,16 @@ chmod +x logger_register.sh logger_unregister.sh
 ./logger_register.sh
 systemctl status robot-logger
 
+chmod +x compass_register.sh compass_unregister.sh
+./compass_register.sh
+systemctl status robot-compass
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
 ./vision_unregister.sh
 ./logger_unregister.sh
+./compass_unregister.sh
 
 # status
 systemctl status fastapi-server
@@ -63,6 +74,7 @@ systemctl status robot-lidar
 systemctl status robot-vision
 systemctl status robot-pilot-vision
 systemctl status robot-logger
+systemctl status robot-compass
 
 # restart
 sudo systemctl restart fastapi-server
@@ -80,6 +92,7 @@ sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-vision
 sudo systemctl restart robot-logger
 sudo systemctl restart robot-heading
+sudo systemctl restart robot-compass
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 
@@ -104,3 +117,6 @@ tail -f /data/logs/pilot_vision/pilot_vision.log
 
 nano /data/logs/logger/logger.log
 tail -f /data/logs/logger/logger.log
+
+nano /data/logs/compass/compass.log
+tail -f /data/logs/compass/compass.log

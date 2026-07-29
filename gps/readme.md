@@ -1,0 +1,22 @@
+
+# UM980 
+
+UBS-C <=> com3 modulu 115200
+
+
+PORT /dev/robot-gps 115200
+
+
+## Nastavení modulu
+MODE ROVER SURVEY MOW
+CONFIG PPP ENABLE E6-HAS
+SAVECONFIG
+
+## Nastavení zpráv
+
+UNLOG
+BESTNAVA 0.1
+GPGGA 10
+HWSTATUSA 60
+SAVECONFIG
+

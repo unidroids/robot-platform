@@ -55,3 +55,6 @@ cache/
 !chalenges/Tulak_po_Krasu_2026/log/06_training.log
 
 compass/10-axis IMU module communication protocol.pdf
+
+**/*.gpx
+**/*.pdf

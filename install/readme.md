@@ -24,6 +24,12 @@ chmod 755 /data/logs/compass
 touch /data/logs/compass/compass.log
 chmod 664 /data/logs/compass/compass.log
 
+mkdir -p /data/logs/gps
+chown user:user /data/logs/gps
+chmod 755 /data/logs/gps
+touch /data/logs/gps/gps.log
+chmod 664 /data/logs/gps/gps.log
+
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
 ./register_fastapi.sh
@@ -59,12 +65,17 @@ chmod +x compass_register.sh compass_unregister.sh
 ./compass_register.sh
 systemctl status robot-compass
 
+chmod +x gps_register.sh gps_unregister.sh
+./gps_register.sh
+systemctl status robot-gps
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
 ./vision_unregister.sh
 ./logger_unregister.sh
 ./compass_unregister.sh
+./gps_unregister.sh
 
 # status
 systemctl status fastapi-server
@@ -75,6 +86,7 @@ systemctl status robot-vision
 systemctl status robot-pilot-vision
 systemctl status robot-logger
 systemctl status robot-compass
+systemctl status robot-gps
 
 # restart
 sudo systemctl restart fastapi-server
@@ -84,6 +96,7 @@ sudo systemctl restart robot-lidar
 sudo systemctl restart robot-journey
 sudo systemctl restart robot-gamepad
 sudo systemctl restart robot-gnss
+sudo systemctl restart robot-gps
 sudo systemctl restart robot-pointperfect
 sudo systemctl restart robot-fusion
 sudo systemctl restart robot-drive
@@ -93,6 +106,7 @@ sudo systemctl restart robot-vision
 sudo systemctl restart robot-logger
 sudo systemctl restart robot-heading
 sudo systemctl restart robot-compass
+sudo systemctl restart robot-oow
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 
@@ -120,3 +134,8 @@ tail -f /data/logs/logger/logger.log
 
 nano /data/logs/compass/compass.log
 tail -f /data/logs/compass/compass.log
+
+nano /data/logs/gps/gps.log
+tail -f /data/logs/gps/gps.log
+
+tail -f /data/logs/oow/service.log

@@ -2,12 +2,15 @@ import asyncio
 import time
 import zmq
 import zmq.asyncio
+from camera_client import CameraClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
         self.logger = logger
         self.last_heartbeat = 0.0
         self.is_running = False
+        self.ble_server = None
+        self.camera_client = CameraClient()
         
         self.zmq_address = zmq_address
         self.fallback_address = fallback_address
@@ -47,6 +50,35 @@ class OfficerWatchdog:
             asyncio.create_task(self._send_zmq("PAUSE"))
         elif command == "RESUME":
             asyncio.create_task(self._send_zmq("RESUME"))
+        elif command == "POWEROFF":
+            print(f"[Watchdog][WARNING] Client {client_id} sent POWEROFF command!")
+            asyncio.create_task(self._poweroff())
+        elif command in ("CAMERA_ON", "CAMERA_OFF", "CAMERA_STATUS"):
+            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
+            asyncio.create_task(self._handle_camera_command(command))
+
+    async def _poweroff(self):
+        print("[Watchdog][WARNING] Executing sudo poweroff...")
+        try:
+            proc = await asyncio.create_subprocess_exec("sudo", "poweroff")
+            await proc.wait()
+        except Exception as e:
+            print(f"[Watchdog][ERROR] Failed to execute poweroff: {e}")
+
+    async def _handle_camera_command(self, command):
+        if command == "CAMERA_ON":
+            response = await self.camera_client.camera_on(timeout=3.0)
+        elif command == "CAMERA_OFF":
+            response = await self.camera_client.camera_off(timeout=3.0)
+        elif command == "CAMERA_STATUS":
+            response = await self.camera_client.camera_status(timeout=3.0)
+        else:
+            return
+            
+        print(f"[Watchdog][INFO] Camera command '{command}' response: {response}")
+        
+        if self.ble_server and hasattr(self.ble_server, 'send_response'):
+            self.ble_server.send_response(response)
 
     def get_status(self):
         if self.is_running and (time.time() - self.last_heartbeat) < 1.0:

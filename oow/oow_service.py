@@ -25,7 +25,23 @@ class OowBleServer:
     def __init__(self, loop, watchdog):
         self.loop = loop
         self.watchdog = watchdog
+        self.watchdog.ble_server = self
         self.server = None
+
+    def send_response(self, response: str):
+        """Odešle odpověď klienta přes BLE jako notifikaci na telemetrické charakteristice."""
+        if not self.server:
+            return
+        try:
+            char = self.server.get_characteristic(CHAR_TELEMETRY_UUID)
+            if char:
+                char.value = bytearray(response.encode("utf-8"))
+                self.server.update_value(SERVICE_UUID, CHAR_TELEMETRY_UUID)
+                print(f"[BLE_Service][DEBUG] Sent BLE response: {response}")
+            else:
+                print("[BLE_Service][WARNING] Telemetry characteristic not found for response")
+        except Exception as e:
+            print(f"[BLE_Service][ERROR] Failed to send BLE response: {e}")
 
     def read_request_handler(self, characteristic: BlessGATTCharacteristic, **kwargs) -> bytearray:
         """Callback při pokusu klienta o čtení charakteristiky."""

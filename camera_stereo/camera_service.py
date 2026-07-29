@@ -70,8 +70,11 @@ class CameraService:
             struct.pack_into('q d', self.shm.buf, 0, self.frame_seq, capture_time) 
             
             # Publikování přes ZMQ (pouze jeden společný stream)
-            self.zmq_pub.send_string(f"combined/{self.frame_seq}/{capture_time}")
+            message = f"combined/{self.frame_seq}/{capture_time}"
+            self.zmq_pub.send_string(message)
             self.frame_seq += 1
+            if self.frame_seq % 10 == 0:
+                print(f"📌 DEBUG message: {message}")
                 
             buf.unmap(mapinfo)
         
@@ -87,29 +90,29 @@ class CameraService:
             f"nvarguscamerasrc sensor-id=0 ! "
             f"video/x-raw(memory:NVMM), width=1640, height=1232, format=NV12, framerate=10/1 ! "
             f"nvvidconv flip-method=3 ! video/x-raw(memory:NVMM), width=1232, height=1640 ! "
-            f"queue ! comp.sink_0 "
+            f"queue max-size-buffers=2 leaky=downstream ! comp.sink_0 "
             
             # --- Pravá kamera (sensor-id=1, flip=1) ---
             f"nvarguscamerasrc sensor-id=1 ! "
             f"video/x-raw(memory:NVMM), width=1640, height=1232, format=NV12, framerate=10/1 ! "
             f"nvvidconv flip-method=1 ! video/x-raw(memory:NVMM), width=1232, height=1640 ! "
-            f"queue ! comp.sink_1 "
+            f"queue max-size-buffers=2 leaky=downstream ! comp.sink_1 "
             
             # --- Kompozitor (Složení obrazů vedle sebe) ---
             f"nvcompositor name=comp "
             f"sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1232 sink_0::height=1640 "
             f"sink_1::xpos=1232 sink_1::ypos=0 sink_1::width=1232 sink_1::height=1640 ! "
-            f"video/x-raw(memory:NVMM), width=2464, height=1640, format=NV12 ! "
+            f"video/x-raw(memory:NVMM), width=2464, height=1640, format=RGBA, framerate=10/1 ! "
             f"tee name=t "
             
             # --- Větev 1: Aplikace (10 Hz BGRx -> BGR) ---
-            f"t. ! queue max-size-buffers=1 ! nvvidconv ! video/x-raw, format=BGRx ! "
+            f"t. ! queue max-size-buffers=2 leaky=downstream ! nvvidconv ! video/x-raw, format=BGRx ! "
             f"videoconvert ! video/x-raw, format=BGR ! "
             f"appsink name={sink_name} drop=true sync=false max-buffers=1 emit-signals=true "
             
             # --- Větev 2: Logování na disk (1 Hz JPEG) ---
-            f"t. ! queue max-size-buffers=1 ! nvvidconv ! video/x-raw, format=I420 ! "
-            f"videorate drop-only=true ! video/x-raw, framerate=1/1 ! "
+            f"t. ! queue max-size-buffers=2 leaky=downstream ! videorate drop-only=true ! "
+            f"video/x-raw(memory:NVMM), framerate=1/1 ! "
             f"nvvidconv ! video/x-raw(memory:NVMM), format=I420 ! "
             f"nvjpegenc quality=70 ! multifilesink location={log_file_pattern}"
         )
@@ -140,7 +143,15 @@ class CameraService:
         print("🚀 Inicializuji spojenou GStreamer pipeline přes `gi`...")
         
         pipe_str = self.get_combined_camera_pipeline(LOG_FILE_PATTERN, "appsink_combined")
-        self.pipeline = Gst.parse_launch(pipe_str)
+        try:
+            self.pipeline = Gst.parse_launch(pipe_str)
+        except Exception as e:
+            print(f"❌ GStreamer pipeline error: {e}")
+            self.shm.close()
+            self.shm.unlink()
+            self.zmq_pub.close()
+            self.context.term()
+            return
         
         appsink = self.pipeline.get_by_name("appsink_combined")
         appsink.connect("new-sample", self.on_new_sample)
@@ -172,19 +183,22 @@ class CameraService:
         self.is_running = False
         print("✅ CameraService: Vše bezpečně ukončeno.")
 
-    def start(self) -> bool:
+    def start(self) -> str:
         if self.is_running:
-            return False
+            return "ALREADY_RUNNING"
         
         self.frame_seq = 0
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
         
         for _ in range(20):
-            if self.is_running: break
+            if self.is_running: 
+                return "OK"
+            if not self.thread.is_alive():
+                return "ERROR"
             time.sleep(0.1)
             
-        return self.is_running
+        return "TIMEOUT"
 
     def stop(self) -> bool:
         if not self.is_running or self.loop is None:

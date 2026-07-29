@@ -29,13 +29,16 @@ def handle_client(conn, addr, shutdown_event):
 
                 # --- základní příkazy ---
                 if cmd == "PING":
-                    conn.sendall(b"PONG CAMERA\n")
+                    conn.sendall(b"PONG CAMERA_STEREO\n")
 
-                elif cmd in ("START"):
-                    if service.start():
+                elif cmd == "START":
+                    res = service.start()
+                    if res == "OK":
                         conn.sendall(b"STARTED\n")
-                    else:
+                    elif res == "ALREADY_RUNNING":
                         conn.sendall(b"ALREADY RUNNING\n")
+                    else:
+                        conn.sendall(f"ERR {res}\n".encode())
 
                 elif cmd == "STOP":
                     if service.stop():

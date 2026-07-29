@@ -4,7 +4,7 @@ import threading
 import os
 
 DEVICE = '/dev/robot-gps' # /dev/robot-gps /dev/robot-heading /dev/robot-compass
-BAUD = 115200 #  115200  921600
+BAUD = 921600 #  115200  921600
 TCP_PORT = 5000
 
 # Získání cesty ke skriptu:

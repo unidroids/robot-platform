@@ -1,13 +1,12 @@
 
 # UM980 
 
-UBS-C <=> com3 modulu 115200
-
-
-PORT /dev/robot-gps 115200
+UBS-C <=> com3 modulu 921600
+PORT /dev/robot-gps 921600
 
 
 ## Nastavení modulu
+CONFIG COM3 921600
 MODE ROVER SURVEY MOW
 CONFIG PPP ENABLE E6-HAS
 SAVECONFIG

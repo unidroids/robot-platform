@@ -63,7 +63,7 @@ class GpsSerialIO:
                 self._fifo.get_nowait()
             except queue.Empty:
                 break
-        self._ser = serial.Serial(self.device, self.baudrate, timeout=0.5)
+        self._ser = serial.Serial(self.device, self.baudrate, timeout=1.0)
         self._stop_event.clear()
         if not self._reader_thread.is_alive():
             self._reader_thread = threading.Thread(target=self._reader, daemon=True)

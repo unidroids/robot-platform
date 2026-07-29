@@ -9,7 +9,7 @@ from handlers.hwstatusa_handler import HwstatusaHandler
 class GpsService:
     def __init__(self):
         self.device = '/dev/robot-gps'
-        self.baudrate = 115200
+        self.baudrate = 921600
         
         self.running = False
         self._lock = threading.Lock()

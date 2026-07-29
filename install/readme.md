@@ -12,6 +12,12 @@ chmod 664 /data/logs/fastapi/zeroconf.log
 touch /data/logs/fastapi/cameras.log
 chmod 664 /data/logs/fastapi/cameras.log
 
+mkdir -p /data/logs/camera_stereo
+chown user:user /data/logs/camera_stereo
+chmod 755 /data/logs/camera_stereo
+touch /data/logs/camera_stereo/cameras.log
+chmod 664 /data/logs/camera_stereo/cameras.log
+
 mkdir -p /data/logs/logger
 chown user:user /data/logs/logger
 chmod 755 /data/logs/logger
@@ -42,6 +48,10 @@ systemctl status zeroconf
 chmod +x register_camera_service.sh unregister_camera_service.sh
 ./register_camera_service.sh
 systemctl status robot-cameras
+
+chmod +x camera_stereo_register.sh camera_stereo_unregister.sh
+./camera_stereo_register.sh
+systemctl status robot-camera-stereo
 
 chmod +x lidar_service_register.sh lidar_service_unregister.sh
 ./lidar_service_register.sh
@@ -76,11 +86,13 @@ systemctl status robot-gps
 ./logger_unregister.sh
 ./compass_unregister.sh
 ./gps_unregister.sh
+./camera_stereo_unregister.sh
 
 # status
 systemctl status fastapi-server
 systemctl status zeroconf
 systemctl status robot-cameras
+systemctl status robot-camera-stereo
 systemctl status robot-lidar
 systemctl status robot-vision
 systemctl status robot-pilot-vision
@@ -92,6 +104,7 @@ systemctl status robot-gps
 sudo systemctl restart fastapi-server
 sudo systemctl restart zeroconf
 sudo systemctl restart robot-cameras
+sudo systemctl restart robot-camera-stereo
 sudo systemctl restart robot-lidar
 sudo systemctl restart robot-journey
 sudo systemctl restart robot-gamepad
@@ -117,6 +130,9 @@ tail -f /data/logs/fastapi/zeroconf.log
 
 nano /data/logs/camera/cameras.log
 tail -f /data/logs/camera/cameras.log
+
+nano /data/logs/camera_stereo/cameras.log
+tail -f /data/logs/camera_stereo/cameras.log
 
 nano /data/logs/lidar/lidar.log
 tail -f /data/logs/lidar/lidar.log

@@ -26,7 +26,7 @@ import serial as pyserial  # pyserial – vyhneme se kolizi názvů
 
 from parser import DriveParser # náš inkrementální parser
 
-DEFAULT_DEVICE = "/dev/howerboard"
+DEFAULT_DEVICE = "/dev/robot-hoverboard"
 DEFAULT_BAUD = 921600
 DEFAULT_LOG_DIR = "/data/robot/drive"
 

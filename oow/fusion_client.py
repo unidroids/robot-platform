@@ -6,6 +6,7 @@ class FusionClient:
         self.host = host
         # Služby a jejich očekávané PONG odpovědi
         self.services = {
+            "LOGGER": {"port": 9012, "pong": "PONG LOGGER"},
             "GPS": {"port": 9006, "pong": "PONG GPS"},
             "DRIVE": {"port": 9003, "pong": "PONG DRIVE"},
             "HEADING": {"port": 9010, "pong": "PONG HEADING"},
@@ -47,20 +48,24 @@ class FusionClient:
         except Exception as e:
             return f"ERR: {e}"
 
-    async def _control_services(self, cmd: str, timeout: float = 3.0) -> str:
+    async def _control_services(self, cmd: str, reverse_order: bool = False, timeout: float = 3.0) -> str:
         """Postupně zavolá příkaz na všech službách krmících fusion."""
         results = {}
-        for name, config in self.services.items():
+        items = list(self.services.items())
+        if reverse_order:
+            items.reverse()
+            
+        for name, config in items:
             res = await self._send_command(config["port"], config["pong"], cmd, timeout)
             results[name] = res
             
         return json.dumps(results, ensure_ascii=False)
 
     async def fusion_on(self, timeout: float = 3.0) -> str:
-        return await self._control_services("START", timeout=timeout)
+        return await self._control_services("START", reverse_order=False, timeout=timeout)
 
     async def fusion_off(self, timeout: float = 3.0) -> str:
-        return await self._control_services("STOP", timeout=timeout)
+        return await self._control_services("STOP", reverse_order=True, timeout=timeout)
 
     async def fusion_status(self, timeout: float = 3.0) -> str:
         res = await self._send_command(self.fusion_service["port"], self.fusion_service["pong"], "STATUS", timeout)

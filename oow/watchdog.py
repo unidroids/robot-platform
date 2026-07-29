@@ -3,6 +3,7 @@ import time
 import zmq
 import zmq.asyncio
 from camera_client import CameraClient
+from fusion_client import FusionClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
@@ -11,6 +12,7 @@ class OfficerWatchdog:
         self.is_running = False
         self.ble_server = None
         self.camera_client = CameraClient()
+        self.fusion_client = FusionClient()
         
         self.zmq_address = zmq_address
         self.fallback_address = fallback_address
@@ -56,6 +58,10 @@ class OfficerWatchdog:
         elif command in ("CAMERA_ON", "CAMERA_OFF", "CAMERA_STATUS"):
             print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
             asyncio.create_task(self._handle_camera_command(command))
+        elif command in ("FUSION_ON", "FUSION_OFF", "FUSION_STATUS"):
+            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
+            asyncio.create_task(self._handle_fusion_command(command))
+
 
     async def _poweroff(self):
         print("[Watchdog][WARNING] Executing sudo poweroff...")
@@ -76,6 +82,21 @@ class OfficerWatchdog:
             return
             
         print(f"[Watchdog][INFO] Camera command '{command}' response: {response}")
+        
+        if self.ble_server and hasattr(self.ble_server, 'send_response'):
+            self.ble_server.send_response(response)
+
+    async def _handle_fusion_command(self, command):
+        if command == "FUSION_ON":
+            response = await self.fusion_client.fusion_on(timeout=5.0)
+        elif command == "FUSION_OFF":
+            response = await self.fusion_client.fusion_off(timeout=5.0)
+        elif command == "FUSION_STATUS":
+            response = await self.fusion_client.fusion_status(timeout=5.0)
+        else:
+            return
+            
+        print(f"[Watchdog][INFO] Fusion command '{command}' response: {response}")
         
         if self.ble_server and hasattr(self.ble_server, 'send_response'):
             self.ble_server.send_response(response)

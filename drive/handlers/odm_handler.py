@@ -13,7 +13,7 @@ class OdmHandler:
     Handler příjmu ODM zpráv a jejich přeposílání přes ZMQ.
 
     Očekávaná testovací věta (NMEA-like):
-        b"$ODM<ts_mono>,<gyroZ_adc>,<accumAngle_adc>,<leftSpeed>,<rightSpeed>*CS\r\n"
+        b"$ODM<ts_mono>,<leftSteps>,<rightSteps>,<leftSpeed>,<rightSpeed>*CS\r\n"
 
     - Parsuje zprávu a odesílá rychlost levého a pravého kola jako JSON přes ZMQ.
     """
@@ -50,16 +50,20 @@ class OdmHandler:
             parts = decoded.split(',')
             if len(parts) >= 5:
                 ts_mono = parts[0]
+                left_steps = parts[1]
+                right_steps = parts[2]
                 left_speed = parts[3]
                 right_speed = parts[4]
                 
                 msg_data = {
                     "ts": int(ts_mono),
+                    "left_steps": int(left_steps),
+                    "right_steps": int(right_steps),
                     "left": int(left_speed),
                     "right": int(right_speed)
                 }
                 
-                self._zmq_pub.send_string(f"speed/{json.dumps(msg_data)}")
+                self._zmq_pub.send_string(f"odometry/{json.dumps(msg_data)}")
         except Exception as e:
             print(f"[OdmHandler] Chyba při odesílání na ZMQ: {e}")
 

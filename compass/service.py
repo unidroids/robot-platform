@@ -1,6 +1,7 @@
 # service.py
 import threading
 import zmq
+from typing import Optional
 from imu_serial import ImuSerialIO
 from dispatcher import MessageDispatcher
 from handlers.angle_handler import AngleHandler
@@ -100,17 +101,29 @@ class CompassService:
             self.configuring = True
             self.imu_serial.open()
 
+        print(f"[SERVICE] COMPASS setup_unit START on {self.device} at {self.baudrate} baud")
         try:
             self.imu_serial.send_command(builders.build_unlock())
             time.sleep(0.05)
             self.imu_serial.send_command(builders.build_rsw(0x021E)) # QUATER + MAG + ANGLE + GYRO + ACC
             time.sleep(0.05)
-            self.imu_serial.send_command(builders.build_rrate(0x07)) # 20Hz
+            
+            self.imu_serial.send_command(builders.build_unlock())
+            time.sleep(0.05)
+            self.imu_serial.send_command(builders.build_rrate(0x06)) # 10Hz Output rate
+            time.sleep(0.05)
+            
+            self.imu_serial.send_command(builders.build_unlock())
             time.sleep(0.05)
             self.imu_serial.send_command(builders.build_bandwidth(0x06)) # 10Hz
             time.sleep(0.05)
-            self.imu_serial.send_command(builders.build_baud(0x09)) # 921600bps
+            
+            self.imu_serial.send_command(builders.build_unlock())
             time.sleep(0.05)
+            self.imu_serial.send_command(builders.build_baud(0x07)) # 230400bps
+            time.sleep(0.05)
+            
+            print("[SERVICE] COMPASS settings applied, saving and rebooting...")
             
             # Save settings
             self.imu_serial.send_command(builders.build_unlock())
@@ -128,37 +141,37 @@ class CompassService:
             self.imu_serial.close()
             
             # Update config and reopen with new baudrate
-            self.baudrate = 921600
-            self.config.baudrate = 921600
+            self.baudrate = 230400
+            self.config.baudrate = 230400
             self.config.save()
             
             self.imu_serial.baudrate = self.baudrate
             self.imu_serial.open()
             time.sleep(0.5)
             
-            # Flush existing messages
-            while self.imu_serial.get_message(timeout=0.0) is not None:
-                pass
-                
-            # Send Read command for BAUD (register 0x04)
-            self.imu_serial.send_command(builders.build_unlock()) # Unlock just in case
-            time.sleep(0.05)
-            self.imu_serial.send_command(builders.build_read(0x04))
+            print(f"[SERVICE] COMPASS reopened at {self.baudrate} baud. Verifying...")
             
-            read_baud_code = None
-            start_time = time.time()
-            while time.time() - start_time < 1.0:
-                msg = self.imu_serial.get_message(timeout=0.1)
-                if msg and msg[1] == 0x5F:
-                    read_baud_code = msg[2] | (msg[3] << 8)
-                    break
-                    
-            res_str = "OK"
-            if read_baud_code is not None:
-                res_str += f" (Baud code read: 0x{read_baud_code:02X})"
-            else:
-                res_str += " (Baud verify failed)"
-                
+            # Helper for reading register
+            def read_reg(addr: int) -> Optional[int]:
+                while self.imu_serial.get_message(timeout=0.0) is not None:
+                    pass
+                self.imu_serial.send_command(builders.build_unlock())
+                time.sleep(0.05)
+                self.imu_serial.send_command(builders.build_read(addr))
+                st = time.time()
+                while time.time() - st < 1.0:
+                    msg = self.imu_serial.get_message(timeout=0.1)
+                    if msg and len(msg) >= 11 and msg[1] == 0x5F:
+                        return msg[2] | (msg[3] << 8)
+                return None
+
+            rsw = read_reg(0x02)
+            rrate = read_reg(0x03)
+            bw = read_reg(0x1F)
+            baud = read_reg(0x04)
+
+            res_str = f"OK (Verify: RSW={hex(rsw) if rsw else None}, RATE={hex(rrate) if rrate else None}, BW={hex(bw) if bw else None}, BAUD={hex(baud) if baud else None})"
+            print(f"[SERVICE] COMPASS setup_unit DONE: {res_str}")
             return res_str
             
         finally:

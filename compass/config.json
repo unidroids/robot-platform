@@ -1,4 +1,4 @@
 {
     "device": "/dev/robot-compass",
-    "baudrate": 115200
+    "baudrate": 230400
 }

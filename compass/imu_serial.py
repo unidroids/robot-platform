@@ -16,8 +16,8 @@ class ImuSerialIO:
     def __init__(self,
                  device: str = '/dev/robot-compass',
                  baudrate: int = 115200,
-                 rx_fifo_size: int = 60,
-                 write_fifo_size: int = 60):
+                 rx_fifo_size: int = 100,
+                 write_fifo_size: int = 100):
         self.device = device
         self.baudrate = baudrate
         self._ser: Optional[serial.Serial] = None

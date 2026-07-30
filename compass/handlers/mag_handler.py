@@ -10,6 +10,7 @@ class MagHandler:
         self._latest_hx = 0
         self._latest_hy = 0
         self._latest_hz = 0
+        self._latest_ts = 0.0
         self._last_print_time = 0.0
 
     def handle(self, message_bytes: bytes):
@@ -23,7 +24,8 @@ class MagHandler:
         self._latest_hy = hy_raw
         self._latest_hz = hz_raw
 
-        current_time = time.time()
+        current_time = time.monotonic()
+        self._latest_ts = current_time
         
         json_data = json.dumps({
             "ts": current_time,
@@ -44,7 +46,7 @@ class MagHandler:
 
     def get_latest(self) -> dict:
         return {
-            "ts": time.time(),
+            "ts": self._latest_ts,
             "hx": self._latest_hx,
             "hy": self._latest_hy,
             "hz": self._latest_hz

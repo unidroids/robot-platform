@@ -10,6 +10,7 @@ class GyroHandler:
         self._latest_wx = 0.0
         self._latest_wy = 0.0
         self._latest_wz = 0.0
+        self._latest_ts = 0.0
         self._last_print_time = 0.0
 
     def handle(self, message_bytes: bytes):
@@ -23,7 +24,8 @@ class GyroHandler:
         self._latest_wy = wy_raw / 32768.0 * 2000.0
         self._latest_wz = wz_raw / 32768.0 * 2000.0
 
-        current_time = time.time()
+        current_time = time.monotonic()
+        self._latest_ts = current_time
         
         json_data = json.dumps({
             "ts": current_time,
@@ -44,7 +46,7 @@ class GyroHandler:
 
     def get_latest(self) -> dict:
         return {
-            "ts": time.time(),
+            "ts": self._latest_ts,
             "wx": self._latest_wx,
             "wy": self._latest_wy,
             "wz": self._latest_wz

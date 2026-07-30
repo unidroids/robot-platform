@@ -11,6 +11,7 @@ class AngleHandler:
         self._latest_roll = 0.0
         self._latest_pitch = 0.0
         self._latest_yaw = 0.0
+        self._latest_ts = 0.0
         self._last_print_time = 0.0
 
     def handle(self, message_bytes: bytes):
@@ -24,7 +25,8 @@ class AngleHandler:
         self._latest_pitch = pitch_raw / 32768.0 * 180.0
         self._latest_yaw = yaw_raw / 32768.0 * 180.0
 
-        current_time = time.time()
+        current_time = time.monotonic()
+        self._latest_ts = current_time
         
         json_data = json.dumps({
             "ts": current_time,
@@ -45,7 +47,7 @@ class AngleHandler:
 
     def get_latest(self) -> dict:
         return {
-            "ts": time.time(),
+            "ts": self._latest_ts,
             "roll": self._latest_roll,
             "pitch": self._latest_pitch,
             "yaw": self._latest_yaw

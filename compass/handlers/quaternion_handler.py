@@ -12,6 +12,7 @@ class QuaternionHandler:
         self._latest_q1 = 0.0
         self._latest_q2 = 0.0
         self._latest_q3 = 0.0
+        self._latest_ts = 0.0
         self._last_print_time = 0.0
 
     def handle(self, message_bytes: bytes):
@@ -26,7 +27,8 @@ class QuaternionHandler:
         self._latest_q2 = q2_raw / 32768.0
         self._latest_q3 = q3_raw / 32768.0
 
-        current_time = time.time()
+        current_time = time.monotonic()
+        self._latest_ts = current_time
         
         json_data = json.dumps({
             "ts": current_time,
@@ -48,7 +50,7 @@ class QuaternionHandler:
 
     def get_latest(self) -> dict:
         return {
-            "ts": time.time(),
+            "ts": self._latest_ts,
             "q0": self._latest_q0,
             "q1": self._latest_q1,
             "q2": self._latest_q2,

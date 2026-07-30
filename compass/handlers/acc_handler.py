@@ -11,6 +11,7 @@ class AccHandler:
         self._latest_ay = 0.0
         self._latest_az = 0.0
         self._latest_temp = 0.0
+        self._latest_ts = 0.0
         self._last_print_time = 0.0
 
     def handle(self, message_bytes: bytes):
@@ -25,7 +26,8 @@ class AccHandler:
         self._latest_az = az_raw / 32768.0 * 16.0
         self._latest_temp = temp_raw / 100.0
 
-        current_time = time.time()
+        current_time = time.monotonic()
+        self._latest_ts = current_time
         
         json_data = json.dumps({
             "ts": current_time,
@@ -53,7 +55,7 @@ class AccHandler:
 
     def get_latest(self) -> dict:
         return {
-            "ts": time.time(),
+            "ts": self._latest_ts,
             "ax": self._latest_ax,
             "ay": self._latest_ay,
             "az": self._latest_az,

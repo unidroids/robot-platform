@@ -3,8 +3,10 @@
 from __future__ import annotations
 import threading
 import time
+import json
+import zmq
 from dataclasses import dataclass, asdict
-from typing import Optional, Tuple
+from typing import Optional
 
 from data.nav_fusion_data import NavFusionData
 from core import FusionCore
@@ -12,7 +14,6 @@ from core import FusionCore
 __all__ = [
     "FusionService"
 ]
-
 
 @dataclass
 class FusionState:
@@ -22,36 +23,28 @@ class FusionState:
 
 class FusionService:
 
-    VERSION = "1.0.1"
+    VERSION = "2.0.0"
 
     def __init__(self):
         self.running = False
         self._initialized = False
         self._lock = threading.Lock()
-        #self._stop_event = threading.Event()
-        #self._thread: Optional[threading.Thread] = None
-
+        
         self._state_lock = threading.Lock()
         self._state = FusionState()
-        #self._data_lock = threading.Lock()
 
         self._latest: Optional[NavFusionData] = None
         self._latest_lock = threading.Lock()
         self._cond = threading.Condition()
 
+        self.core: Optional[FusionCore] = None
+        self._publish_counter = 0
 
-        self.LIDAR_MESSAGE_LENGHT = 1
-        self.GNSS_MESSAGE_LENGHT = NavFusionData.byte_size()
-        self.CAMERA_MESSAGE_LENGHT = 1
-        self.DRIVE_MESSAGE_LENGHT = 0
-
-        # latest data
-        self.core = None
-        self._publish_couter = 0
-
-        self.last_gnss_data = None
-        self.last_heading_data = None
-        self.last_drive_data = None
+        # ZMQ Context
+        self._zmq_context = zmq.Context.instance()
+        self._zmq_pub: Optional[zmq.Socket] = None
+        self._zmq_sub: Optional[zmq.Socket] = None
+        self._zmq_thread: Optional[threading.Thread] = None
 
         # auto start
         self._start()
@@ -75,11 +68,33 @@ class FusionService:
             if self.running:
                 return "OK ALREADY_RUNNING"
             if not self._initialized:
-                #TODO init helpers
                 self.core = FusionCore()
-                self._publish_couter=0
+                self._publish_counter = 0
+                
+                # ZMQ Pub
+                self._zmq_pub = self._zmq_context.socket(zmq.PUB)
+                self._zmq_pub.bind("ipc:///tmp/robot-fusion")
+                
+                # ZMQ Sub
+                self._zmq_sub = self._zmq_context.socket(zmq.SUB)
+                self._zmq_sub.connect("ipc:///tmp/robot-gps")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "pvat/")
+                
+                self._zmq_sub.connect("ipc:///tmp/robot-heading")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "UNIHEADING/")
+                
+                self._zmq_sub.connect("ipc:///tmp/robot-compass")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "COMPASS/ANGLE/")
+                
+                # self._zmq_sub.connect("ipc:///tmp/robot-odometry")
+                # self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "speed/")
+
                 self._initialized = True
+            
             self.running = True
+            self._zmq_thread = threading.Thread(target=self._zmq_listener_loop, daemon=True)
+            self._zmq_thread.start()
+            
             self._set_state(mode="WAITING", last_note="SERVICE STARTED")
             print("[SERVICE] STARTED")
             return "OK"
@@ -88,103 +103,70 @@ class FusionService:
         with self._lock:
             if not self.running:
                 return "OK WAS NOT RUNNING"
-            try:
-                #TODO
-                pass
-            finally:
-                #TODO
-                self.core = None
-                self._publish_couter = 0
-                self._latest = None
-                self._initialized = False
-                self.running = False
-                self._set_state(mode="IDLE", last_note="SERVICE STOPPED")
-                print("[SERVICE] STOPPED")
+            
+            self.running = False
+            
+            if self._zmq_sub is not None:
+                self._zmq_sub.close()
+                self._zmq_sub = None
+                
+            if self._zmq_pub is not None:
+                self._zmq_pub.close()
+                self._zmq_pub = None
+                
+            if self._zmq_thread is not None:
+                self._zmq_thread.join(timeout=1.0)
+                self._zmq_thread = None
+
+            self.core = None
+            self._publish_counter = 0
+            self._latest = None
+            self._initialized = False
+            
+            self._set_state(mode="IDLE", last_note="SERVICE STOPPED")
+            print("[SERVICE] STOPPED")
             return "OK"
 
     def _ensure_running(self):
         if not self.running or not self._initialized:
             raise RuntimeError("[FUSION SERVICE] Service is not running. Call START first.")
-
   
     def restart(self):
         self._stop()
         self._start()
         return "OK"
 
-
-    # ---------------------- events -----------------
-    def on_gnss_data(self, msg):
-        #print("on_gnss_data", msg)
-        tmono = time.monotonic()
-        nav = NavFusionData.from_bytes(msg)
-        #print("on_gnss_data", nav.to_json())
-        self.last_gnss_data = nav
-        self.core.update_position(
-            iTow=tmono, #TODO
-            lat=nav.lat,
-            lon=nav.lon,
-            hAcc=nav.hAcc,
-            height=0.0, #TODO get height from gnss
-            vAcc=1.0, #TODO get vAcc from gnss
-        )
-
-    def on_drive_data(self, msg):
-        #print("on_drive_data", msg)
-        tmono = time.monotonic()
-        self.last_drive_data = msg
-        (tmark, omega, angle, left_speed, right_speed) = parse_drive_msg(msg)
-        self.core.update_whell_speed(
-            tmark=tmono, #TODO,
-            left_wheel_speed=left_speed,
-            right_wheel_speed=right_speed,
-        )
-        self.core.update_local_heading(
-            tmark=tmono, #TODO,
-            heading=-angle, #ccw to cw
-            omega=-omega, #ccw to cw
-        )
-
-
-    def on_heading_data(self, msg):
-        #print("on_heading_data", msg)
-        tmono = time.monotonic()
-        self.last_heading_data = msg
-        (sol, pos, length, heading, pitch, reserved, hdgstddev, ptchstddev) = parse_heading_msg(msg)
-        if (length > 0.7 or length < 0.3): #nevalidní rozsah
-            return 
-        self.core.update_global_roll(
-            iTow=tmono, #TODO
-            lenght=length,
-            roll=pitch,
-            gstddev=ptchstddev,
-        )
-        self.core.update_global_heading(
-            iTow=tmono, #TODO
-            lenght=length,
-            heading=heading,
-            gstddev=hdgstddev,
-        )
-        #publish solution
-        if self.core.ready:
-            self._publish(self._get_solution())
-            self._set_state(mode="READY", last_note="SOLUSION PUBLISHED")
-
-        
-
-    def on_camera_data(self, msg):
-        print("on_camera_data", msg)
-        pass
-
-    def on_lidar_data(self, msg):
-        print("on_lidar_data", msg)
-        pass
-    
-    # -------------- datové API -------------
-    def _get_solution(self):
-        if not self.core.ready: return None
-        return self.core.get_solution()
-
+    # ---------------------- ZMQ Loop -----------------
+    def _zmq_listener_loop(self):
+        while self.running and self._zmq_sub is not None:
+            try:
+                # Use polling to be able to stop cleanly
+                if self._zmq_sub.poll(100):
+                    msg = self._zmq_sub.recv_string()
+                    
+                    if msg.startswith("pvat/"):
+                        data = json.loads(msg[len("pvat/"):])
+                        self.core.update_position(data.get("lat", 0.0), data.get("lon", 0.0), data.get("hAcc", 0.0))
+                        
+                    elif msg.startswith("UNIHEADING/"):
+                        data = json.loads(msg[len("UNIHEADING/"):])
+                        self.core.update_heading(data.get("heading", 0.0), data.get("hdgstddev", 180.0))
+                        
+                    elif msg.startswith("COMPASS/ANGLE/"):
+                        data = json.loads(msg[len("COMPASS/ANGLE/"):])
+                        self.core.update_compass(data.get("yaw", 0.0))
+                        
+                    # Publish output if core is ready
+                    if self.core.ready:
+                        self._publish(self.core.get_solution())
+                        self._set_state(mode="READY", last_note="SOLUTION PUBLISHED")
+                        
+            except zmq.error.ContextTerminated:
+                break
+            except zmq.error.ZMQError:
+                break
+            except Exception as e:
+                print(f"[ZMQ Listener Error] {e}")
 
     # === Odběratelské API ====================================================
 
@@ -194,8 +176,15 @@ class FusionService:
         with self._cond:
             self._cond.notify_all()
 
-        self._publish_couter += 1
-        if self._publish_couter % 10 == 0:            
+        # Publish over ZMQ
+        if self._zmq_pub is not None:
+            try:
+                self._zmq_pub.send_string(f"SOLUTION/{res.to_json()}")
+            except Exception as e:
+                print(f"[FUSION ZMQ PUB] Error: {e}")
+
+        self._publish_counter += 1
+        if self._publish_counter % 10 == 0:            
             print("published", res.to_json())
 
     def get_latest(self) -> Optional[NavFusionData]:
@@ -206,67 +195,9 @@ class FusionService:
         with self._cond:
             return self._cond.wait(timeout=timeout)
 
-
-
-def parse_drive_msg(msg):
-    # ASCII zpráva: "tmark,omega,angle,left_speed,right_speed"
-    # Vstup může být bytes nebo str. Naivní konverze bez kontrol.
-
-    if isinstance(msg, bytes):
-        msg = msg.decode('ascii', errors='replace')
-
-    parts = msg.strip().split(',')
-
-    if len(parts) != 5: 
-        raise ValueError(f"parse_drive_msg: expected 8 fields, got {len(parts)}")
-
-    tmark       = int(parts[0], 10)
-    omega       = int(parts[1], 10)       # může být ±
-    angle       = int(parts[2], 10)       # může být ±
-    left_speed  = int(parts[3], 10)       # může být ±
-    right_speed = int(parts[4], 10)       # může být ±
-
-    return (tmark, omega, angle, left_speed, right_speed)
-
-
-def parse_heading_msg(msg):
-    """
-    ASCII/bytes zpráva: "sol,pos,length,heading,pitch,reserved,hdgstddev,ptchstddev"
-    – Oddělovač: čárka ','
-    – Desetinná tečka '.'
-    – Typy: sol=text, pos=text, ostatní=float
-    – Pouze kontrola počtu položek, bez rozsahových validací
-    """
-    if isinstance(msg, bytes):
-        msg = msg.decode('ascii', errors='replace')
-
-    parts = [p.strip() for p in msg.strip().split(',')]
-    if len(parts) != 8:
-        raise ValueError(f"parse_heading_msg: expected 8 fields, got {len(parts)}")
-
-    sol         = parts[0]   # Solution status (enum)
-    pos         = parts[1]    # Position type (enum)
-    length      = float(parts[2])      # baseline length
-    heading     = float(parts[3])      # 0..360
-    pitch       = float(parts[4])      # -90..+90
-    reserved    = float(parts[5])
-    hdgstddev   = float(parts[6])
-    ptchstddev  = float(parts[7])
-
-    return (sol, pos, length, heading, pitch, reserved, hdgstddev, ptchstddev)
-
-
 if __name__ == "__main__":
-    print(f"TEST") 
+    print("TEST") 
     fusion = FusionService()
-    #fusion.start()
     print(fusion.get_state())
     fusion.restart()
     print(fusion.get_state())
-    # try:
-    #     while True:
-    #         time.sleep(1.0)
-    # except KeyboardInterrupt:
-    #     pass
-    # finally:
-    #     fusion.stop()

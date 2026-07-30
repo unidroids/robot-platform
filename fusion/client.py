@@ -27,41 +27,9 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
                 break
             line = line.decode('utf-8').strip()
             try:
-                # --- input senzors data ---
-
-                if line == "LIDAR": # data from gnss
-                    payload = f.read(fusion.LIDAR_MESSAGE_LENGHT)
-                    if not ensure_running(f, fusion): continue
-                    fusion.on_lidar_data(payload)
-                    f.write(b'OK\n')
-                
-                elif line == "DRIVE": # data from drive
-                    payload = f.readline() # text base data from drive
-                    if not ensure_running(f, fusion): continue
-                    fusion.on_drive_data(payload)
-                    f.write(b'OK\n')
-
-                elif line == "HEADING": # data from drive
-                    payload = f.readline() # text base data from drive
-                    if not ensure_running(f, fusion): continue
-                    fusion.on_heading_data(payload)
-                    f.write(b'OK\n')
-
-                elif line == "GNSS": # data from gnss
-                    payload = f.read(fusion.GNSS_MESSAGE_LENGHT) #binary data from gnss
-                    if not ensure_running(f, fusion): continue
-                    fusion.on_gnss_data(payload)
-                    f.write(b'OK\n')
-                
-                elif line == "CAMERA": # data from camera
-                    payload = f.read(fusion.CAMERA_MESSAGE_LENGHT)
-                    if not ensure_running(f, fusion): continue
-                    fusion.on_camera_data(payload)
-                    f.write(b'OK\n')
-
                 # --- output fusion data ---
 
-                elif line == "DATA": # data 
+                if line == "DATA": # data 
                     if not ensure_running(f, fusion): continue
                     sol = fusion.get_latest()
                     if not sol: 
@@ -69,24 +37,6 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
                         continue
                     payload = sol.to_json()
                     f.write(f"{payload}\n".encode("utf-8"))
-
-                elif line == "GET_BINARY_STREAM":
-                    if not ensure_running(f, fusion): continue
-                    while True:
-                        if not fusion.wait_for_update(timeout=1.0):
-                            continue
-                        sol = fusion.get_latest()
-                        if not sol:
-                            continue
-                        f.write(sol.to_bytes())
-                        f.flush()
-                        # Volitelně: přerušení na základě dalšího příkazu od klienta
-                        # Pokud chceš, aby klient mohl ukončit stream, můžeš zde číst další řádky:
-                        # break pokud přijde "STOP_STREAM" nebo socket zavřen
-                        # Příklad:
-                        # if f.peek(1):  # pokud je něco v bufferu od klienta
-                        #     cmd = f.readline().decode().strip()
-                        #     if cmd == "STOP_STREAM": break
 
                 # --- standard API ---
 
@@ -97,15 +47,18 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
                     res = fusion.restart()
                     f.write((res+'\n').encode('utf-8'))
 
-                elif line == "STATE":
-                    st = fusion.get_state()
-                    payload = json.dumps(st, separators=(",", ":"), ensure_ascii=False)
-                    f.write(f"OK STATE {payload}\n".encode("utf-8"))
-
                 elif line == "STATUS":
                     st = fusion.get_state()
                     payload = json.dumps(st, separators=(",", ":"), ensure_ascii=False)
                     f.write(f"OK STATUS {payload}\n".encode("utf-8"))
+
+                elif line == "SHUTDOWN":
+                    f.write(b'OK SHUTDOWN\n')
+                    f.flush()
+                    # graceful shutdown via service
+                    fusion._stop()
+                    import sys
+                    sys.exit(0)
 
                 elif line == "EXIT":
                     f.write(b'OK-FUSION-BYE\n')

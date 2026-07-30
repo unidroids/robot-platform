@@ -5,6 +5,9 @@ from imu_serial import ImuSerialIO
 from dispatcher import MessageDispatcher
 from handlers.angle_handler import AngleHandler
 from handlers.quaternion_handler import QuaternionHandler
+from handlers.acc_handler import AccHandler
+from handlers.gyro_handler import GyroHandler
+from handlers.mag_handler import MagHandler
 from handlers.dummy_handler import DummyHandler
 import builders
 import time
@@ -41,11 +44,17 @@ class CompassService:
                 self.imu_serial = ImuSerialIO(self.device, self.baudrate)
                 self.dispatcher = MessageDispatcher(self.imu_serial)
                 
+                self.acc_handler = AccHandler(self.zmq_pub)
+                self.gyro_handler = GyroHandler(self.zmq_pub)
                 self.angle_handler = AngleHandler(self.zmq_pub)
+                self.mag_handler = MagHandler(self.zmq_pub)
                 self.quaternion_handler = QuaternionHandler(self.zmq_pub)
                 self.dummy_handler = DummyHandler()
                 
+                self.dispatcher.register_handler(0x51, self.acc_handler)
+                self.dispatcher.register_handler(0x52, self.gyro_handler)
                 self.dispatcher.register_handler(0x53, self.angle_handler)
+                self.dispatcher.register_handler(0x54, self.mag_handler)
                 self.dispatcher.register_handler(0x59, self.quaternion_handler)
                 
                 self._initialized = True
@@ -94,13 +103,13 @@ class CompassService:
         try:
             self.imu_serial.send_command(builders.build_unlock())
             time.sleep(0.05)
-            self.imu_serial.send_command(builders.build_rsw(0x0208)) # QUATER + ANGLE
+            self.imu_serial.send_command(builders.build_rsw(0x021E)) # QUATER + MAG + ANGLE + GYRO + ACC
             time.sleep(0.05)
             self.imu_serial.send_command(builders.build_rrate(0x07)) # 20Hz
             time.sleep(0.05)
             self.imu_serial.send_command(builders.build_bandwidth(0x06)) # 10Hz
             time.sleep(0.05)
-            self.imu_serial.send_command(builders.build_baud(0x06)) # 115200bps
+            self.imu_serial.send_command(builders.build_baud(0x09)) # 921600bps
             time.sleep(0.05)
             
             # Save settings
@@ -119,8 +128,8 @@ class CompassService:
             self.imu_serial.close()
             
             # Update config and reopen with new baudrate
-            self.baudrate = 115200
-            self.config.baudrate = 115200
+            self.baudrate = 921600
+            self.config.baudrate = 921600
             self.config.save()
             
             self.imu_serial.baudrate = self.baudrate

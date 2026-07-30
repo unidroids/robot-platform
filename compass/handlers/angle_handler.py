@@ -2,6 +2,7 @@
 import struct
 import zmq
 import time
+import json
 from typing import Optional
 
 class AngleHandler:
@@ -23,10 +24,16 @@ class AngleHandler:
         self._latest_pitch = pitch_raw / 32768.0 * 180.0
         self._latest_yaw = yaw_raw / 32768.0 * 180.0
 
-        # Send string to ZMQ topic ANGLE
-        msg = f"ANGLE/R,{self._latest_roll:.4f},P,{self._latest_pitch:.4f},Y,{self._latest_yaw:.4f}"
-        
         current_time = time.time()
+        
+        json_data = json.dumps({
+            "ts": current_time,
+            "roll": self._latest_roll,
+            "pitch": self._latest_pitch,
+            "yaw": self._latest_yaw
+        })
+        msg = f"COMPASS/ANGLE/{json_data}"
+        
         if current_time - self._last_print_time > 1.0:
             print(f"[AngleHandler] {msg}")
             self._last_print_time = current_time
@@ -36,5 +43,10 @@ class AngleHandler:
         except Exception:
             pass
 
-    def get_latest(self) -> str:
-        return f"{self._latest_roll:.4f},{self._latest_pitch:.4f},{self._latest_yaw:.4f}"
+    def get_latest(self) -> dict:
+        return {
+            "ts": time.time(),
+            "roll": self._latest_roll,
+            "pitch": self._latest_pitch,
+            "yaw": self._latest_yaw
+        }

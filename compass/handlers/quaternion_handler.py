@@ -2,6 +2,7 @@
 import struct
 import zmq
 import time
+import json
 from typing import Optional
 
 class QuaternionHandler:
@@ -25,10 +26,17 @@ class QuaternionHandler:
         self._latest_q2 = q2_raw / 32768.0
         self._latest_q3 = q3_raw / 32768.0
 
-        # Send string to ZMQ topic QUATERNION
-        msg = f"QUATERNION/{self._latest_q0:.4f},{self._latest_q1:.4f},{self._latest_q2:.4f},{self._latest_q3:.4f}"
-        
         current_time = time.time()
+        
+        json_data = json.dumps({
+            "ts": current_time,
+            "q0": self._latest_q0,
+            "q1": self._latest_q1,
+            "q2": self._latest_q2,
+            "q3": self._latest_q3
+        })
+        msg = f"COMPASS/QUATER/{json_data}"
+        
         if current_time - self._last_print_time > 1.0:
             print(f"[QuaternionHandler] {msg}")
             self._last_print_time = current_time
@@ -38,5 +46,11 @@ class QuaternionHandler:
         except Exception:
             pass
 
-    def get_latest(self) -> str:
-        return f"{self._latest_q0:.4f},{self._latest_q1:.4f},{self._latest_q2:.4f},{self._latest_q3:.4f}"
+    def get_latest(self) -> dict:
+        return {
+            "ts": time.time(),
+            "q0": self._latest_q0,
+            "q1": self._latest_q1,
+            "q2": self._latest_q2,
+            "q3": self._latest_q3
+        }

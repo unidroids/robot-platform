@@ -9,7 +9,7 @@ aby se předešlo kolizi se závislostí **pyserial** (modul `serial`).
 - Datalogger: zapisuje odeslané rámce (HEX) a přijaté ASCII řádky (oddělené CRLF)
 - Bez zbytečných `sleep()` v hot‑path; blokování řídí `read(1)` s konfigurovatelným timeoutem
 
-Zařízení: '/dev/gnss3', 921600 Bd, 8N1
+Zařízení: '/dev/robot-heading', 921600 Bd, 8N1
 
 Závislosti: pyserial (importováno jako `import serial as pyserial`), parser.DriveParser
 """
@@ -35,7 +35,7 @@ __all__ = [
 
 @dataclass(slots=True)
 class WrpaConfig:
-    device: str = "/dev/gnss3"    # DEFAULT_DEVICE
+    device: str = "/dev/robot-heading"    # DEFAULT_DEVICE
     baudrate: int = 921600        # DEFAULT_BAUD
     timeout_s: float = 1.0        # read(1) timeout; max doba blokování mezi kontrolami stop_event
     write_timeout_s: float = 0.1  # write timeout

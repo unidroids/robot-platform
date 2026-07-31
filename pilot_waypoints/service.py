@@ -119,6 +119,9 @@ class WaypointsPilotService:
                 return f"RUNNING {idx} {self.fusion_data.get('lat', 0)} {self.fusion_data.get('lon', 0)} {self.fusion_data.get('heading', 0)}"
             return f"RUNNING {idx}"
         elif self.state == "PAUSED":
+            if self.source == "GPS" and self.fusion_data:
+                hAcc = self.fusion_data.get("hAcc", 9999)
+                return f"PAUSED {self.source} Current hAcc: {hAcc} mm"
             return f"PAUSED {self.source} {self.status_info}"
         elif self.state == "STOPPED":
             return f"STOPPED {self.source} {self.status_info}"

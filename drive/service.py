@@ -124,6 +124,7 @@ class DriveService:
         self._last_ack_nack_data: Optional[Tuple[int, int, int, int, int]] = None
         self._last_ack_nack_error: Optional[Tuple[int, int]] = None
         self._active_token: Optional[str] = None
+        self._motors_enabled = False
 
     # --------------- lifecycle ---------------
     def start(self, token: Optional[str] = None) -> str:
@@ -140,6 +141,8 @@ class DriveService:
             self._started_at = time.monotonic()
         # dle specifikace po startu UI/servisy poslat START motorů (cmd=2)
         #self.motors_on()
+        with self._lock:
+            self._motors_enabled = False
         return f"RUNNING (token={self._active_token})"
 
     def stop(self) -> str:
@@ -199,17 +202,29 @@ class DriveService:
         with self._lock:
             return self._active_token == token
 
+    def is_motors_enabled(self) -> bool:
+        with self._lock:
+            return self._motors_enabled
+
     # --------------- API – jednoduché příkazy ---------------
     def ping(self) -> str:
         return "PONG DRIVE"
 
     def motors_on(self) -> bool:
-        return self._send_cmd(2, 125, 125, 125, 125)
+        res = self._send_cmd(2, 125, 125, 125, 125)
+        if res:
+            with self._lock:
+                self._motors_enabled = True
+        return res
 
     def motors_off(self) -> bool:
         if not self.is_running():
             return "NOT RUNNING"
-        return self._send_cmd(1, 125, 125, 125, 125)
+        res = self._send_cmd(1, 125, 125, 125, 125)
+        if res:
+            with self._lock:
+                self._motors_enabled = False
+        return res
 
     def power_off(self) -> bool:
         if not self.is_running():

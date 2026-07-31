@@ -77,6 +77,11 @@ def client_thread(conn: socket.socket, addr: Tuple[str, int], svc: DriveService)
                     state = svc.stop()
                     _send_line(conn, f"OK {state}")
 
+                elif cmd == "STATUS":
+                    r_str = "RUNNING" if svc.is_running() else "IDLE"
+                    m_str = "ON" if svc.is_motors_enabled() else "OFF"
+                    _send_line(conn, f"{r_str} {m_str}")
+
                 elif cmd == "STATE":
                     st = svc.get_state()
                     _send_line(conn, json.dumps(st, separators=(",",":")))

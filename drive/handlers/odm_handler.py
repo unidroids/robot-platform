@@ -59,8 +59,8 @@ class OdmHandler:
                     "ts": int(ts_mono),
                     "left_steps": int(left_steps),
                     "right_steps": int(right_steps),
-                    "left": int(left_speed),
-                    "right": int(right_speed)
+                    "left_speed": int(left_speed),
+                    "right_speed": int(right_speed)
                 }
                 
                 self._zmq_pub.send_string(f"odometry/{json.dumps(msg_data)}")

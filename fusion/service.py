@@ -168,8 +168,8 @@ class FusionService:
                         
                     elif msg.startswith("odometry/"):
                         data = json.loads(msg[len("odometry/"):])
-                        left = data.get("left", 0.0)
-                        right = data.get("right", 0.0)
+                        left = data.get("left_speed", 0.0)
+                        right = data.get("right_speed", 0.0)
                         self.core.update_odometry(left, right)
 
                     elif msg.startswith("COMPASS/GYRO/"):

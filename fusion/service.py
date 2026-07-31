@@ -1,10 +1,11 @@
-# fusion.py
+# fusion/service.py
 
 from __future__ import annotations
 import threading
 import time
 import json
 import zmq
+import math
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -35,7 +36,6 @@ class FusionService:
 
         self._latest: Optional[NavFusionData] = None
         self._latest_lock = threading.Lock()
-        self._cond = threading.Condition()
 
         self.core: Optional[FusionCore] = None
         self._publish_counter = 0
@@ -45,6 +45,7 @@ class FusionService:
         self._zmq_pub: Optional[zmq.Socket] = None
         self._zmq_sub: Optional[zmq.Socket] = None
         self._zmq_thread: Optional[threading.Thread] = None
+        self._pub_thread: Optional[threading.Thread] = None
 
         # auto start
         self._start()
@@ -77,23 +78,27 @@ class FusionService:
                 
                 # ZMQ Sub
                 self._zmq_sub = self._zmq_context.socket(zmq.SUB)
+                
                 self._zmq_sub.connect("ipc:///tmp/robot-gps")
-                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "pvat/")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "BESTNAV/")
                 
                 self._zmq_sub.connect("ipc:///tmp/robot-heading")
                 self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "UNIHEADING/")
                 
                 self._zmq_sub.connect("ipc:///tmp/robot-compass")
-                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "COMPASS/ANGLE/")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "COMPASS/GYRO/")
                 
-                # self._zmq_sub.connect("ipc:///tmp/robot-odometry")
-                # self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "speed/")
+                self._zmq_sub.connect("ipc:///tmp/robot-odometry")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "odometry/")
 
                 self._initialized = True
             
             self.running = True
             self._zmq_thread = threading.Thread(target=self._zmq_listener_loop, daemon=True)
             self._zmq_thread.start()
+
+            self._pub_thread = threading.Thread(target=self._publisher_loop, daemon=True)
+            self._pub_thread.start()
             
             self._set_state(mode="WAITING", last_note="SERVICE STARTED")
             print("[SERVICE] STARTED")
@@ -118,6 +123,10 @@ class FusionService:
                 self._zmq_thread.join(timeout=1.0)
                 self._zmq_thread = None
 
+            if self._pub_thread is not None:
+                self._pub_thread.join(timeout=1.0)
+                self._pub_thread = None
+
             self.core = None
             self._publish_counter = 0
             self._latest = None
@@ -127,10 +136,6 @@ class FusionService:
             print("[SERVICE] STOPPED")
             return "OK"
 
-    def _ensure_running(self):
-        if not self.running or not self._initialized:
-            raise RuntimeError("[FUSION SERVICE] Service is not running. Call START first.")
-  
     def restart(self):
         self._stop()
         self._start()
@@ -144,22 +149,33 @@ class FusionService:
                 if self._zmq_sub.poll(100):
                     msg = self._zmq_sub.recv_string()
                     
-                    if msg.startswith("pvat/"):
-                        data = json.loads(msg[len("pvat/"):])
-                        self.core.update_position(data.get("lat", 0.0), data.get("lon", 0.0), data.get("hAcc", 0.0))
+                    if msg.startswith("BESTNAV/"):
+                        data = json.loads(msg[len("BESTNAV/"):])
+                        lat = data.get("lat", 0.0)
+                        lon = data.get("lon", 0.0)
+                        lat_std = data.get("lat_std", 0.0)
+                        lon_std = data.get("lon_std", 0.0)
+                        hAcc = math.hypot(lat_std, lon_std)
+                        gpsSol = data.get("pos_type", "NONE")
+                        self.core.update_position(lat, lon, hAcc, gpsSol)
                         
                     elif msg.startswith("UNIHEADING/"):
                         data = json.loads(msg[len("UNIHEADING/"):])
-                        self.core.update_heading(data.get("heading", 0.0), data.get("hdgstddev", 180.0))
+                        heading = data.get("heading", 0.0)
+                        hdg_std = data.get("hdg_std", 180.0)
+                        headingSol = data.get("pos_type", "NONE")
+                        self.core.update_heading(heading, hdg_std, headingSol)
                         
-                    elif msg.startswith("COMPASS/ANGLE/"):
-                        data = json.loads(msg[len("COMPASS/ANGLE/"):])
-                        self.core.update_compass(data.get("yaw", 0.0))
-                        
-                    # Publish output if core is ready
-                    if self.core.ready:
-                        self._publish(self.core.get_solution())
-                        self._set_state(mode="READY", last_note="SOLUTION PUBLISHED")
+                    elif msg.startswith("odometry/"):
+                        data = json.loads(msg[len("odometry/"):])
+                        left = data.get("left", 0.0)
+                        right = data.get("right", 0.0)
+                        self.core.update_odometry(left, right)
+
+                    elif msg.startswith("COMPASS/GYRO/"):
+                        data = json.loads(msg[len("COMPASS/GYRO/"):])
+                        wz = data.get("wz", 0.0)
+                        self.core.update_gyro(wz)
                         
             except zmq.error.ContextTerminated:
                 break
@@ -168,13 +184,18 @@ class FusionService:
             except Exception as e:
                 print(f"[ZMQ Listener Error] {e}")
 
+    def _publisher_loop(self):
+        while self.running:
+            if self.core and self.core.ready:
+                self._publish(self.core.get_solution())
+                self._set_state(mode="READY", last_note="SOLUTION PUBLISHED")
+            time.sleep(0.1)
+
     # === Odběratelské API ====================================================
 
     def _publish(self, res: NavFusionData) -> None:
         with self._latest_lock:
             self._latest = res
-        with self._cond:
-            self._cond.notify_all()
 
         # Publish over ZMQ
         if self._zmq_pub is not None:
@@ -190,10 +211,6 @@ class FusionService:
     def get_latest(self) -> Optional[NavFusionData]:
         with self._latest_lock:
             return self._latest
-
-    def wait_for_update(self, timeout: Optional[float] = None) -> bool:
-        with self._cond:
-            return self._cond.wait(timeout=timeout)
 
 if __name__ == "__main__":
     print("TEST") 

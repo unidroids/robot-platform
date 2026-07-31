@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 from data.nav_fusion_data import NavFusionData
 
 class FusionCore:
@@ -10,19 +9,26 @@ class FusionCore:
         self._lat: float = 0.0
         self._lon: float = 0.0
         self._hAcc: float = 0.0
+        self._gpsSol: str = "NONE"
         self._have_position: bool = False
 
         # Heading state (from RTK GPS)
         self._global_heading: float = 0.0
         self._headingAcc: float = 180.0
+        self._headingSol: str = "NONE"
         self._have_heading: bool = False
 
+        # Odometry state
+        self._speed: float = 0.0
+        self._sAcc: float = 0.05
+
         # Compass state
-        self._compass_angle: float = 0.0
-        self._have_compass: bool = False
+        self._gyroZ: float = 0.0
+        self._gyroZAcc: float = 5.0
 
         # Fusion state
         self._fused_heading: float = 0.0
+        self._fusionSol: str = "COPY"
 
     @staticmethod
     def _norm_deg(a: float) -> float:
@@ -32,56 +38,40 @@ class FusionCore:
             a += 360.0
         return a
 
-    @staticmethod
-    def _diff_deg(a_from: float, a_to: float) -> float:
-        """Nejkratší rozdíl a_to - a_from v intervalu (-180, 180]."""
-        return (a_to - a_from + 180.0) % 360.0 - 180.0
-
     def _update_ready_flag(self) -> None:
         self.ready = self._have_position and self._have_heading
 
-    def update_position(self, lat: float, lon: float, hAcc: float):
+    def update_position(self, lat: float, lon: float, hAcc: float, gpsSol: str):
         self._lat = float(lat)
         self._lon = float(lon)
         self._hAcc = float(hAcc)
+        self._gpsSol = gpsSol
         self._have_position = True
         self._fuse()
 
-    def update_heading(self, heading: float, headingAcc: float):
+    def update_heading(self, heading: float, headingAcc: float, headingSol: str):
         """Heading from dual-antenna GPS (North East)"""
         self._global_heading = self._norm_deg(heading)
         self._headingAcc = float(headingAcc)
+        self._headingSol = headingSol
         self._have_heading = True
         self._fuse()
 
-    def update_compass(self, yaw: float):
-        """Compass yaw (East North)"""
-        self._compass_angle = float(yaw)
-        self._have_compass = True
-        self._fuse()
+    def update_odometry(self, speed_left: float, speed_right: float):
+        """Odometry speed in mm/s"""
+        self._speed = (speed_left + speed_right) / 2.0
+
+    def update_gyro(self, wz: float):
+        """Compass gyro in deg/s"""
+        self._gyroZ = float(wz)
 
     def _fuse(self):
         self._update_ready_flag()
         if not self._have_heading:
             return
 
-        # Heading je primární. Pokud je chyba do 5 stupňů, použijeme jej přímo.
-        if self._headingAcc <= 5.0:
-            self._fused_heading = self._global_heading
-        else:
-            # Pokud je chyba velká, zkusíme použít kompas, pokud je k dispozici
-            if self._have_compass:
-                # Kompas je EN, korekce na NE je +90 stupňů
-                compass_ne = self._norm_deg(self._compass_angle + 90.0)
-                
-                # Zjistíme, zda je kompas v rozsahu (heading ± headingAcc)
-                diff = abs(self._diff_deg(self._global_heading, compass_ne))
-                if diff <= self._headingAcc:
-                    self._fused_heading = compass_ne
-                else:
-                    self._fused_heading = self._global_heading
-            else:
-                self._fused_heading = self._global_heading
+        # Heading je primární
+        self._fused_heading = self._global_heading
 
     def get_solution(self) -> NavFusionData:
         return NavFusionData(
@@ -91,10 +81,11 @@ class FusionCore:
             hAcc=self._hAcc,
             heading=self._fused_heading,
             headingAcc=self._headingAcc,
-            speed=0.0,
-            sAcc=0.0,
-            gyroZ=0.0,
-            gyroZAcc=0.0,
-            gnssFixOK=True if self._hAcc < 10.0 else False,
-            drUsed=False,
+            speed=self._speed,
+            sAcc=self._sAcc,
+            gyroZ=self._gyroZ,
+            gyroZAcc=self._gyroZAcc,
+            gpsSol=self._gpsSol,
+            headingSol=self._headingSol,
+            fusionSol=self._fusionSol,
         )

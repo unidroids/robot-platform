@@ -57,7 +57,6 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
                     f.flush()
                     # graceful shutdown via service
                     fusion._stop()
-                    import sys
                     sys.exit(0)
 
                 elif line == "EXIT":

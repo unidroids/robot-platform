@@ -4,6 +4,7 @@ import zmq
 import zmq.asyncio
 from camera_client import CameraClient
 from fusion_client import FusionClient
+from lidar_client import LidarClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
@@ -13,6 +14,7 @@ class OfficerWatchdog:
         self.ble_server = None
         self.camera_client = CameraClient()
         self.fusion_client = FusionClient()
+        self.lidar_client = LidarClient()
         
         self.zmq_address = zmq_address
         self.fallback_address = fallback_address
@@ -61,6 +63,9 @@ class OfficerWatchdog:
         elif command in ("FUSION_ON", "FUSION_OFF", "FUSION_STATUS"):
             print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
             asyncio.create_task(self._handle_fusion_command(command))
+        elif command in ("LIDAR_ON", "LIDAR_OFF", "LIDAR_STATUS"):
+            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
+            asyncio.create_task(self._handle_lidar_command(command))
 
 
     async def _poweroff(self):
@@ -97,6 +102,21 @@ class OfficerWatchdog:
             return
             
         print(f"[Watchdog][INFO] Fusion command '{command}' response: {response}")
+        
+        if self.ble_server and hasattr(self.ble_server, 'send_response'):
+            self.ble_server.send_response(response)
+
+    async def _handle_lidar_command(self, command):
+        if command == "LIDAR_ON":
+            response = await self.lidar_client.lidar_on(timeout=3.0)
+        elif command == "LIDAR_OFF":
+            response = await self.lidar_client.lidar_off(timeout=3.0)
+        elif command == "LIDAR_STATUS":
+            response = await self.lidar_client.lidar_status(timeout=3.0)
+        else:
+            return
+            
+        print(f"[Watchdog][INFO] Lidar command '{command}' response: {response}")
         
         if self.ble_server and hasattr(self.ble_server, 'send_response'):
             self.ble_server.send_response(response)

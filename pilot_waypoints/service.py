@@ -49,6 +49,9 @@ class WaypointsPilotService:
         self.receiver = None
         
         self.oow_task = None
+        
+        self.control_thread = None
+        self.zmq_thread = None
 
     def start_service(self, max_speed=100, max_pwm=150):
         if self.state in ["RUNNING"]:
@@ -84,8 +87,22 @@ class WaypointsPilotService:
         return "OK"
 
     def stop_service(self):
-        print(f"[PilotService] STOP")
-        self.state = "STOPPED"
+        if self.running:
+            print("[PilotService] Zastavuji službu...")
+            self.running = False
+            self.state = "STOPPED"
+            self.drive.send_motors_off()
+            
+            # Počkat na ukončení vláken, abychom zamezili vzniku více vláken
+            if self.control_thread and self.control_thread.is_alive():
+                self.control_thread.join(timeout=1.0)
+            if self.zmq_thread and self.zmq_thread.is_alive():
+                self.zmq_thread.join(timeout=1.0)
+            
+            self.control_thread = None
+            self.zmq_thread = None
+            print("[PilotService] Služba kompletně zastavena.")
+            
         self.source = "USER"
         self.status_info = "Stopped by command"
         self.drive.send_break()
@@ -287,7 +304,7 @@ class WaypointsPilotService:
                     pass
                 else:
                     hAcc = self.fusion_data.get("hAcc", 9999) # v mm
-                    heading_sol = self.fusion_data.get("headingSol", "UNKNOWN")
+                    heading_sol = self.fusion_data.get("headingSol", "NONE")
                     
                     if hAcc > 700 or heading_sol == "NONE":
                         heading_val = self.fusion_data.get("heading", 0.0)
@@ -340,7 +357,7 @@ class WaypointsPilotService:
             elif self.state == "PAUSED":
                 if self.source == "GPS" and self.fusion_data:
                     hAcc = self.fusion_data.get("hAcc", 9999)
-                    heading_sol = self.fusion_data.get("headingSol", "UNKNOWN")
+                    heading_sol = self.fusion_data.get("headingSol", "NONE")
                     if hAcc < 500 and heading_sol != "NONE":
                         self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}")
                 

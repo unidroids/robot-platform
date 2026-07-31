@@ -157,7 +157,7 @@ class FusionService:
                         lon_std = data.get("lon_std", 0.0)
                         hAcc = math.hypot(lat_std, lon_std)
                         gpsSol = data.get("pos_type", "NONE")
-                        self.core.update_position(lat, lon, hAcc, gpsSol)
+                        self.core.update_position(lat, lon, hAcc, gpsSol) 
                         
                     elif msg.startswith("UNIHEADING/"):
                         data = json.loads(msg[len("UNIHEADING/"):])

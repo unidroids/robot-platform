@@ -6,6 +6,7 @@ from camera_client import CameraClient
 from fusion_client import FusionClient
 from lidar_client import LidarClient
 from pilot_waypoints_client import PilotWaypointsClient
+from drive_client import DriveClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
@@ -17,6 +18,7 @@ class OfficerWatchdog:
         self.fusion_client = FusionClient()
         self.lidar_client = LidarClient()
         self.pilot_waypoints_client = PilotWaypointsClient()
+        self.drive_client = DriveClient()
         
         self.zmq_address = zmq_address
         self.fallback_address = fallback_address
@@ -52,26 +54,34 @@ class OfficerWatchdog:
         if command == "STOP":
             print(f"[Watchdog][WARNING] Client {client_id} sent STOP command!")
             asyncio.create_task(self._send_zmq("STOP"))
+            return
         elif command == "PAUSE":
             asyncio.create_task(self._send_zmq("PAUSE"))
+            return
         elif command == "RESUME":
             asyncio.create_task(self._send_zmq("RESUME"))
+            return
         elif command == "POWEROFF":
             print(f"[Watchdog][WARNING] Client {client_id} sent POWEROFF command!")
             asyncio.create_task(self._poweroff())
-        elif command in ("CAMERA_ON", "CAMERA_OFF", "CAMERA_STATUS"):
-            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
-            asyncio.create_task(self._handle_camera_command(command))
-        elif command in ("FUSION_ON", "FUSION_OFF", "FUSION_STATUS"):
-            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
-            asyncio.create_task(self._handle_fusion_command(command))
-        elif command in ("LIDAR_ON", "LIDAR_OFF", "LIDAR_STATUS"):
-            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
-            asyncio.create_task(self._handle_lidar_command(command))
-        elif command in ("PILOT_WAYPOINTS_START", "PILOT_WAYPOINTS_STATUS"):
-            print(f"[Watchdog][INFO] Client {client_id} sent {command} command.")
-            asyncio.create_task(self._handle_pilot_waypoints_command(command))
+            return
+            
+        clients = [
+            self.camera_client,
+            self.fusion_client,
+            self.lidar_client,
+            self.pilot_waypoints_client,
+            self.drive_client
+        ]
+        for client in clients:
+            asyncio.create_task(self._try_client_command(client, command, client_id))
 
+    async def _try_client_command(self, client, command, client_id):
+        response = await client.handle_command(command)
+        if response is not None:
+            print(f"[Watchdog][INFO] Client {client_id} command '{command}' response: {response}")
+            if self.ble_server and hasattr(self.ble_server, 'send_response'):
+                self.ble_server.send_response(response)
 
     async def _poweroff(self):
         print("[Watchdog][WARNING] Executing sudo poweroff...")
@@ -80,64 +90,6 @@ class OfficerWatchdog:
             await proc.wait()
         except Exception as e:
             print(f"[Watchdog][ERROR] Failed to execute poweroff: {e}")
-
-    async def _handle_camera_command(self, command):
-        if command == "CAMERA_ON":
-            response = await self.camera_client.camera_on(timeout=3.0)
-        elif command == "CAMERA_OFF":
-            response = await self.camera_client.camera_off(timeout=3.0)
-        elif command == "CAMERA_STATUS":
-            response = await self.camera_client.camera_status(timeout=3.0)
-        else:
-            return
-            
-        print(f"[Watchdog][INFO] Camera command '{command}' response: {response}")
-        
-        if self.ble_server and hasattr(self.ble_server, 'send_response'):
-            self.ble_server.send_response(response)
-
-    async def _handle_fusion_command(self, command):
-        if command == "FUSION_ON":
-            response = await self.fusion_client.fusion_on(timeout=5.0)
-        elif command == "FUSION_OFF":
-            response = await self.fusion_client.fusion_off(timeout=5.0)
-        elif command == "FUSION_STATUS":
-            response = await self.fusion_client.fusion_status(timeout=5.0)
-        else:
-            return
-            
-        print(f"[Watchdog][INFO] Fusion command '{command}' response: {response}")
-        
-        if self.ble_server and hasattr(self.ble_server, 'send_response'):
-            self.ble_server.send_response(response)
-
-    async def _handle_lidar_command(self, command):
-        if command == "LIDAR_ON":
-            response = await self.lidar_client.lidar_on(timeout=3.0)
-        elif command == "LIDAR_OFF":
-            response = await self.lidar_client.lidar_off(timeout=3.0)
-        elif command == "LIDAR_STATUS":
-            response = await self.lidar_client.lidar_status(timeout=3.0)
-        else:
-            return
-            
-        print(f"[Watchdog][INFO] Lidar command '{command}' response: {response}")
-        
-        if self.ble_server and hasattr(self.ble_server, 'send_response'):
-            self.ble_server.send_response(response)
-
-    async def _handle_pilot_waypoints_command(self, command):
-        if command == "PILOT_WAYPOINTS_START":
-            response = await self.pilot_waypoints_client.start(timeout=3.0)
-        elif command == "PILOT_WAYPOINTS_STATUS":
-            response = await self.pilot_waypoints_client.status(timeout=3.0)
-        else:
-            return
-            
-        print(f"[Watchdog][INFO] Pilot Waypoints command '{command}' response: {response}")
-        
-        if self.ble_server and hasattr(self.ble_server, 'send_response'):
-            self.ble_server.send_response(response)
 
     def get_status(self):
         if self.is_running and (time.time() - self.last_heartbeat) < 1.0:

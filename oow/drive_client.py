@@ -1,12 +1,12 @@
 import asyncio
 
-class CameraClient:
-    def __init__(self, host="127.0.0.1", port=9001):
+class DriveClient:
+    def __init__(self, host="127.0.0.1", port=9003):
         self.host = host
         self.port = port
 
     async def send_command(self, cmd: str, timeout: float = 3.0) -> str:
-        """Odešle příkaz TCP službě kamery na zadaném portu a vrátí odpověď s timeoutem 3s."""
+        """Odešle příkaz TCP službě drive na zadaném portu a vrátí odpověď s timeoutem."""
         try:
             async def _interact():
                 reader, writer = await asyncio.open_connection(self.host, self.port)
@@ -23,25 +23,25 @@ class CameraClient:
                         pass
 
             response = await asyncio.wait_for(_interact(), timeout=timeout)
-            return response if response else "ERR: No response from camera service"
+            return response if response else "ERR: No response from drive service"
         except asyncio.TimeoutError:
-            print(f"[CameraClient][WARNING] Timeout waiting for camera response (cmd: {cmd})")
+            print(f"[DriveClient][WARNING] Timeout waiting for drive response (cmd: {cmd})")
             return "ERR: Timeout (3s)"
         except Exception as e:
-            print(f"[CameraClient][ERROR] Error communicating with camera service: {e}")
+            print(f"[DriveClient][ERROR] Error communicating with drive service: {e}")
             return f"ERR: {e}"
 
-    async def camera_on(self, timeout: float = 3.0) -> str:
-        return await self.send_command("START", timeout=timeout)
+    async def drive_on(self, timeout: float = 3.0) -> str:
+        return await self.send_command("ON", timeout=timeout)
 
-    async def camera_off(self, timeout: float = 3.0) -> str:
-        return await self.send_command("STOP", timeout=timeout)
+    async def drive_off(self, timeout: float = 3.0) -> str:
+        return await self.send_command("OFF", timeout=timeout)
 
-    async def camera_status(self, timeout: float = 3.0) -> str:
+    async def status(self, timeout: float = 3.0) -> str:
         return await self.send_command("STATUS", timeout=timeout)
 
     async def handle_command(self, cmd: str) -> str | None:
-        if cmd == "CAMERA_ON": return await self.camera_on()
-        if cmd == "CAMERA_OFF": return await self.camera_off()
-        if cmd == "CAMERA_STATUS": return await self.camera_status()
+        if cmd == "DRIVE_ON": return await self.drive_on()
+        if cmd == "DRIVE_OFF": return await self.drive_off()
+        if cmd == "DRIVE_STATUS": return await self.status()
         return None

@@ -39,3 +39,9 @@ class LidarClient:
 
     async def lidar_status(self, timeout: float = 3.0) -> str:
         return await self.send_command("STATUS", timeout=timeout)
+
+    async def handle_command(self, cmd: str) -> str | None:
+        if cmd == "LIDAR_ON": return await self.lidar_on()
+        if cmd == "LIDAR_OFF": return await self.lidar_off()
+        if cmd == "LIDAR_STATUS": return await self.lidar_status()
+        return None

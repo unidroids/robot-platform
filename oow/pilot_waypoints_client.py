@@ -36,3 +36,8 @@ class PilotWaypointsClient:
 
     async def status(self, timeout: float = 3.0) -> str:
         return await self.send_command("STATUS", timeout=timeout)
+
+    async def handle_command(self, cmd: str) -> str | None:
+        if cmd == "PILOT_WAYPOINTS_START": return await self.start()
+        if cmd == "PILOT_WAYPOINTS_STATUS": return await self.status()
+        return None

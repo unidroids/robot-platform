@@ -164,7 +164,8 @@ class FusionService:
                         heading = data.get("heading", 0.0)
                         hdg_std = data.get("hdg_std", 180.0)
                         headingSol = data.get("pos_type", "NONE")
-                        self.core.update_heading(heading, hdg_std, headingSol)
+                        length = data.get("length", 0.0)
+                        self.core.update_heading(heading, hdg_std, headingSol, length)
                         
                     elif msg.startswith("odometry/"):
                         data = json.loads(msg[len("odometry/"):])

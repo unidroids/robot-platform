@@ -49,8 +49,12 @@ class FusionCore:
         self._have_position = True
         self._fuse()
 
-    def update_heading(self, heading: float, headingAcc: float, headingSol: str):
+    def update_heading(self, heading: float, headingAcc: float, headingSol: str, length: float = 0.0):
         """Heading from dual-antenna GPS (North East)"""
+        # Validace vzdálenosti antén
+        if not (0.45 <= length <= 0.50):
+            headingSol = "NONE"
+            
         self._global_heading = self._norm_deg(heading)
         self._headingAcc = float(headingAcc)
         self._headingSol = headingSol

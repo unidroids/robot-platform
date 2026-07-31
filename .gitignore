@@ -60,3 +60,4 @@ compass/10-axis IMU module communication protocol.pdf
 **/*.pdf
 
 **/*.dat
+**/*.csv

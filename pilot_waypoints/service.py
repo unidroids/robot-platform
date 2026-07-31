@@ -88,6 +88,7 @@ class WaypointsPilotService:
         self.state = "STOPPED"
         self.source = "USER"
         self.status_info = "Stopped by command"
+        self.drive.send_break()
         self.drive.send_motors_off()
         if self.logger:
             self.logger.close()
@@ -286,8 +287,18 @@ class WaypointsPilotService:
                     pass
                 else:
                     hAcc = self.fusion_data.get("hAcc", 9999) # v mm
-                    if hAcc > 700:
-                        self.pause_service(source="GPS", info=f"Bad Accuracy: {hAcc} mm")
+                    heading_sol = self.fusion_data.get("headingSol", "UNKNOWN")
+                    
+                    if hAcc > 700 or heading_sol == "NONE":
+                        heading_val = self.fusion_data.get("heading", 0.0)
+                        heading_acc = self.fusion_data.get("headingAcc", 9999.0)
+                        info_msg = f"Bad GPS/Hdg. hAcc:{hAcc}mm hdg:{heading_val:.1f} hdgAcc:{heading_acc} hdgSol:{heading_sol}"
+                        self.pause_service(source="GPS", info=info_msg)
+                        self.drive.send_drive(self.max_pwm, 0, 0)
+                        self.last_v = 0
+                        self.last_w = 0
+                        target_left, target_right = 0, 0
+                        actual_left, actual_right = 0, 0
                     else:
                         lat = self.fusion_data.get("lat")
                         lon = self.fusion_data.get("lon")
@@ -306,6 +317,7 @@ class WaypointsPilotService:
                             print("[PilotService] Konec trasy dosažen.")
                             self.state = "FINISHED"
                             self.status_info = "Goal reached"
+                            self.drive.send_break()
                             self.drive.send_motors_off()
                             if self.logger:
                                 self.logger.close()
@@ -328,17 +340,23 @@ class WaypointsPilotService:
             elif self.state == "PAUSED":
                 if self.source == "GPS" and self.fusion_data:
                     hAcc = self.fusion_data.get("hAcc", 9999)
-                    if hAcc < 500:
-                        self.resume_service(source="GPS", info=f"Accuracy improved: {hAcc} mm")
+                    heading_sol = self.fusion_data.get("headingSol", "UNKNOWN")
+                    if hAcc < 500 and heading_sol != "NONE":
+                        self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}")
                 
                 # Udržovat 0
                 target_left, target_right = 0, 0
+                self.drive.send_drive(self.max_pwm, 0, 0)
+                self.last_v = 0
+                self.last_w = 0
+                actual_left, actual_right = 0, 0
                 
-            # Pokud neskončila služba, spočítáme limity
-            if self.state in ["RUNNING", "PAUSED"]:
+            # Pokud neskončila služba a jsme RUNNING, spočítáme limity
+            if self.state == "RUNNING":
                 actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)
                 self.drive.send_drive(self.max_pwm, actual_left, actual_right)
                 
+            if self.state in ["RUNNING", "PAUSED"]:
                 if self.logger:
                     self.logger.print(f"{time.time()},{lat},{lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{target_left},{target_right},{actual_left},{actual_right},{self.lidar_distance},{self.state}")
             

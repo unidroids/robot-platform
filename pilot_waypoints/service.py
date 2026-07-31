@@ -40,6 +40,7 @@ class WaypointsPilotService:
         
         self.fusion_data = None
         self.lidar_distance = -1.0
+        self.last_lidar_time = 0.0
         
         # OOW state
         self.oow_tcp_ok = False
@@ -139,6 +140,7 @@ class WaypointsPilotService:
         
     def update_lidar(self, data):
         self.lidar_distance = data.get("distance", -1.0)
+        self.last_lidar_time = time.time()
         
     def update_oow_zmq(self, msg):
         print(f"[PilotService] OOW ZMQ Event: {msg}")
@@ -188,13 +190,18 @@ class WaypointsPilotService:
                 print(f"[PilotService] ZMQ chyba: {e}")
                 time.sleep(0.1)
                 
-    def _calculate_steering(self, heading, target_heading):
+    def _calculate_steering(self, heading, target_heading, lidar_dist):
         heading_error = target_heading - heading
         heading_error = (heading_error + 180) % 360 - 180
         
         kappa_v = self.max_speed * 1.5
         v_center = self.max_speed * math.exp(- (abs(heading_error)/45.0)**2)
         
+        # Zpomalení dle LiDARu (mezi 50 a 150 cm)
+        if 50.0 <= lidar_dist < 150.0:
+            lidar_factor = max(0.2, (lidar_dist - 50.0) / 100.0)
+            v_center *= lidar_factor
+            
         v_turn_pp = heading_error * (kappa_v / 90.0)
         
         spin_mix = math.exp(- ((180 - abs(heading_error))/60.0)**4)
@@ -305,11 +312,15 @@ class WaypointsPilotService:
                             distance_to_goal = near_state.distance_to_goal_m
                             d_perp = near_state.d_perp_m
                             
-                            if 0 < self.lidar_distance < 0.5:
-                                print(f"[PilotService] Lidar antikolize ({self.lidar_distance}m) - zastavuji.")
+                            # Validace aktuálnosti lidaru (timeout 2s)
+                            lidar_active = (time.time() - self.last_lidar_time) < 2.0
+                            current_lidar = self.lidar_distance if lidar_active else -1.0
+                            
+                            if 0 < current_lidar < 50.0:
+                                print(f"[PilotService] Lidar antikolize ({current_lidar}cm) - zastavuji.")
                                 target_left, target_right = 0, 0
                             else:
-                                target_left, target_right, heading_error = self._calculate_steering(heading, target_heading)
+                                target_left, target_right, heading_error = self._calculate_steering(heading, target_heading, current_lidar)
 
             elif self.state == "PAUSED":
                 if self.source == "GPS" and self.fusion_data:

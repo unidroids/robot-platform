@@ -36,6 +36,12 @@ chmod 755 /data/logs/gps
 touch /data/logs/gps/gps.log
 chmod 664 /data/logs/gps/gps.log
 
+mkdir -p /data/logs/pilot_waypoints
+chown user:user /data/logs/pilot_waypoints
+chmod 755 /data/logs/pilot_waypoints
+touch /data/logs/pilot_waypoints/pilot_waypoints.log
+chmod 664 /data/logs/pilot_waypoints/pilot_waypoints.log
+
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
 ./register_fastapi.sh
@@ -67,6 +73,10 @@ chmod +x pilot_vision_register.sh pilot_vision_unregister.sh
 ./pilot_vision_register.sh
 systemctl status robot-pilot-vision
 
+chmod +x pilot_waypoints_register.sh pilot_waypoints_unregister.sh
+./pilot_waypoints_register.sh
+systemctl status robot-pilot-waypoints
+
 chmod +x logger_register.sh logger_unregister.sh
 ./logger_register.sh
 systemctl status robot-logger
@@ -83,6 +93,7 @@ systemctl status robot-gps
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
 ./vision_unregister.sh
+./pilot_waypoints_unregister.sh
 ./logger_unregister.sh
 ./compass_unregister.sh
 ./gps_unregister.sh
@@ -96,30 +107,32 @@ systemctl status robot-camera-stereo
 systemctl status robot-lidar
 systemctl status robot-vision
 systemctl status robot-pilot-vision
+systemctl status robot-pilot-waypoints
 systemctl status robot-logger
 systemctl status robot-compass
 systemctl status robot-gps
 
 # restart
 sudo systemctl restart fastapi-server
-sudo systemctl restart zeroconf
-sudo systemctl restart robot-cameras
 sudo systemctl restart robot-camera-stereo
-sudo systemctl restart robot-lidar
-sudo systemctl restart robot-journey
+sudo systemctl restart robot-cameras
+sudo systemctl restart robot-compass
+sudo systemctl restart robot-drive
+sudo systemctl restart robot-fusion
 sudo systemctl restart robot-gamepad
 sudo systemctl restart robot-gnss
 sudo systemctl restart robot-gps
-sudo systemctl restart robot-pointperfect
-sudo systemctl restart robot-fusion
-sudo systemctl restart robot-drive
+sudo systemctl restart robot-heading
+sudo systemctl restart robot-journey
+sudo systemctl restart robot-lidar
+sudo systemctl restart robot-logger
+sudo systemctl restart robot-oow
 sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
+sudo systemctl restart robot-pilot-waypoints
+sudo systemctl restart robot-pointperfect
 sudo systemctl restart robot-vision
-sudo systemctl restart robot-logger
-sudo systemctl restart robot-heading
-sudo systemctl restart robot-compass
-sudo systemctl restart robot-oow
+sudo systemctl restart zeroconf
 
 # vypis
 nano /data/logs/fastapi/fastapi.log 
@@ -144,6 +157,9 @@ tail -f /data/logs/drive/drive.log
 
 nano /data/logs/pilot_vision/pilot_vision.log
 tail -f /data/logs/pilot_vision/pilot_vision.log
+
+nano /data/logs/pilot_waypoints/pilot_waypoints.log
+tail -f /data/logs/pilot_waypoints/pilot_waypoints.log
 
 nano /data/logs/logger/logger.log
 tail -f /data/logs/logger/logger.log

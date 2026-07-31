@@ -44,6 +44,10 @@ public:
         stop();
     }
 
+    bool isRunning() const {
+        return running_.load(std::memory_order_relaxed);
+    }
+
     // Volitelný helper – jen zajistí initializeUDP.
     bool connect() {
         std::lock_guard<std::mutex> lg(mtx_);

@@ -8,6 +8,9 @@ make -j$(nproc)
 chmod +x ../bin/robot_lidar_tcp
 # cp ../bin/robot_lidar_tcp ../../server/robot_lidar_tcp
 
+sudo systemctl restart robot-lidar
+
+
 
 # set mode
 Bit	Function                                              - Value 0                     Value 1

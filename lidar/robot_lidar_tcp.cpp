@@ -97,6 +97,17 @@ void handle_client(int sock) {
             } else if (line == "STOP") {
                 lidar.stop();
                 send_line(sock, "OK STOPPED");
+            } else if (line == "STATUS") {
+                if (lidar.isRunning()) {
+                    float dist;
+                    if (lidar.getDistance(dist)) {
+                        send_line(sock, "RUNNING " + std::to_string(dist));
+                    } else {
+                        send_line(sock, "RUNNING -1");
+                    }
+                } else {
+                    send_line(sock, "IDLE");
+                }
             } else if (line == "DISTANCE") {
                 //uint64_t seq;
                 float dist;

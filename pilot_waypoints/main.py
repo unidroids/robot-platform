@@ -89,7 +89,7 @@ async def main():
     service = WaypointsPilotService()
     server = await asyncio.start_server(
         lambda r, w: handle_client(r, w, service),
-        '0.0.0.0', 9101
+        '127.0.0.1', 9101
     )
     
     print("[TCP_Server] Služba pilot_waypoints naslouchá na TCP portu 9101.")

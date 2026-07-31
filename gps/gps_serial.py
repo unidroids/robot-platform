@@ -3,6 +3,8 @@ import threading
 import queue
 import sys
 import zlib
+import os
+from datetime import datetime
 from typing import Optional
 
 _unicore_crc_table = [
@@ -52,9 +54,14 @@ class GpsSerialIO:
         self.baudrate = baudrate
         self._ser: Optional[serial.Serial] = None
         self._fifo: "queue.Queue[str]" = queue.Queue(maxsize=fifo_size)
+        self._write_fifo: "queue.Queue[bytes]" = queue.Queue(maxsize=100)
         self._stop_event = threading.Event()
+        self._write_event = threading.Event()
         self._reader_thread = threading.Thread(target=self._reader, daemon=True)
+        self._writer_thread = threading.Thread(target=self._writer, daemon=True)
         self._err_checksum = 0
+        self._rx_log_file = None
+        self._tx_log_file = None
 
     def open(self):
         self._err_checksum = 0
@@ -63,17 +70,35 @@ class GpsSerialIO:
                 self._fifo.get_nowait()
             except queue.Empty:
                 break
+
+        now = datetime.now()
+        date_dir = f"/data/robot/gps/{now.strftime('%Y-%m-%d')}"
+        os.makedirs(date_dir, exist_ok=True)
+        self._rx_log_file = open(os.path.join(date_dir, f"rx-{now.strftime('%H-%M-%S')}.bin"), "wb")
+        self._tx_log_file = open(os.path.join(date_dir, f"tx-{now.strftime('%H-%M-%S')}.bin"), "wb")
+
         self._ser = serial.Serial(self.device, self.baudrate, timeout=1.0)
         self._stop_event.clear()
+        
+        if not self._writer_thread.is_alive():
+            self._writer_thread = threading.Thread(target=self._writer, daemon=True)
+            self._writer_thread.start()
+            
         if not self._reader_thread.is_alive():
             self._reader_thread = threading.Thread(target=self._reader, daemon=True)
             self._reader_thread.start()
 
     def close(self):
         self._stop_event.set()
+        self._write_event.set()
         try:
             if self._reader_thread.is_alive():
                 self._reader_thread.join(timeout=2.0)
+        except Exception:
+            pass
+        try:
+            if self._writer_thread.is_alive():
+                self._writer_thread.join(timeout=2.0)
         except Exception:
             pass
         if self._ser:
@@ -82,6 +107,19 @@ class GpsSerialIO:
             except Exception:
                 pass
             self._ser = None
+            
+        if self._rx_log_file:
+            try:
+                self._rx_log_file.close()
+            except:
+                pass
+            self._rx_log_file = None
+        if self._tx_log_file:
+            try:
+                self._tx_log_file.close()
+            except:
+                pass
+            self._tx_log_file = None
 
     def get_sentence(self, timeout: Optional[float] = None) -> Optional[str]:
         try:
@@ -92,6 +130,33 @@ class GpsSerialIO:
     def get_error_counters(self) -> int:
         return self._err_checksum
 
+    def send_data(self, data: bytes) -> bool:
+        try:
+            self._write_fifo.put_nowait(data)
+            self._write_event.set()
+            return True
+        except queue.Full:
+            print("[GpsSerialIO] Write FIFO full - dropping data!", file=sys.stderr)
+            return False
+
+    def _writer(self):
+        while not self._stop_event.is_set():
+            self._write_event.wait(timeout=0.1)
+            self._write_event.clear()
+            while not self._write_fifo.empty():
+                try:
+                    data = self._write_fifo.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    if self._ser and self._ser.writable():
+                        self._ser.write(data)
+                        if self._tx_log_file:
+                            self._tx_log_file.write(data)
+                            self._tx_log_file.flush()
+                except Exception as e:
+                    print(f"[GpsSerialIO] Writer error: {e}", file=sys.stderr)
+
     def _reader(self):
         while not self._stop_event.is_set():
             try:
@@ -99,6 +164,10 @@ class GpsSerialIO:
                     line = self._ser.readline()
                     if not line:
                         continue
+                        
+                    if self._rx_log_file:
+                        self._rx_log_file.write(line)
+                        self._rx_log_file.flush()
                     
                     try:
                         line_str = line.decode('ascii', errors='ignore').strip()

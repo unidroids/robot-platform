@@ -36,6 +36,12 @@ chmod 755 /data/logs/gps
 touch /data/logs/gps/gps.log
 chmod 664 /data/logs/gps/gps.log
 
+mkdir -p /data/logs/rtk
+chown user:user /data/logs/rtk
+chmod 755 /data/logs/rtk
+touch /data/logs/rtk/rtk.log
+chmod 664 /data/logs/rtk/rtk.log
+
 mkdir -p /data/logs/pilot_waypoints
 chown user:user /data/logs/pilot_waypoints
 chmod 755 /data/logs/pilot_waypoints
@@ -89,6 +95,10 @@ chmod +x gps_register.sh gps_unregister.sh
 ./gps_register.sh
 systemctl status robot-gps
 
+chmod +x rtk_register.sh rtk_unregister.sh
+./rtk_register.sh
+systemctl status robot-rtk
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
@@ -97,6 +107,7 @@ systemctl status robot-gps
 ./logger_unregister.sh
 ./compass_unregister.sh
 ./gps_unregister.sh
+./rtk_unregister.sh
 ./camera_stereo_unregister.sh
 
 # status
@@ -111,6 +122,7 @@ systemctl status robot-pilot-waypoints
 systemctl status robot-logger
 systemctl status robot-compass
 systemctl status robot-gps
+systemctl status robot-rtk
 
 # restart
 sudo systemctl restart fastapi-server
@@ -131,6 +143,7 @@ sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-pilot-waypoints
 sudo systemctl restart robot-pointperfect
+sudo systemctl restart robot-rtk
 sudo systemctl restart robot-vision
 sudo systemctl restart zeroconf
 
@@ -169,5 +182,8 @@ tail -f /data/logs/compass/compass.log
 
 nano /data/logs/gps/gps.log
 tail -f /data/logs/gps/gps.log
+
+nano /data/logs/rtk/rtk.log
+tail -f /data/logs/rtk/rtk.log
 
 tail -f /data/logs/oow/service.log

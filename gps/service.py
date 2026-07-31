@@ -5,6 +5,7 @@ from gps_serial import GpsSerialIO
 from handlers.bestnava_handler import BestnavaHandler
 from handlers.gpgga_handler import GpggaHandler
 from handlers.hwstatusa_handler import HwstatusaHandler
+from tcp_server import GpsTcpServer
 
 class GpsService:
     def __init__(self):
@@ -25,6 +26,7 @@ class GpsService:
         self.gpgga_handler = None
         self.bestnava_handler = None
         self.hwstatusa_handler = None
+        self.tcp_server = None
         
     def start(self):
         with self._lock:
@@ -48,6 +50,9 @@ class GpsService:
             self._stop_event.clear()
             self.gps_serial.open()
             
+            self.tcp_server = GpsTcpServer(port=5001, serial_io=self.gps_serial)
+            self.tcp_server.start()
+            
             self._dispatcher_thread = threading.Thread(target=self._dispatcher, daemon=True)
             self._dispatcher_thread.start()
             
@@ -61,6 +66,10 @@ class GpsService:
                 return "NOT_RUNNING"
                 
             self._stop_event.set()
+            
+            if self.tcp_server:
+                self.tcp_server.stop()
+                self.tcp_server = None
             
             # Zrušíme serial port první, to pomůže uvolnit read vlákno
             if self.gps_serial:

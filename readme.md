@@ -48,6 +48,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv ze senzorů (ZMQ) do logu |
 | **OOW**          | 9013 | Out of World (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
+| **RTK**          | 9015 | Mikroslužba pro stahování RTCM z PointPerfect do GPS |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
 
 

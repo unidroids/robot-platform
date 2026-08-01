@@ -87,6 +87,7 @@ class FusionService:
                 
                 self._zmq_sub.connect("ipc:///tmp/robot-compass")
                 self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "COMPASS/GYRO/")
+                self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "COMPASS/ANGLE/")
                 
                 self._zmq_sub.connect("ipc:///tmp/robot-odometry")
                 self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "odometry/")
@@ -177,6 +178,11 @@ class FusionService:
                         data = json.loads(msg[len("COMPASS/GYRO/"):])
                         wz = data.get("wz", 0.0)
                         self.core.update_gyro(wz)
+                        
+                    elif msg.startswith("COMPASS/ANGLE/"):
+                        data = json.loads(msg[len("COMPASS/ANGLE/"):])
+                        yaw = data.get("yaw", 0.0)
+                        self.core.update_compass_angle(yaw)
                         
             except zmq.error.ContextTerminated:
                 break

@@ -56,6 +56,7 @@ class OowBleServer:
             val_str = value.decode("utf-8").strip()
             
             if characteristic.uuid.lower() == CHAR_COMMAND_UUID.lower():
+                print(f"[BLE_Service][DEBUG] Received command: {val_str}")
                 # Formát: "MAC_ADRESA:COMMAND" (např. "00:11:22:33:44:55:ON")
                 parts = val_str.split(":", 1)
                 if len(parts) == 2:

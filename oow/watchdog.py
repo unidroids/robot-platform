@@ -7,6 +7,7 @@ from fusion_client import FusionClient
 from lidar_client import LidarClient
 from pilot_waypoints_client import PilotWaypointsClient
 from drive_client import DriveClient
+from rtk_client import RtkClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
@@ -19,6 +20,7 @@ class OfficerWatchdog:
         self.lidar_client = LidarClient()
         self.pilot_waypoints_client = PilotWaypointsClient()
         self.drive_client = DriveClient()
+        self.rtk_client = RtkClient()
         
         self.zmq_address = zmq_address
         self.fallback_address = fallback_address
@@ -71,7 +73,8 @@ class OfficerWatchdog:
             self.fusion_client,
             self.lidar_client,
             self.pilot_waypoints_client,
-            self.drive_client
+            self.drive_client,
+            self.rtk_client
         ]
         for client in clients:
             asyncio.create_task(self._try_client_command(client, command, client_id))

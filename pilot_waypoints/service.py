@@ -69,7 +69,7 @@ class WaypointsPilotService:
         self.logger = DataLogger()
         self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,target_left,target_right,actual_left,actual_right,lidar_dist,state")
         
-        self.path_tracker = PathTracker("/opt/projects/robotour/pilot_waypoints/waypoints/_route.json", L_near_m=1.0)
+        self.path_tracker = PathTracker("/opt/projects/robotour/pilot_waypoints/waypoints/_route.json", L_near_m=3.0)
         
         self.state = "RUNNING"
         self.source = "USER"
@@ -134,12 +134,20 @@ class WaypointsPilotService:
         elif self.state == "RUNNING":
             idx = self.path_tracker.current_wp_index if self.path_tracker else 0
             if self.fusion_data:
-                return f"RUNNING {idx} {self.fusion_data.get('lat', 0)} {self.fusion_data.get('lon', 0)} {self.fusion_data.get('heading', 0)}"
+                lat = self.fusion_data.get('lat', 0)
+                lon = self.fusion_data.get('lon', 0)
+                heading = self.fusion_data.get('heading', 0)
+                gpsSol = self.fusion_data.get('gpsSol', 'NONE')
+                hAcc = self.fusion_data.get('hAcc', 9999)
+                headingSol = self.fusion_data.get('headingSol', 'NONE')
+                headingAcc = self.fusion_data.get('headingAcc', 9999)
+                return f"RUNNING idx:{idx} lat:{lat} lon:{lon} heading:{heading} gpsSol:{gpsSol} hAcc:{hAcc} headingSol:{headingSol} hedingAcc:{headingAcc}"
             return f"RUNNING {idx}"
         elif self.state == "PAUSED":
             if self.source == "GPS" and self.fusion_data:
                 hAcc = self.fusion_data.get("hAcc", 9999)
-                return f"PAUSED {self.source} Current hAcc: {hAcc} mm"
+                headingAcc = self.fusion_data.get('headingAcc', 9999)
+                return f"PAUSED {self.source} Current hAcc: {hAcc} mm headingAcc: {headingAcc}"
             return f"PAUSED {self.source} {self.status_info}"
         elif self.state == "STOPPED":
             return f"STOPPED {self.source} {self.status_info}"
@@ -305,10 +313,10 @@ class WaypointsPilotService:
                 else:
                     hAcc = self.fusion_data.get("hAcc", 9999) # v mm
                     heading_sol = self.fusion_data.get("headingSol", "NONE")
+                    heading_acc = self.fusion_data.get("headingAcc", 9999.0)
                     
-                    if hAcc > 700 or heading_sol == "NONE":
+                    if hAcc > 700 or heading_sol == "NONE" or heading_acc > 6.0:
                         heading_val = self.fusion_data.get("heading", 0.0)
-                        heading_acc = self.fusion_data.get("headingAcc", 9999.0)
                         info_msg = f"Bad GPS/Hdg. hAcc:{hAcc}mm hdg:{heading_val:.1f} hdgAcc:{heading_acc} hdgSol:{heading_sol}"
                         self.pause_service(source="GPS", info=info_msg)
                         self.drive.send_drive(self.max_pwm, 0, 0)
@@ -358,8 +366,9 @@ class WaypointsPilotService:
                 if self.source == "GPS" and self.fusion_data:
                     hAcc = self.fusion_data.get("hAcc", 9999)
                     heading_sol = self.fusion_data.get("headingSol", "NONE")
-                    if hAcc < 500 and heading_sol != "NONE":
-                        self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}")
+                    heading_acc = self.fusion_data.get("headingAcc", 9999.0)
+                    if hAcc < 500 and heading_sol != "NONE" and heading_acc <= 6.0:
+                        self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}, hdgAcc={heading_acc}")
                 
                 # Udržovat 0
                 target_left, target_right = 0, 0

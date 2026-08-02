@@ -72,7 +72,7 @@ class FusionCore:
 
     def update_compass_angle(self, yaw: float):
         """Compass angle in deg"""
-        self.compass_heading.heading = self._norm_deg(90.0 - float(yaw))
+        self.compass_heading.heading = self._norm_deg(185-float(yaw))
         self.compass_heading.acc = 4.0
         self.compass_heading.sol = "COMPASS"
         self._fuse_heading()

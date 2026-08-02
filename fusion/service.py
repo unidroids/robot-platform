@@ -196,6 +196,7 @@ class FusionService:
             if self.core and self.core.ready:
                 self._publish(self.core.get_solution())
                 self._set_state(mode="READY", last_note="SOLUTION PUBLISHED")
+                
             time.sleep(0.1)
 
     # === Odběratelské API ====================================================

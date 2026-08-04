@@ -22,6 +22,8 @@ class NearState:
     near_x_m: Optional[float] = None             
     near_y_m: Optional[float] = None             
     d_perp_m: Optional[float] = None             
+    closest_lat: Optional[float] = None          
+    closest_lon: Optional[float] = None          
 
 
 class NearWaypoint:
@@ -61,6 +63,8 @@ class NearWaypoint:
                 near_lat=None, near_lon=None,
                 near_x_m=None, near_y_m=None,
                 d_perp_m=None,
+                closest_lat=self.S_lat,
+                closest_lon=self.S_lon,
             )
 
         vx /= L_seg
@@ -73,6 +77,13 @@ class NearWaypoint:
 
         distance_to_goal_m = (L_seg - t_q)
 
+        # Calculate closest point strictly on the segment [0, L_seg]
+        t_closest = max(0.0, min(L_seg, t_q))
+        Cx = Sx + t_closest * vx
+        Cy = Sy + t_closest * vy
+        Cx_ecef, Cy_ecef, Cz_ecef = enu_to_ecef(Cx, Cy, 0.0, R_lat, R_lon, 0.0)
+        Clat, Clon, _ = ecef_to_lla(Cx_ecef, Cy_ecef, Cz_ecef)
+
         if self.L_near_m is None:
             return NearState(
                 distance_to_goal_m=distance_to_goal_m,
@@ -82,6 +93,8 @@ class NearWaypoint:
                 near_lat=None, near_lon=None,
                 near_x_m=None, near_y_m=None,
                 d_perp_m=d_perp,
+                closest_lat=Clat,
+                closest_lon=Clon,
             )
 
         Lr = self.L_near_m
@@ -96,6 +109,8 @@ class NearWaypoint:
                 near_lat=None, near_lon=None,
                 near_x_m=None, near_y_m=None,
                 d_perp_m=d_perp,
+                closest_lat=Clat,
+                closest_lon=Clon,
             )
         elif abs(d_perp - Lr) <= eps:
             nx, ny = Qx, Qy
@@ -111,6 +126,8 @@ class NearWaypoint:
                 near_lat=nlat, near_lon=nlon,
                 near_x_m=nx, near_y_m=ny,
                 d_perp_m=d_perp,
+                closest_lat=Clat,
+                closest_lon=Clon,
             )
         else:
             delta = math.sqrt(max(0.0, Lr * Lr - d_perp * d_perp))
@@ -135,6 +152,8 @@ class NearWaypoint:
                 near_lat=nlat, near_lon=nlon,
                 near_x_m=nx, near_y_m=ny,
                 d_perp_m=d_perp,
+                closest_lat=Clat,
+                closest_lon=Clon,
             )
 
     def update(self, R_lat: float, R_lon: float) -> tuple[float, float, Optional[float]]:

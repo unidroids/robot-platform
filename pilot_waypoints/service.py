@@ -69,7 +69,7 @@ class WaypointsPilotService:
         self.logger = DataLogger()
         self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,target_left,target_right,actual_left,actual_right,lidar_dist,state")
         
-        self.path_tracker = PathTracker("/opt/projects/robotour/pilot_waypoints/waypoints/_route.json", L_near_m=3.0)
+        self.path_tracker = PathTracker("/opt/projects/robotour/pilot_waypoints/waypoints/_route.json", L_near_m=2.0)
         
         self.state = "RUNNING"
         self.source = "USER"

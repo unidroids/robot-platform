@@ -42,7 +42,7 @@ async def handle_client(reader, writer, service):
                 if cmd == "PING":
                     writer.write(b"PONG PILOT_WAYPOINTS\n")
                 elif cmd == "START":
-                    speed = 70
+                    speed = 120
                     pwm = 150
                     if len(parts) >= 2: speed = int(parts[1])
                     if len(parts) >= 3: pwm = int(parts[2])

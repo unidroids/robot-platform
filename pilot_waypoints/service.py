@@ -144,7 +144,6 @@ class WaypointsPilotService:
     def shutdown(self):
         print(f"[PilotService] SHUTDOWN")
         self.running = False
-        self.drive.send_motors_off()
         self.drive.disconnect()
         if self.logger:
             self.logger.close()
@@ -293,7 +292,7 @@ class WaypointsPilotService:
             distance_to_goal = 0
             d_perp = 0
             
-            if self.state in ["RUNNING", "PAUSED", "STOPPED"]:
+            if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
                 # Defaultní target_v pro případy, kdy nemáme data z GPS atd.
                 target_v = self.max_speed if self.state == "RUNNING" else 0.0
 
@@ -323,23 +322,20 @@ class WaypointsPilotService:
                         near_state = self.path_tracker.update(lat, lon)
                         
                         if near_state is None:
-                            self.state = "FINISHED"
-                            self.status_info = "Path not found"
-                            self.drive.send_motors_off()
-                            if self.logger:
-                                self.logger.close()
-                                self.logger = None
-                        elif near_state.distance_to_goal_m is not None and near_state.distance_to_goal_m < 0 and self.path_tracker.current_wp_index >= len(self.path_tracker.waypoints)-2:
-                            print("[PilotService] Konec trasy dosažen.")
-                            self.state = "FINISHED"
-                            self.status_info = "Goal reached"
-                            self.drive.send_break()
-                            self.drive.send_motors_off()
-                            if self.logger:
-                                self.logger.close()
-                                self.logger = None
-                        elif near_state.heading_to_near_gnss_deg is not None:
-                            target_heading = near_state.heading_to_near_gnss_deg
+                            if self.state != "FINISHED":
+                                print("[PilotService] Path not found. Přepínám na stav FINISHED (zpomaluji na 0).")
+                                self.state = "FINISHED"
+                                self.status_info = "Path not found"
+                            target_left, target_right = 0, 0
+                        else:
+                            if near_state.distance_to_goal_m is not None and near_state.distance_to_goal_m < 0 and self.path_tracker.current_wp_index >= len(self.path_tracker.waypoints)-2:
+                                if self.state != "FINISHED":
+                                    print("[PilotService] Konec trasy dosažen. Přepínám na stav FINISHED (zpomaluji na 0).")
+                                    self.state = "FINISHED"
+                                    self.status_info = "Goal reached"
+                                
+                            if near_state.heading_to_near_gnss_deg is not None:
+                                target_heading = near_state.heading_to_near_gnss_deg
                             distance_to_goal = near_state.distance_to_goal_m
                             d_perp = near_state.d_perp_m
                             
@@ -347,6 +343,7 @@ class WaypointsPilotService:
                             if self.state == "RUNNING" and near_state.end_rel_azimuth_deg is not None and near_state.distance_to_goal_m is not None:
                                 rel_az = near_state.end_rel_azimuth_deg
                                 v_waypoint = self.max_speed * math.exp(- (abs(rel_az)/45.0)**2)
+                                v_waypoint = max(min(self.max_speed, 200.0), v_waypoint)
                                 dist = max(0.0, near_state.distance_to_goal_m)
                                 slowdown_dist = self.path_tracker.L_near_m
                                 if dist < slowdown_dist:
@@ -379,13 +376,13 @@ class WaypointsPilotService:
                 actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)
                 self.drive.send_drive(self.max_pwm, actual_left, actual_right)
                 
-            if self.state in ["RUNNING", "PAUSED", "STOPPED"]:
+            if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
                 if self.logger:
                     self.logger.print(f"{time.time()},{lat},{lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{target_left},{target_right},{actual_left},{actual_right},{self.lidar_distance},{self.state}")
                 
-                # Pokud jsme ve stavu STOPPED a skutečně jsme zastavili, ukončíme smyčku (motory drží pozici)
-                if self.state == "STOPPED" and actual_left == 0 and actual_right == 0:
-                    print("[PilotService] Robot plynule zastavil (STOPPED). Ukončuji řídicí smyčku.")
+                # Pokud jsme ve stavu STOPPED nebo FINISHED a skutečně jsme zastavili, ukončíme smyčku (motory drží pozici)
+                if self.state in ["STOPPED", "FINISHED"] and actual_left == 0 and actual_right == 0:
+                    print(f"[PilotService] Robot plynule zastavil ({self.state}). Ukončuji řídicí smyčku.")
                     self.running = False
                     break
             

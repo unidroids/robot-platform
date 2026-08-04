@@ -88,7 +88,8 @@ class FusionPoller:
         elif msg.startswith("COMPASS/GYRO/"):
             data = json.loads(msg[len("COMPASS/GYRO/"):])
             wz = data.get("wz", 0.0)
-            self.core.update_gyro(wz)
+            ts = data.get("ts", 0.0)
+            self.core.update_gyro(ts, wz)
             
         elif msg.startswith("COMPASS/ANGLE/"):
             data = json.loads(msg[len("COMPASS/ANGLE/"):])

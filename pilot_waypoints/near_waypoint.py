@@ -24,6 +24,7 @@ class NearState:
     d_perp_m: Optional[float] = None             
     closest_lat: Optional[float] = None          
     closest_lon: Optional[float] = None          
+    end_rel_azimuth_deg: Optional[float] = 0.0
 
 
 class NearWaypoint:
@@ -33,6 +34,7 @@ class NearWaypoint:
         E_lat: float, E_lon: float,
         L_near_m: Optional[float] = 1.0,
         eps_m: float = 2e-3,
+        end_rel_azimuth_deg: float = 0.0,
     ) -> None:
         self.S_lat = float(S_lat)
         self.S_lon = float(S_lon)
@@ -43,6 +45,7 @@ class NearWaypoint:
 
         self._S_ecef = lla_to_ecef(self.S_lat, self.S_lon, 0.0)
         self._E_ecef = lla_to_ecef(self.E_lat, self.E_lon, 0.0)
+        self.end_rel_azimuth_deg = end_rel_azimuth_deg
         self.state: Optional[NearState] = None
 
     def _compute(self, R_lat: float, R_lon: float) -> NearState:
@@ -65,6 +68,7 @@ class NearWaypoint:
                 d_perp_m=None,
                 closest_lat=self.S_lat,
                 closest_lon=self.S_lon,
+                end_rel_azimuth_deg=self.end_rel_azimuth_deg,
             )
 
         vx /= L_seg
@@ -95,6 +99,7 @@ class NearWaypoint:
                 d_perp_m=d_perp,
                 closest_lat=Clat,
                 closest_lon=Clon,
+                end_rel_azimuth_deg=self.end_rel_azimuth_deg,
             )
 
         Lr = self.L_near_m
@@ -111,6 +116,7 @@ class NearWaypoint:
                 d_perp_m=d_perp,
                 closest_lat=Clat,
                 closest_lon=Clon,
+                end_rel_azimuth_deg=self.end_rel_azimuth_deg,
             )
         elif abs(d_perp - Lr) <= eps:
             nx, ny = Qx, Qy
@@ -128,6 +134,7 @@ class NearWaypoint:
                 d_perp_m=d_perp,
                 closest_lat=Clat,
                 closest_lon=Clon,
+                end_rel_azimuth_deg=self.end_rel_azimuth_deg,
             )
         else:
             delta = math.sqrt(max(0.0, Lr * Lr - d_perp * d_perp))
@@ -154,6 +161,7 @@ class NearWaypoint:
                 d_perp_m=d_perp,
                 closest_lat=Clat,
                 closest_lon=Clon,
+                end_rel_azimuth_deg=self.end_rel_azimuth_deg,
             )
 
     def update(self, R_lat: float, R_lon: float) -> tuple[float, float, Optional[float]]:

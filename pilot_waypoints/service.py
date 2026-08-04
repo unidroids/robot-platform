@@ -28,6 +28,7 @@ class WaypointsPilotService:
         
         self.last_v = 0.0
         self.last_w = 0.0
+        self.current_speed = 0.0
         
         self.path_tracker = None
         self.drive = DriveClient()
@@ -64,6 +65,7 @@ class WaypointsPilotService:
         # Reset speeds
         self.last_v = 0.0
         self.last_w = 0.0
+        self.current_speed = 0.0
         
         # Init logger
         self.logger = DataLogger()
@@ -74,42 +76,26 @@ class WaypointsPilotService:
         self.state = "RUNNING"
         self.source = "USER"
         self.status_info = "Starting"
-        self.running = True
         
-        # ZMQ Receiver
-        self.receiver = threading.Thread(target=self._zmq_loop, daemon=True)
-        self.receiver.start()
-        
-        # Control Loop
-        self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
-        self.control_thread.start()
+        if not self.running:
+            self.running = True
+            
+            # ZMQ Receiver
+            self.zmq_thread = threading.Thread(target=self._zmq_loop, daemon=True)
+            self.zmq_thread.start()
+            
+            # Control Loop
+            self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
+            self.control_thread.start()
         
         return "OK"
 
     def stop_service(self):
-        if self.running:
-            print("[PilotService] Zastavuji službu...")
-            self.running = False
+        print("[PilotService] Zastavuji službu (zpomaluji na 0)...")
+        if self.state != "STOPPED":
             self.state = "STOPPED"
-            self.drive.send_motors_off()
-            
-            # Počkat na ukončení vláken, abychom zamezili vzniku více vláken
-            if self.control_thread and self.control_thread.is_alive():
-                self.control_thread.join(timeout=1.0)
-            if self.zmq_thread and self.zmq_thread.is_alive():
-                self.zmq_thread.join(timeout=1.0)
-            
-            self.control_thread = None
-            self.zmq_thread = None
-            print("[PilotService] Služba kompletně zastavena.")
-            
-        self.source = "USER"
-        self.status_info = "Stopped by command"
-        self.drive.send_break()
-        self.drive.send_motors_off()
-        if self.logger:
-            self.logger.close()
-            self.logger = None
+            self.source = "USER"
+            self.status_info = "Stopped by command"
         return "OK"
         
     def pause_service(self, source="USER", info=""):
@@ -219,12 +205,12 @@ class WaypointsPilotService:
                 print(f"[PilotService] ZMQ chyba: {e}")
                 time.sleep(0.1)
                 
-    def _calculate_steering(self, heading, target_heading, lidar_dist):
+    def _calculate_steering(self, heading, target_heading, lidar_dist, current_speed):
         heading_error = target_heading - heading
         heading_error = (heading_error + 180) % 360 - 180
         
-        kappa_v = self.max_speed * 1.5
-        v_center = self.max_speed * math.exp(- (abs(heading_error)/45.0)**2)
+        kappa_v = current_speed * 1.5
+        v_center = current_speed * math.exp(- (abs(heading_error)/45.0)**2)
         
         # Zpomalení dle LiDARu (mezi 50 a 150 cm)
         if 50.0 <= lidar_dist < 150.0:
@@ -234,7 +220,7 @@ class WaypointsPilotService:
         v_turn_pp = heading_error * (kappa_v / 90.0)
         
         spin_mix = math.exp(- ((180 - abs(heading_error))/60.0)**4)
-        v_spin = heading_error * (self.max_speed / 90.0)
+        v_spin = heading_error * (current_speed / 90.0)
         
         v_turn = (1.0 - spin_mix) * v_turn_pp + spin_mix * v_spin
         
@@ -307,7 +293,11 @@ class WaypointsPilotService:
             distance_to_goal = 0
             d_perp = 0
             
-            if self.state == "RUNNING":
+            if self.state in ["RUNNING", "PAUSED", "STOPPED"]:
+                # Defaultní target_v pro případy, kdy nemáme data z GPS atd.
+                target_v = self.max_speed if self.state == "RUNNING" else 0.0
+
+                # Sledování trasy a logika GPS
                 if not self.fusion_data:
                     pass
                 else:
@@ -318,13 +308,14 @@ class WaypointsPilotService:
                     if hAcc > 700 or heading_sol == "NONE" or heading_acc > 6.0:
                         heading_val = self.fusion_data.get("heading", 0.0)
                         info_msg = f"Bad GPS/Hdg. hAcc:{hAcc}mm hdg:{heading_val:.1f} hdgAcc:{heading_acc} hdgSol:{heading_sol}"
-                        self.pause_service(source="GPS", info=info_msg)
-                        self.drive.send_drive(self.max_pwm, 0, 0)
-                        self.last_v = 0
-                        self.last_w = 0
+                        if self.state == "RUNNING":
+                            self.pause_service(source="GPS", info=info_msg)
                         target_left, target_right = 0, 0
-                        actual_left, actual_right = 0, 0
                     else:
+                        # Pokud byla chyba GPS odstraněna, obnovíme běh (pokud jsme byli pauznutí kvůli ní)
+                        if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 6.0:
+                            self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}, hdgAcc={heading_acc}")
+                            
                         lat = self.fusion_data.get("lat")
                         lon = self.fusion_data.get("lon")
                         heading = self.fusion_data.get("heading")
@@ -352,39 +343,51 @@ class WaypointsPilotService:
                             distance_to_goal = near_state.distance_to_goal_m
                             d_perp = near_state.d_perp_m
                             
+                            # Korekce target_v na základě relativního azimutu (zpomalení do zatáčky)
+                            if self.state == "RUNNING" and near_state.end_rel_azimuth_deg is not None and near_state.distance_to_goal_m is not None:
+                                rel_az = near_state.end_rel_azimuth_deg
+                                v_waypoint = self.max_speed * math.exp(- (abs(rel_az)/45.0)**2)
+                                dist = max(0.0, near_state.distance_to_goal_m)
+                                slowdown_dist = self.path_tracker.L_near_m
+                                if dist < slowdown_dist:
+                                    target_v = v_waypoint + (self.max_speed - v_waypoint) * (dist / slowdown_dist)
+
+                            # Řízení požadované rychlosti (current_speed)
+                            if self.current_speed < target_v:
+                                self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
+                            elif self.current_speed > target_v:
+                                self.current_speed = max(target_v, self.current_speed - self.max_brk_accel_step)
+                            
                             # Validace aktuálnosti lidaru (timeout 2s)
                             lidar_active = (time.time() - self.last_lidar_time) < 2.0
                             current_lidar = self.lidar_distance if lidar_active else -1.0
                             
-                            if 0 < current_lidar < 50.0:
+                            if 0 < current_lidar < 70.0:
                                 print(f"[PilotService] Lidar antikolize ({current_lidar}cm) - zastavuji.")
                                 target_left, target_right = 0, 0
                             else:
-                                target_left, target_right, heading_error = self._calculate_steering(heading, target_heading, current_lidar)
+                                target_left, target_right, heading_error = self._calculate_steering(heading, target_heading, current_lidar, self.current_speed)
 
-            elif self.state == "PAUSED":
-                if self.source == "GPS" and self.fusion_data:
-                    hAcc = self.fusion_data.get("hAcc", 9999)
-                    heading_sol = self.fusion_data.get("headingSol", "NONE")
-                    heading_acc = self.fusion_data.get("headingAcc", 9999.0)
-                    if hAcc < 500 and heading_sol != "NONE" and heading_acc <= 6.0:
-                        self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}, hdgAcc={heading_acc}")
-                
-                # Udržovat 0
-                target_left, target_right = 0, 0
-                self.drive.send_drive(self.max_pwm, 0, 0)
-                self.last_v = 0
-                self.last_w = 0
-                actual_left, actual_right = 0, 0
-                
-            # Pokud neskončila služba a jsme RUNNING, spočítáme limity
-            if self.state == "RUNNING":
+                # Fallback aktualizace rychlosti, pokud nebyla upravena (např. chyba GPS)
+                if not self.fusion_data or (self.fusion_data and (self.fusion_data.get("hAcc", 9999) > 700 or self.fusion_data.get("headingSol", "NONE") == "NONE")):
+                    if self.current_speed < target_v:
+                        self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
+                    elif self.current_speed > target_v:
+                        self.current_speed = max(target_v, self.current_speed - self.max_brk_accel_step)
+
+                # Spočítáme fyzické limity zrychlení a pošleme do motorů
                 actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)
                 self.drive.send_drive(self.max_pwm, actual_left, actual_right)
                 
-            if self.state in ["RUNNING", "PAUSED"]:
+            if self.state in ["RUNNING", "PAUSED", "STOPPED"]:
                 if self.logger:
                     self.logger.print(f"{time.time()},{lat},{lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{target_left},{target_right},{actual_left},{actual_right},{self.lidar_distance},{self.state}")
+                
+                # Pokud jsme ve stavu STOPPED a skutečně jsme zastavili, ukončíme smyčku (motory drží pozici)
+                if self.state == "STOPPED" and actual_left == 0 and actual_right == 0:
+                    print("[PilotService] Robot plynule zastavil (STOPPED). Ukončuji řídicí smyčku.")
+                    self.running = False
+                    break
             
             # 10 Hz
             elapsed = time.time() - start_time

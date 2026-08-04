@@ -21,6 +21,7 @@ class FusionCore:
 
         # Headings
         self.gps_heading = HeadingData()
+        self.dual_heading = HeadingData()
         self.compass_heading = HeadingData()
         self.default_heading = HeadingData()
         self.fused_heading = HeadingData()
@@ -45,7 +46,11 @@ class FusionCore:
         return a
 
     def _update_ready_flag(self) -> None:
-        self.ready = self._have_position and (self.gps_heading.sol != "NONE" or self.compass_heading.sol != "NONE")
+        self.ready = self._have_position and (
+            self.gps_heading.sol != "NONE" or 
+            self.compass_heading.sol != "NONE" or
+            self.dual_heading.sol != "NONE"
+        )
 
     def update_position(self, lat: float, lon: float, hAcc: float, gpsSol: str):
         self._lat = float(lat)
@@ -55,8 +60,15 @@ class FusionCore:
         self._have_position = True
         self._fuse_heading()
 
-    def update_heading(self, heading: float, headingAcc: float, headingSol: str, length: float = 0.0):
+    def update_dual_heading(self, heading: float, headingAcc: float, headingSol: str, length: float = 0.0):
         """Heading from dual-antenna GPS (North East)"""
+        self.dual_heading.heading = self._norm_deg(heading)
+        self.dual_heading.acc = float(headingAcc)
+        self.dual_heading.sol = headingSol
+        self._fuse_heading()
+
+    def update_gps_heading(self, heading: float, headingAcc: float, headingSol: str):
+        """Heading derived from GPS velocity (BESTNAV)"""
         self.gps_heading.heading = self._norm_deg(heading)
         self.gps_heading.acc = float(headingAcc)
         self.gps_heading.sol = headingSol
@@ -80,11 +92,16 @@ class FusionCore:
     def _fuse_heading(self):
         self._update_ready_flag()
 
-        if self.gps_heading.sol != "NONE" and self.gps_heading.acc < 5.0:
+        if self.dual_heading.sol != "NONE" and self.dual_heading.acc < 5.0:
+            self.fused_heading.heading = self.dual_heading.heading
+            self.fused_heading.acc = self.dual_heading.acc
+            self.fused_heading.sol = self.dual_heading.sol
+            self._fusionSol = "UNIHEADING"
+        elif self.gps_heading.sol != "NONE" and self.gps_heading.acc < 5.0:
             self.fused_heading.heading = self.gps_heading.heading
             self.fused_heading.acc = self.gps_heading.acc
             self.fused_heading.sol = self.gps_heading.sol
-            self._fusionSol = "UNIHEADING"
+            self._fusionSol = "BESTNAV"
         elif self.compass_heading.sol != "NONE":
             self.fused_heading.heading = self.compass_heading.heading
             self.fused_heading.acc = self.compass_heading.acc

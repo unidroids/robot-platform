@@ -8,6 +8,7 @@ class Waypoint:
     lat: float
     lon: float
 
+class PathTracker:
     def __init__(self, route_json_path: str, L_near_m: float = 2.0):
         self.waypoints = []
         self.L_near_m = L_near_m

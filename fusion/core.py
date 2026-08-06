@@ -71,7 +71,7 @@ class FusionCore:
         self.dual_heading.sol = headingSol
         self._last_msg_mono_ts = time.monotonic()
         
-        if self.dual_heading.sol != "NONE" and self.dual_heading.acc < 2.0:
+        if self.dual_heading.sol == "NARROW_INT" and self.dual_heading.acc < 1.5:
             self._heading_initialized = True
             self.fused_heading.heading = self.dual_heading.heading
             self.fused_heading.acc = self.dual_heading.acc
@@ -98,7 +98,7 @@ class FusionCore:
             dt = ts - self._last_gyro_ts
             if 0 < dt < 1.0:
                 if self._heading_initialized:
-                    if self.dual_heading.sol == "NONE" or self.dual_heading.acc >= 2.0:
+                    if not (self.dual_heading.sol == "NARROW_INT" and self.dual_heading.acc < 1.5):
                         self.fused_heading.heading = self._norm_deg(self.fused_heading.heading - self._gyroZ * dt)
                         self.fused_heading.acc = 4.0
                         self.fused_heading.sol = "GYRO"

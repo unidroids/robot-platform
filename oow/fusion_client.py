@@ -68,8 +68,7 @@ class FusionClient:
         return await self._control_services("STOP", reverse_order=True, timeout=timeout)
 
     async def fusion_status(self, timeout: float = 5.0) -> str:
-        res = await self._send_command(self.fusion_service["port"], self.fusion_service["pong"], "STATUS", timeout)
-        return json.dumps({"FUSION": res}, ensure_ascii=False)
+        return await self._send_command(self.fusion_service["port"], self.fusion_service["pong"], "STATUS", timeout)
 
     async def handle_command(self, cmd: str) -> str | None:
         if cmd == "FUSION_ON": return await self.fusion_on()

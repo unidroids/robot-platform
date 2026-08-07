@@ -343,7 +343,7 @@ class WaypointsPilotService:
                             if self.state == "RUNNING" and near_state.end_rel_azimuth_deg is not None and near_state.distance_to_goal_m is not None:
                                 rel_az = near_state.end_rel_azimuth_deg
                                 v_waypoint = self.max_speed * math.exp(- (abs(rel_az)/45.0)**2)
-                                v_waypoint = max(min(self.max_speed, 200.0), v_waypoint)
+                                v_waypoint = max(min(self.max_speed, 100.0), v_waypoint)
                                 dist = max(0.0, near_state.distance_to_goal_m)
                                 slowdown_dist = self.path_tracker.L_near_m
                                 if dist < slowdown_dist:

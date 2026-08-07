@@ -3,6 +3,7 @@
 from __future__ import annotations
 import threading
 import time
+import json
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -48,9 +49,16 @@ class FusionService:
                 setattr(self._state, k, v)
             self._state.ts_mono = time.monotonic()
 
-    def get_state(self) -> dict:
+    def get_state(self) -> str:
         with self._state_lock:
-            return asdict(self._state)
+            if not self.running:
+                return "IDLE"
+            state_dict = asdict(self._state)
+            mode = state_dict.pop("mode", "IDLE")
+            state_json = json.dumps(state_dict)
+            solution = asdict(self.core.get_solution()) if self.core else {}
+            solution_json = json.dumps(solution)
+            return f"{mode} {state_json} {solution_json}"
 
     # ---------------------- lifecycle ------------------------
 

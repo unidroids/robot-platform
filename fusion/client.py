@@ -48,9 +48,8 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
                     f.write((res+'\n').encode('utf-8'))
 
                 elif line == "STATUS":
-                    st = fusion.get_state()
-                    payload = json.dumps(st, separators=(",", ":"), ensure_ascii=False)
-                    f.write(f"OK STATUS {payload}\n".encode("utf-8"))
+                    res = fusion.get_state()
+                    f.write((res+'\n').encode('utf-8'))
 
                 elif line == "SHUTDOWN":
                     f.write(b'OK SHUTDOWN\n')

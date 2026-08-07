@@ -6,15 +6,15 @@
 
 ## Shrnutí
 
-Řešení řízené robota bylo postaveno na záznamu GPS polohy. Záznam byl večer před startem zaznamenán (cca 1 km). 
+Řešení řízení robota bylo postaveno na záznamu GPS polohy. Záznam byl pořízen večer před startem (cca 1 km trasy). 
 
-Všechny pokusy vedly k tomu, že robot postupně sjížděl z cesty a systematicky uhýbal na pravou stranu. 
+Všechny pokusy při závodu vedly k tomu, že robot postupně sjížděl z cesty a systematicky uhýbal na pravou stranu. 
 
 Analýza dat po závodu ukázala, že fúze headingu a IMU obsahovala systematickou chybu 90 stupňů. Robot si myslel, že jede správným směrem, ale ve skutečnosti byl natočený do příkopu.
 
 ## Analýza logu
 
-Z logu je patrné, že robot při ztratě heading z duální antény přepnul na heading z IMU. Úhel se skokově změnil.
+Z logu je patrné, že robot při ztrátě heading z duální antény přepnul na heading z IMU. Úhel se skokově změnil.
 
 <p align="center">
   <img src="./img/logger-11-41-34.dat_heading_comparison.png" alt="Záznam logu při manuálním vedení robota" width="62%" />
@@ -25,7 +25,7 @@ Z logu je patrné, že robot při ztratě heading z duální antény přepnul na
 </p>
 
 
-Další zkoumání dat z IMU ukázalo zásadní problém pro integraci. Když jsem robota otočil na místě dvakrát dokola, magnetické pole se neotočilo, a výsledný reportovaný úhel tak není správný. Zjistilo se však, že gyroskop (GYRO) poskytuje důvěryhodné informace. (Tato zjištění budou předmětem změny kódu a vylepšení integračního řešení; dalším krokem bude už jen ze zvědavosti snížení množství železa v okolí kompasu). 
+Další zkoumání dat z IMU ukázalo zásadní problém pro integraci. Když jsem robota otočil na místě dvakrát dokola, magnetické pole (MAG) se neotočilo, a výsledný reportovaný úhel (ANGLE) tak není správný. Nicméně Gyroskop (GYRO) na první pohled poskytuje správné informace. (Tato zjištění budou předmětem změny kódu a vylepšení integračního řešení; dalším krokem bude už jen ze zvědavosti snížení množství železa v okolí kompasu zda je příčinou chybného reportování). 
 
 
 ## Kvalita headingu 
@@ -45,7 +45,7 @@ Mapa jasně ukazuje chybu orientace v částech, kde byl GNSS heading nepřesný
 
 ## Kvalita GPS dat 
 
-Robot byl osazen novou GNSS jednotkou Unicore UM980 s novou anténou pro příjem všech satelitních systémů a s PPP korekcí. Jedná se o náhradu za původní L1/L2 anténu a u-blox F9R GNSS modul.
+Robot byl osazen novou GNSS jednotkou Unicore UM980 s novou anténou pro příjem všech satelitních systémů a frekvencí L1/L2/L5 a s PPP korekcí. Jedná se o náhradu za původní L1/L2 anténu a u-blox F9R GNSS modul.
 
 <p align="center">
   <img src="./img/tulak_po_krasu_gps_poloha.png" alt="gps tulák" width="49%" />
@@ -55,7 +55,7 @@ Robot byl osazen novou GNSS jednotkou Unicore UM980 s novou anténou pro příje
   <em>Vlevo: GPS záznam ze soutěže Tulák. Vpravo: GPS záznam z Dívky.</em>
 </p>
 
-Modul Unicore UM980 společně s RTK korekcemi a L1/L2/L5 anténou byl schopen udržet RTK fix i pod stromy, zatímco u předchozí řešení (u-blox F9R s L1/L2 anténou) pod stromy RTK vypadávalo.
+Modul Unicore UM980 společně s RTK korekcemi a L1/L2/L5 anténou byl schopen udržet RTK fix i pod stromy, zatímco u předchozího řešení (u-blox F9R s L1/L2 anténou) RTK pod stromy vypadávalo.
 
 
 ## Závěr

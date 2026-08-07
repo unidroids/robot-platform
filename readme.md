@@ -11,7 +11,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | Výpočetní jednotka | NVIDIA Jetson Orin Nano 8GB, JetPack 6.2                         |
 | Kamery             | 2× Waveshare IMX219, 200°, CSI (stereo pohled dolů)              |
 | LiDAR              | Unitree L2 (Ethernet)                                            |
-| GNSS               | C102-F9R GNSS + IMU (USB)                                        |
+| GNSS               | UM980 + L1/L2/L5 E6 anténa
 | Kompas             | 10-axis IMU (USB)                                                |
 | Dual GNSS Heading  | UM982 + 2x heliacal antána (USB)                                 |
 | Mobilní základna   | Hoverboard s upraveným firmware (řízení přes USB sériovou linku) |
@@ -58,6 +58,7 @@ Architektura je rozdělena na obecné jádro a specifické mise. Dokumentaci a z
 
 * [Robotour 2025](challenges/Robotour_2025/robotour_2025.md) – Původní soutěž, pro kterou byl robot postaven.
 * [Tulák po Krasu 2026](challenges/Tulak_po_Krasu_2026/tulak_po_krasu.md) – Úpravy a odladění vizuální navigace po čáře.
+* [Dívka 2026 II](challenges/Divka_2026_II/divka_2026_II_analyza.md) – Analýza ne/úspěchu.
 
 ## 📁 Struktura projektu
 

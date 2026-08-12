@@ -83,6 +83,7 @@ class LoggerService:
             "ipc:///tmp/robot-odometry",
             "ipc:///tmp/robot-gps",
             "ipc:///tmp/robot-heading",
+            "ipc:///tmp/robot-gnss",
             "ipc:///tmp/robot-imu",
             "ipc:///tmp/robot-oow",
             "ipc:///tmp/robot-compass",

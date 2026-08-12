@@ -29,10 +29,7 @@ class RtkWorker:
         
         self.log_file = None
         
-        # tcp client port 5001
-        self.gps_tcp_host = "127.0.0.1"
-        self.gps_tcp_port = 5001
-        self.gps_tcp_socket = None
+        self.zmq_rtcm_pub = None
         
         self.ntrip = None
 
@@ -65,12 +62,9 @@ class RtkWorker:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
             
-        if self.gps_tcp_socket:
-            try:
-                self.gps_tcp_socket.close()
-            except:
-                pass
-            self.gps_tcp_socket = None
+        if self.zmq_rtcm_pub:
+            self.zmq_rtcm_pub.close()
+            self.zmq_rtcm_pub = None
             
         if self.log_file:
             self.log_file.close()
@@ -86,8 +80,13 @@ class RtkWorker:
         ctx = zmq.Context()
         zmq_sub = ctx.socket(zmq.SUB)
         zmq_sub.connect("ipc:///tmp/robot-gps")
-        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GGA/")
+        zmq_sub.connect("ipc:///tmp/robot-gnss")
+        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GGA")
+        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GPGGA")
         zmq_sub.setsockopt(zmq.RCVTIMEO, 1000)
+
+        self.zmq_rtcm_pub = ctx.socket(zmq.PUB)
+        self.zmq_rtcm_pub.bind("ipc:///tmp/robot-rtk")
 
         self.ntrip = NtripClient(
             host=self.ntrip_host,
@@ -101,8 +100,11 @@ class RtkWorker:
         while not self._stop_event.is_set():
             try:
                 msg = zmq_sub.recv_string()
-                # Očekávaný formát: GGA/{"lat": ..., "lon": ..., "fix": ..., "sats": ..., "raw": "$GPGGA,..."}
-                prefix, json_str = msg.split("/", 1)
+                if "{" in msg:
+                    prefix, json_str = msg.split("{", 1)
+                    json_str = "{" + json_str
+                else:
+                    continue
                 data = json.loads(json_str)
                 raw_gga = data.get("raw", "").strip()
                 fix = data.get("fix", 0)
@@ -158,30 +160,10 @@ class RtkWorker:
 
     def _send_to_gps(self, data: bytes):
         try:
-            if self.gps_tcp_socket is None:
-                self.gps_tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.gps_tcp_socket.settimeout(1.0)
-                self.gps_tcp_socket.connect((self.gps_tcp_host, self.gps_tcp_port))
-                print(f"[RTK] Připojeno k TCP serveru GPS služby na {self.gps_tcp_host}:{self.gps_tcp_port}")
-            
-            self.gps_tcp_socket.sendall(data)
-            print(f"[RTK] Odesláno {len(data)} bytů RTCM dat do služby GPS na port {self.gps_tcp_port}.")
-        except socket.timeout:
-            print(f"[RTK] Chyba při odesílání na {self.gps_tcp_port} (timeout).")
-        except ConnectionRefusedError:
-            print(f"[RTK] Služba GPS (port {self.gps_tcp_port}) pravděpodobně neběží nebo je spojení odmítnuto.")
-            if self.gps_tcp_socket:
-                try:
-                    self.gps_tcp_socket.close()
-                except:
-                    pass
-                self.gps_tcp_socket = None
+            if self.zmq_rtcm_pub:
+                self.zmq_rtcm_pub.send(b"RTCM " + data)
+                print(f"[RTK] Odesláno {len(data)} bytů RTCM dat přes ZMQ (ipc:///tmp/robot-rtk).")
         except Exception as e:
             print(f"[RTK] Chyba při předávání RTCM dat: {e}")
             traceback.print_exc()
-            if self.gps_tcp_socket:
-                try:
-                    self.gps_tcp_socket.close()
-                except:
-                    pass
-                self.gps_tcp_socket = None
+

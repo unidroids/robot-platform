@@ -25,7 +25,7 @@ class GpggaHandler:
             }
             json_data = json.dumps(data)
             self._last_json = json_data
-            self._zmq_pub.send_string(f"GPGGA {json_data}")
+            self._zmq_pub.send_multipart([b"GPGGA", json_data.encode('utf-8')])
             print(f"[GGA] {message}")
             return True
             

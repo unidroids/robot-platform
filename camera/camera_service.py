@@ -77,13 +77,13 @@ class CameraService:
                 struct.pack_into('q d', self.shm_L.buf, 0, -1, capture_time) # zámek
                 np.copyto(self.img_data_L, raw_frame)
                 struct.pack_into('q d', self.shm_L.buf, 0, self.frame_seq_L, capture_time) # odemčení
-                self.zmq_pub.send_string(f"left/{self.frame_seq_L}/{capture_time}")
+                self.zmq_pub.send_multipart([b"LEFT", f"{self.frame_seq_L} {capture_time}".encode('utf-8')])
                 self.frame_seq_L += 1
             else:
                 struct.pack_into('q d', self.shm_R.buf, 0, -1, capture_time) # zámek
                 np.copyto(self.img_data_R, raw_frame)
                 struct.pack_into('q d', self.shm_R.buf, 0, self.frame_seq_R, capture_time) # odemčení
-                self.zmq_pub.send_string(f"right/{self.frame_seq_R}/{capture_time}")
+                self.zmq_pub.send_multipart([b"RIGHT", f"{self.frame_seq_R} {capture_time}".encode('utf-8')])
                 self.frame_seq_R += 1
                 
             buf.unmap(mapinfo)

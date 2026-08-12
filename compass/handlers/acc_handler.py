@@ -35,21 +35,21 @@ class AccHandler:
             "ay": self._latest_ay,
             "az": self._latest_az
         })
-        msg = f"COMPASS/ACC/{json_data}"
+        msg_payload = json_data.encode('utf-8')
         
         temp_json = json.dumps({
             "ts": current_time,
             "temp": self._latest_temp
         })
-        temp_msg = f"COMPASS/TEMP/{temp_json}"
+        temp_payload = temp_json.encode('utf-8')
         
         if current_time - self._last_print_time > 1.0:
-            print(f"[AccHandler] {msg} | Temp: {self._latest_temp:.2f}°C")
+            print(f"[AccHandler] ACC {json_data} | Temp: {self._latest_temp:.2f}°C")
             self._last_print_time = current_time
             
         try:
-            self._zmq_pub.send_string(msg)
-            self._zmq_pub.send_string(temp_msg)
+            self._zmq_pub.send_multipart([b"ACC", msg_payload])
+            self._zmq_pub.send_multipart([b"TEMP", temp_payload])
         except Exception:
             pass
 

@@ -91,7 +91,7 @@ class UniHeadinAHandler:
         self._lastest = json_data.encode('utf-8')
 
         try:
-            self._zmq_pub.send_string(f"UNIHEADING {json_data}")
+            self._zmq_pub.send_multipart([b"UNIHEADING", self._lastest])
         except Exception as e:
             pass
 

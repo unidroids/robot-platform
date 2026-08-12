@@ -67,7 +67,7 @@ class HwstatusaHandler:
                 
             json_data = self.to_json(parsed_data)
             self._last_json = json_data
-            self._zmq_pub.send_string(f"HWSTATUS {json_data}")
+            self._zmq_pub.send_multipart([b"HWSTATUS", json_data.encode('utf-8')])
             
             print(f"[HWSTATUSA] {message}")
             return True

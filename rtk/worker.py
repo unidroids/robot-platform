@@ -79,9 +79,7 @@ class RtkWorker:
     def _run(self):
         ctx = zmq.Context()
         zmq_sub = ctx.socket(zmq.SUB)
-        zmq_sub.connect("ipc:///tmp/robot-gps")
         zmq_sub.connect("ipc:///tmp/robot-gnss")
-        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GGA")
         zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GPGGA")
         zmq_sub.setsockopt(zmq.RCVTIMEO, 1000)
 
@@ -99,10 +97,17 @@ class RtkWorker:
         
         while not self._stop_event.is_set():
             try:
-                msg = zmq_sub.recv_string()
-                if "{" in msg:
-                    prefix, json_str = msg.split("{", 1)
-                    json_str = "{" + json_str
+                parts = zmq_sub.recv_multipart()
+                if len(parts) == 2:
+                    topic = parts[0].decode('utf-8', errors='ignore')
+                    json_str = parts[1].decode('utf-8', errors='ignore')
+                elif len(parts) == 1:
+                    msg = parts[0].decode('utf-8', errors='ignore')
+                    if "{" in msg:
+                        prefix, json_str = msg.split("{", 1)
+                        json_str = "{" + json_str
+                    else:
+                        continue
                 else:
                     continue
                 data = json.loads(json_str)
@@ -161,7 +166,7 @@ class RtkWorker:
     def _send_to_gps(self, data: bytes):
         try:
             if self.zmq_rtcm_pub:
-                self.zmq_rtcm_pub.send(b"RTCM " + data)
+                self.zmq_rtcm_pub.send_multipart([b"RTCM", data])
                 print(f"[RTK] Odesláno {len(data)} bytů RTCM dat přes ZMQ (ipc:///tmp/robot-rtk).")
         except Exception as e:
             print(f"[RTK] Chyba při předávání RTCM dat: {e}")

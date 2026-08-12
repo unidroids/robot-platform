@@ -43,11 +43,11 @@ class DataReceiver:
         sub_lidar.connect("ipc:///tmp/robot-lidar")
         sub_lidar.setsockopt_string(zmq.SUBSCRIBE, "")
 
-        # Připojení k Odometry
+        # Připojení k Drive (Odometrie)
         sub_odom = context.socket(zmq.SUB)
         sub_odom.setsockopt(zmq.CONFLATE, 1)
-        sub_odom.connect("ipc:///tmp/robot-odometry")
-        sub_odom.setsockopt_string(zmq.SUBSCRIBE, "")
+        sub_odom.connect("ipc:///tmp/robot-drive")
+        sub_odom.setsockopt_string(zmq.SUBSCRIBE, "ODM")
 
         poller = zmq.Poller()
         poller.register(sub_vision, zmq.POLLIN)
@@ -61,31 +61,49 @@ class DataReceiver:
                 socks = dict(poller.poll(200))
 
                 if sub_vision in socks:
-                    msg = sub_vision.recv_string()
-                    try:
-                        topic, json_str = msg.split("/", 1)
-                        data = json.loads(json_str)
-                        self.state.update_vision(data.get("pose", []))
-                    except Exception:
-                        pass
+                    parts = sub_vision.recv_multipart()
+                    if len(parts) == 2:
+                        if parts[0].decode('utf-8') == "DETECTIONS":
+                            try:
+                                data = json.loads(parts[1].decode('utf-8'))
+                                self.state.update_vision(data.get("pose", []))
+                            except Exception as e:
+                                print(f"❌ [DataReceiver] Chyba JSON parsování (Vision): {e}")
+                        else:
+                            print(f"⚠️ [DataReceiver] Neznámý topic z Vision: {parts[0].decode('utf-8', errors='ignore')}")
+                    else:
+                        first_frame = parts[0].decode('utf-8', errors='ignore') if len(parts) > 0 else "EMPTY"
+                        print(f"⚠️ [DataReceiver] Neplatný formát zprávy z Vision, očekávány 2 části, přijato {len(parts)}, první frame: '{first_frame}'")
 
                 if sub_lidar in socks:
-                    msg = sub_lidar.recv_string()
-                    try:
-                        topic, json_str = msg.split("/", 1)
-                        data = json.loads(json_str)
-                        self.state.update_lidar(data.get("distance", -1.0))
-                    except Exception:
-                        pass
+                    parts = sub_lidar.recv_multipart()
+                    if len(parts) == 2:
+                        if parts[0].decode('utf-8') == "DISTANCE":
+                            try:
+                                data = json.loads(parts[1].decode('utf-8'))
+                                self.state.update_lidar(data.get("distance", -1.0))
+                            except Exception as e:
+                                print(f"❌ [DataReceiver] Chyba JSON parsování (Lidar): {e}")
+                        else:
+                            print(f"⚠️ [DataReceiver] Neznámý topic z Lidar: {parts[0].decode('utf-8', errors='ignore')}")
+                    else:
+                        first_frame = parts[0].decode('utf-8', errors='ignore') if len(parts) > 0 else "EMPTY"
+                        print(f"⚠️ [DataReceiver] Neplatný formát zprávy z Lidar, očekávány 2 části, přijato {len(parts)}, první frame: '{first_frame}'")
 
                 if sub_odom in socks:
-                    msg = sub_odom.recv_string()
-                    try:
-                        topic, json_str = msg.split("/", 1)
-                        data = json.loads(json_str)
-                        self.state.update_odom(data.get("left", 0), data.get("right", 0))
-                    except Exception:
-                        pass
+                    parts = sub_odom.recv_multipart()
+                    if len(parts) == 2:
+                        if parts[0].decode('utf-8') == "ODM":
+                            try:
+                                data = json.loads(parts[1].decode('utf-8'))
+                                self.state.update_odom(data.get("left_speed", 0), data.get("right_speed", 0))
+                            except Exception as e:
+                                print(f"❌ [DataReceiver] Chyba JSON parsování (Odom): {e}")
+                        else:
+                            print(f"⚠️ [DataReceiver] Neznámý topic z Odom: {parts[0].decode('utf-8', errors='ignore')}")
+                    else:
+                        first_frame = parts[0].decode('utf-8', errors='ignore') if len(parts) > 0 else "EMPTY"
+                        print(f"⚠️ [DataReceiver] Neplatný formát zprávy z Odom, očekávány 2 části, přijato {len(parts)}, první frame: '{first_frame}'")
 
         except Exception as e:
             print(f"❌ [DataReceiver] Chyba: {e}")

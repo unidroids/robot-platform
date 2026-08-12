@@ -191,13 +191,21 @@ class WaypointsPilotService:
         
         while self.running:
             try:
-                msg = sub.recv_string(flags=zmq.NOBLOCK)
-                if msg.startswith("SOLUTION/"):
-                    self.update_fusion(json.loads(msg[9:]))
-                elif msg.startswith("distance/"):
-                    self.update_lidar(json.loads(msg[9:]))
+                parts = sub.recv_multipart(flags=zmq.NOBLOCK)
+                if len(parts) == 2:
+                    topic = parts[0].decode('utf-8', errors='ignore')
+                    payload = parts[1].decode('utf-8', errors='ignore')
+                    if topic == "SOLUTION":
+                        self.update_fusion(json.loads(payload))
+                    elif topic == "DISTANCE":
+                        self.update_lidar(json.loads(payload))
+                    elif topic in ["STATUS", "CMD"]:
+                        self.update_oow_zmq(payload)
+                    else:
+                        print(f"[PilotService] Neznámý topic: {topic}")
                 else:
-                    self.update_oow_zmq(msg)
+                    first_frame = parts[0].decode('utf-8', errors='ignore') if len(parts) > 0 else "EMPTY"
+                    print(f"[PilotService] Neplatný formát zprávy (očekáváno len=2), přijato parts: {len(parts)}, první frame: '{first_frame}'")
             except zmq.Again:
                 time.sleep(0.01)
             except Exception as e:

@@ -37,14 +37,14 @@ class QuaternionHandler:
             "q2": self._latest_q2,
             "q3": self._latest_q3
         })
-        msg = f"COMPASS/QUATER/{json_data}"
+        msg_payload = json_data.encode('utf-8')
         
         if current_time - self._last_print_time > 1.0:
-            print(f"[QuaternionHandler] {msg}")
+            print(f"[QuaternionHandler] QUAT {json_data}")
             self._last_print_time = current_time
             
         try:
-            self._zmq_pub.send_string(msg)
+            self._zmq_pub.send_multipart([b"QUAT", msg_payload])
         except Exception:
             pass
 

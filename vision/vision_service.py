@@ -118,15 +118,20 @@ class VisionService:
                     print("⚠️ [Vision] Timeout polleru, žádná ZMQ zpráva z kamery za posledních 500ms")
                     continue
                     
-                msg = sub.recv_string()
-                parts = msg.split('/')
-                if len(parts) != 3: 
-                    print(f"⚠️ [Vision] Neplatný formát ZMQ zprávy: {msg}")
+                parts = sub.recv_multipart()
+                if len(parts) != 2:
+                    print(f"⚠️ [Vision] Neplatný formát ZMQ zprávy (není multipart 2): {parts}")
+                    continue
+                    
+                topic = parts[0].decode('utf-8')
+                payload = parts[1].decode('utf-8').split(' ')
+                if len(payload) != 2:
+                    print(f"⚠️ [Vision] Neplatný payload: {payload}")
                     continue
                 
-                side = parts[0]
-                zmq_frame_seq = int(parts[1])
-                capture_time = float(parts[2])
+                side = topic.lower()
+                zmq_frame_seq = int(payload[0])
+                capture_time = float(payload[1])
                 
                 # Udržujeme čísla framů pro případný STATUS
                 if side == 'left':
@@ -242,7 +247,7 @@ class VisionService:
                     "frame": zmq_frame_seq,
                     "pose": out_points
                 }
-                pub.send_string(f"vision/{json.dumps(msg_data)}")
+                pub.send_multipart([b"DETECTIONS", json.dumps(msg_data).encode('utf-8')])
 
         except Exception as e:
             print(f"❌ [Vision] Chyba smyčky: {e}")

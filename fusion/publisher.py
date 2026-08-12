@@ -67,7 +67,7 @@ class FusionPublisher:
 
         if self._zmq_pub is not None:
             try:
-                self._zmq_pub.send_string(f"SOLUTION/{res.to_json()}")
+                self._zmq_pub.send_multipart([b"SOLUTION", res.to_json().encode('utf-8')])
             except Exception as e:
                 print(f"[FUSION ZMQ PUB] Error: {e}")
 
@@ -85,7 +85,7 @@ class FusionPublisher:
             "fused_heading": asdict(self.core.fused_heading)
         }
         try:
-            self._zmq_pub.send_string(f"DEBUG/HEADING/{json.dumps(debug_data)}")
+            self._zmq_pub.send_multipart([b"DEBUG_HEADING", json.dumps(debug_data).encode('utf-8')])
             print("published debug", res.to_json())
         except Exception as e:
             print(f"[FUSION ZMQ PUB] Debug Error: {e}")

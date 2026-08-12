@@ -24,7 +24,7 @@ class OdmHandler:
         # ZMQ publisher pro odometrii
         self._zmq_context = zmq.Context.instance()
         self._zmq_pub = self._zmq_context.socket(zmq.PUB)
-        self._zmq_pub.bind("ipc:///tmp/robot-odometry")
+        self._zmq_pub.bind("ipc:///tmp/robot-drive")
 
     # --- veřejné API ---
 
@@ -63,7 +63,7 @@ class OdmHandler:
                     "right_speed": int(right_speed)
                 }
                 
-                self._zmq_pub.send_string(f"odometry/{json.dumps(msg_data)}")
+                self._zmq_pub.send_multipart([b"ODM", json.dumps(msg_data).encode('utf-8')])
         except Exception as e:
             print(f"[OdmHandler] Chyba při odesílání na ZMQ: {e}")
 

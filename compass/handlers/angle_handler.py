@@ -34,14 +34,14 @@ class AngleHandler:
             "pitch": self._latest_pitch,
             "yaw": self._latest_yaw
         })
-        msg = f"COMPASS/ANGLE/{json_data}"
+        msg_payload = json_data.encode('utf-8')
         
         if current_time - self._last_print_time > 1.0:
-            print(f"[AngleHandler] {msg}")
+            print(f"[AngleHandler] ANGLE {json_data}")
             self._last_print_time = current_time
             
         try:
-            self._zmq_pub.send_string(msg)
+            self._zmq_pub.send_multipart([b"ANGLE", msg_payload])
         except Exception:
             pass
 

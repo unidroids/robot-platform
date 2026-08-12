@@ -38,7 +38,7 @@ class OfficerWatchdog:
             print(f"[Watchdog][INFO] ZeroMQ Publisher bound to {self.fallback_address}")
 
     async def emit_off(self):
-        await self._send_zmq("OFF")
+        await self._send_zmq("STATUS", "OFF")
 
     def update_heartbeat(self, client_id):
         if not self.is_running:
@@ -55,13 +55,13 @@ class OfficerWatchdog:
         
         if command == "STOP":
             print(f"[Watchdog][WARNING] Client {client_id} sent STOP command!")
-            asyncio.create_task(self._send_zmq("STOP"))
+            asyncio.create_task(self._send_zmq("CMD", "STOP"))
             return
         elif command == "PAUSE":
-            asyncio.create_task(self._send_zmq("PAUSE"))
+            asyncio.create_task(self._send_zmq("CMD", "PAUSE"))
             return
         elif command == "RESUME":
-            asyncio.create_task(self._send_zmq("RESUME"))
+            asyncio.create_task(self._send_zmq("CMD", "RESUME"))
             return
         elif command == "POWEROFF":
             print(f"[Watchdog][WARNING] Client {client_id} sent POWEROFF command!")
@@ -99,9 +99,9 @@ class OfficerWatchdog:
             return "ON"
         return "OFF"
 
-    async def _send_zmq(self, message):
-        print(f"[Watchdog][DEBUG] ZMQ PUB -> {message}")
-        await self.zmq_pub.send_string(message)
+    async def _send_zmq(self, topic, message):
+        print(f"[Watchdog][DEBUG] ZMQ PUB -> {topic} {message}")
+        await self.zmq_pub.send_multipart([topic.encode('utf-8'), message.encode('utf-8')])
 
     async def run_loop(self):
         """Watchdog smyčka, která kontroluje ztrátu spojení a posílá varování."""
@@ -117,10 +117,10 @@ class OfficerWatchdog:
             if current_state != last_state:
                 if current_state == "ON":
                     print("[Watchdog][INFO] OOW ON: Active heartbeat detected.")
-                    await self._send_zmq("ON")
+                    await self._send_zmq("STATUS", "ON")
                 else:
                     print("[Watchdog][WARNING] OOW OFF: Heartbeat lost (timeout).")
-                    await self._send_zmq("OFF")
+                    await self._send_zmq("STATUS", "OFF")
                 last_state = current_state
                 
             await asyncio.sleep(0.1)  # Kontrola každých 100 ms

@@ -36,20 +36,21 @@ async def vision_stream():
         sub = context.socket(zmq.SUB)
         sub.setsockopt(zmq.CONFLATE, 1)
         sub.connect("ipc:///tmp/robot-vision")
-        sub.setsockopt_string(zmq.SUBSCRIBE, "")
+        sub.setsockopt_string(zmq.SUBSCRIBE, "DETECTIONS")
         
         try:
             print("🟢 [Vision API] Připojeno k ZMQ, čekám na zprávy...")
             while True:
                 # Čekáme na data z kamery
-                msg = await sub.recv_string()
-                print(f"📥 [Vision API] Přijata zpráva (délka: {len(msg)})")
+                parts = await sub.recv_multipart()
+                print(f"📥 [Vision API] Přijata zpráva (délka: {len(parts)})")
                 
                 try:
-                    topic, json_str = msg.split("/", 1)
-                    # json_str obsahuje: {"time": ..., "side": ..., "frame": ..., "pose": [...]}
-                    # sse_starlette automaticky přidá prefix "data: ", takže yieldíme jen samotný JSON
-                    yield json_str
+                    if len(parts) == 2 and parts[0].decode('utf-8') == "DETECTIONS":
+                        json_str = parts[1].decode('utf-8')
+                        # json_str obsahuje: {"time": ..., "side": ..., "frame": ..., "pose": [...]}
+                        # sse_starlette automaticky přidá prefix "data: ", takže yieldíme jen samotný JSON
+                        yield json_str
                 except Exception as e:
                     print(f"⚠️ [Vision API] Chyba parsování JSONu: {e}")
                     

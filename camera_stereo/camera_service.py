@@ -70,11 +70,11 @@ class CameraService:
             struct.pack_into('q d', self.shm.buf, 0, self.frame_seq, capture_time) 
             
             # Publikování přes ZMQ (pouze jeden společný stream)
-            message = f"combined/{self.frame_seq}/{capture_time}"
-            self.zmq_pub.send_string(message)
+            message_payload = f"{self.frame_seq} {capture_time}".encode('utf-8')
+            self.zmq_pub.send_multipart([b"COMBINED", message_payload])
             self.frame_seq += 1
             if self.frame_seq % 10 == 0:
-                print(f"📌 DEBUG message: {message}")
+                print(f"📌 DEBUG message: COMBINED {self.frame_seq} {capture_time}")
                 
             buf.unmap(mapinfo)
         

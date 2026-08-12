@@ -30,17 +30,21 @@ class RtkPoller:
         ctx = zmq.Context.instance()
         zmq_sub = ctx.socket(zmq.SUB)
         zmq_sub.connect("ipc:///tmp/robot-rtk")
-        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "RTCM ")
+        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "RTCM")
         zmq_sub.setsockopt(zmq.RCVTIMEO, 1000)
 
         while not self._stop_event.is_set():
             try:
-                # Očekáváme binární data: b"RTCM " + data
-                msg = zmq_sub.recv()
-                if msg.startswith(b"RTCM "):
-                    data = msg[5:]
-                    if self.gnss_serial:
-                        self.gnss_serial.send_data(data)
+                parts = zmq_sub.recv_multipart()
+                if len(parts) == 2 and parts[0] == b"RTCM":
+                    data = parts[1]
+                elif len(parts) == 1 and parts[0].startswith(b"RTCM "):
+                    data = parts[0][5:]
+                else:
+                    continue
+                
+                if self.gnss_serial:
+                    self.gnss_serial.send_data(data)
                         print(f"[RTK Poller] Odesláno {len(data)} bytů RTCM do gnss_serial")
             except zmq.error.Again:
                 pass

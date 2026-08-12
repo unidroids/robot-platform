@@ -55,10 +55,17 @@ private:
                 float dist = -1.0f;
                 // getDistance vrátí true, pokud je buffer LiDARu naplněn
                 if (controller_->getDistance(dist)) {
-                    std::string payload = "distance/{\"distance\": " + std::to_string(dist) + "}";
-                    zmq::message_t message(payload.size());
-                    std::memcpy(message.data(), payload.c_str(), payload.size());
-                    publisher.send(message, zmq::send_flags::none);
+                    std::string topic = "DISTANCE";
+                    std::string payload = "{\"distance\": " + std::to_string(dist) + "}";
+                    
+                    zmq::message_t topic_msg(topic.size());
+                    std::memcpy(topic_msg.data(), topic.c_str(), topic.size());
+                    
+                    zmq::message_t payload_msg(payload.size());
+                    std::memcpy(payload_msg.data(), payload.c_str(), payload.size());
+                    
+                    publisher.send(topic_msg, zmq::send_flags::sndmore);
+                    publisher.send(payload_msg, zmq::send_flags::none);
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 20 Hz
             }

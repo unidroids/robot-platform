@@ -79,7 +79,7 @@ class RtkWorker:
     def _run(self):
         ctx = zmq.Context()
         zmq_sub = ctx.socket(zmq.SUB)
-        zmq_sub.connect("ipc:///tmp/robot-gnss")
+        zmq_sub.connect("ipc:///tmp/robot-gnss-dual")
         zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GPGGA")
         zmq_sub.setsockopt(zmq.RCVTIMEO, 1000)
 

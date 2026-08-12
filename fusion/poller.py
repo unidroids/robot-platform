@@ -15,7 +15,7 @@ class FusionPoller:
     def start(self):
         if self.running: return
         self._zmq_sub = self._zmq_context.socket(zmq.SUB)
-        self._zmq_sub.connect("ipc:///tmp/robot-gnss")
+        self._zmq_sub.connect("ipc:///tmp/robot-gnss-dual")
         self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "BESTNAV")
         self._zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "UNIHEADING")
         self._zmq_sub.connect("ipc:///tmp/robot-compass")

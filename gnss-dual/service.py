@@ -38,7 +38,7 @@ class GnssDualService:
             
             self.zmq_context = zmq.Context.instance()
             self.zmq_pub = self.zmq_context.socket(zmq.PUB)
-            self.zmq_pub.bind("ipc:///tmp/robot-gnss")
+            self.zmq_pub.bind("ipc:///tmp/robot-gnss-dual")
             
             self.gnss_serial = GnssDualSerialIO(self.device, self.baudrate)
             

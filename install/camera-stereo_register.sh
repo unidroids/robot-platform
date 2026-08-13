@@ -1,10 +1,10 @@
 #!/bin/bash
 
 SERVICE_FILE="/etc/systemd/system/robot-camera-stereo.service"
-LOG_DIR="/data/logs/camera_stereo"
-LOG_FILE="$LOG_DIR/cameras.log"
+LOG_DIR="/data/logs/camera-stereo"
+LOG_FILE="$LOG_DIR/camera-stereo.log"
 
-echo "📁 Vytvářím logovací složku pro camera_stereo..."
+echo "📁 Vytvářím logovací složku pro camera-stereo..."
 sudo mkdir -p "$LOG_DIR"
 sudo touch "$LOG_FILE"
 sudo chmod 664 "$LOG_FILE"
@@ -18,7 +18,7 @@ After=network.target
 
 [Service]
 User=user
-WorkingDirectory=/opt/projects/robotour/camera_stereo
+WorkingDirectory=/opt/projects/robotour/camera-stereo
 
 # vlastní spuštění (un-buffer mód kvůli okamžitému logování)
 Environment=PYTHONUNBUFFERED=1
@@ -30,8 +30,8 @@ ExecStartPre=/bin/sleep 0.5
 ExecStart=/usr/bin/python3 main.py
 
 # logujeme přes systemd přesměrování
-StandardOutput=append:/data/logs/camera_stereo/cameras.log
-StandardError=append:/data/logs/camera_stereo/cameras.log
+StandardOutput=append:/data/logs/camera-stereo/camera-stereo.log
+StandardError=append:/data/logs/camera-stereo/camera-stereo.log
 
 Restart=always
 RestartSec=2

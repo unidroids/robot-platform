@@ -64,6 +64,6 @@ if __name__ == "__main__":
         gyroZAcc=0.8,
         gpsSol="SINGLE",
         headingSol="NONE",
-        fusionSol="COPY",
+        fusionSol="NONE",
     )
     print("to_json:", state.to_json())

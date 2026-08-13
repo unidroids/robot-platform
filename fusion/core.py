@@ -38,7 +38,7 @@ class FusionCore:
         self._gyroZAcc: float = 5.0
 
         # Fusion state
-        self._fusionSol: str = "COPY"
+        self._fusionSol: str = "NONE"
 
     @staticmethod
     def _norm_deg(a: float) -> float:

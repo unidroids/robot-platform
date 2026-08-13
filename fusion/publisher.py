@@ -86,6 +86,6 @@ class FusionPublisher:
         }
         try:
             self._zmq_pub.send_multipart([b"DEBUG_HEADING", json.dumps(debug_data).encode('utf-8')])
-            print("published debug", res.to_json())
+            # print("published debug", json.dumps(debug_data)) # Odkomentujte pro debug
         except Exception as e:
             print(f"[FUSION ZMQ PUB] Debug Error: {e}")

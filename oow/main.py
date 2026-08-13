@@ -85,6 +85,10 @@ async def main():
                 
         try:
             await ble_server.stop()
+            # Důležité: Počkáme chvíli, aby knihovna bless/dbus stihla reálně
+            # odeslat zprávy o zrušení inzerce (advertisement) do BlueZ démona,
+            # než se Python proces úplně ukončí.
+            await asyncio.sleep(1.5)
         except Exception as e:
             print(f"[Main][ERROR] Error stopping BLE server: {e}")
             

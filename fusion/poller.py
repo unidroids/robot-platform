@@ -80,30 +80,28 @@ class FusionPoller:
 
     def _process_bestnav(self, payload: str):
         data = json.loads(payload)
-            lat = data.get("lat", 0.0)
-            lon = data.get("lon", 0.0)
-            lat_std = data.get("lat_std", 0.0)
-            lon_std = data.get("lon_std", 0.0)
-            hAcc = math.hypot(lat_std, lon_std)
-            gpsSol = data.get("pos_type", "NONE")
-            self.core.update_position(lat, lon, hAcc, gpsSol) 
-            
-            trk_gnd = data.get("trk_gnd", 0.0)
-            hor_spd = data.get("hor_spd", 0.0)
-            hor_spd_std = data.get("hor_spd_std", 0.0)
-            if hor_spd > 0.1:
-                hdg_acc = math.degrees(math.atan2(hor_spd_std, hor_spd))
-            else:
-                hdg_acc = 180.0
-            self.core.update_gps_heading(trk_gnd, hdg_acc, gpsSol)
+        lat = data.get("lat", 0.0)
+        lon = data.get("lon", 0.0)
+        lat_std = data.get("lat_std", 0.0)
+        lon_std = data.get("lon_std", 0.0)
+        hAcc = math.hypot(lat_std, lon_std)
+        gpsSol = data.get("pos_type", "NONE")
+        self.core.update_position(lat, lon, hAcc, gpsSol) 
+        
+        trk_gnd = data.get("trk_gnd", 0.0)
+        hor_spd = data.get("hor_spd", 0.0)
+        hor_spd_std = data.get("hor_spd_std", 0.0)
+        if hor_spd > 0.1:
+            hdg_acc = math.degrees(math.atan2(hor_spd_std, hor_spd))
+        else:
+            hdg_acc = 180.0
+        self.core.update_gps_heading(trk_gnd, hdg_acc, gpsSol)
             
             
     def _process_uniheading(self, payload: str):
         data = json.loads(payload)
-            heading = data.get("heading", 0.0)
-            hdg_std = data.get("hdg_std", 180.0)
-            headingSol = data.get("pos_type", "NONE")
-            length = data.get("length", 0.0)
-            self.core.update_dual_heading(heading, hdg_std, headingSol, length)
-            
-            self.core.update_dual_heading(heading, hdg_std, headingSol, length)
+        heading = data.get("heading", 0.0)
+        hdg_std = data.get("hdg_std", 180.0)
+        headingSol = data.get("pos_type", "NONE")
+        length = data.get("length", 0.0)
+        self.core.update_dual_heading(heading, hdg_std, headingSol, length)

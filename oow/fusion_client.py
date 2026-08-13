@@ -7,9 +7,8 @@ class FusionClient:
         # Služby a jejich očekávané PONG odpovědi
         self.services = {
             "LOGGER": {"port": 9012, "pong": "PONG LOGGER"},
-            "GPS": {"port": 9006, "pong": "PONG GPS"},
+            "GNSS-DUAL": {"port": 9006, "pong": "PONG GNSS-DUAL"},
             "DRIVE": {"port": 9003, "pong": "PONG DRIVE"},
-            "HEADING": {"port": 9010, "pong": "PONG HEADING"},
             "COMPASS": {"port": 9014, "pong": "PONG COMPASS"}
         }
         self.fusion_service = {"port": 9009, "pong": "PONG FUSION"}

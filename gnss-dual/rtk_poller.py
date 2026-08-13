@@ -45,7 +45,7 @@ class RtkPoller:
                 
                 if self.gnss_serial:
                     self.gnss_serial.send_data(data)
-                        print(f"[RTK Poller] Odesláno {len(data)} bytů RTCM do gnss_serial")
+                    print(f"[RTK Poller] Odesláno {len(data)} bytů RTCM do gnss_serial")
             except zmq.error.Again:
                 pass
             except Exception as e:

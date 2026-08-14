@@ -114,6 +114,7 @@ class GamepadWatchdog:
             current_state = self.get_status()
             if current_state != last_state:
                 print(f"[Watchdog][INFO] Gamepad status changed to: {current_state}")
+                await self.publish("STATUS", current_state)
                 last_state = current_state
                 
             await asyncio.sleep(1.0)

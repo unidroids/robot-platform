@@ -10,6 +10,7 @@ class GamepadWatchdog:
     def __init__(self, zmq_address="ipc:///tmp/robot-gamepad", fallback_address="tcp://127.0.0.1:5556"):
         self.is_running = False
         self.connected = False
+        self.button_states = {}
         self.target_path = None
         self.bus = None
         
@@ -72,6 +73,14 @@ class GamepadWatchdog:
             
         except Exception as e:
             self.connected = False
+        self.button_states = {}
+
+    def update_buttons(self, states):
+        self.button_states.update(states)
+
+    def get_button_states(self):
+        import json
+        return json.dumps(self.button_states)
 
     def initial_check(self):
         path, dev = self.find_device_by_name()
@@ -80,6 +89,7 @@ class GamepadWatchdog:
             self.check_connection(path)
         else:
             self.connected = False
+        self.button_states = {}
 
     async def publish(self, topic, data):
         if self.is_running:

@@ -3,13 +3,14 @@ import sys
 import signal
 
 from watchdog import GamepadWatchdog
-import gamepad_core as core
+from gamepad_service import GamepadService
 
 class GamepadTcpServer:
-    def __init__(self, host, port, watchdog):
+    def __init__(self, host, port, watchdog, service):
         self.host = host
         self.port = port
         self.watchdog = watchdog
+        self.service = service
         self.server = None
         self.is_running = False
         self.shutdown_event = asyncio.Event()
@@ -24,7 +25,7 @@ class GamepadTcpServer:
             await self.server.wait_closed()
 
     async def handle_client(self, reader, writer):
-        addr = writer.get_extra_info('peername')
+        addr = writer.get_extra_info("peername")
         print(f"[TCP_Server][INFO] Klient připojen: {addr}")
         
         try:
@@ -49,30 +50,36 @@ class GamepadTcpServer:
                     writer.write(b"PONG GAMEPAD\n")
                     
                 elif cmd == "START":
-                    if core.init_gamepad():
-                        core.start_compute_once(self.watchdog)
+                    if self.service.start():
                         writer.write(b"OK STARTED\n")
                     else:
                         writer.write(b"GAMEPAD NOT FOUND\n")
                         
                 elif cmd == "STOP":
-                    core.stop_all()
+                    self.service.stop()
                     writer.write(b"OK STOPPED\n")
 
                 elif cmd == "STATUS":
-                    status = "RUNNING" if self.is_running else "IDLE"
+                    status = "RUNNING" if self.service.is_running else "IDLE"
                     writer.write(f"{status}\n".encode())
                     
                 elif cmd == "GAMEPAD":
                     status = self.watchdog.get_status()
                     writer.write(f"{status}\n".encode())
                     
+                elif cmd == "BUTTONS":
+                    if self.watchdog.get_status() == "ON":
+                        states = self.watchdog.get_button_states()
+                        writer.write(f"{states}\n".encode())
+                    else:
+                        writer.write(b"{}\n")
+                    
                 elif cmd == "EXIT":
-                    writer.write(b"BYE\n")
+                    writer.write(b"BYE GAMEPAD\n")
                     break
                     
                 elif cmd == "SHUTDOWN":
-                    writer.write(b"SHUTTING DOWN\n")
+                    writer.write(b"SHUTTING DOWN GAMEPAD\n")
                     await writer.drain()
                     self.shutdown_event.set()
                     break
@@ -93,7 +100,8 @@ async def main():
     loop = asyncio.get_running_loop()
     
     watchdog = GamepadWatchdog()
-    tcp_server = GamepadTcpServer(host="127.0.0.1", port=9005, watchdog=watchdog)
+    service = GamepadService(watchdog)
+    tcp_server = GamepadTcpServer(host="127.0.0.1", port=9005, watchdog=watchdog, service=service)
     
     def signal_handler(sig_name):
         print(f"[Main][INFO] System signal {sig_name} received, shutting down...")
@@ -126,9 +134,9 @@ async def main():
         await tcp_server.stop()
         tcp_server.is_running = False
         watchdog.is_running = False
-        core.stop_all()
+        service.stop()
         
-        if 'watchdog_task' in locals():
+        if "watchdog_task" in locals():
             try:
                 watchdog_task.cancel()
                 await watchdog_task

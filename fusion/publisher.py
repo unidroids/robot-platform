@@ -55,7 +55,7 @@ class FusionPublisher:
                     self.on_publish()
                 
             now = time.time()
-            if now - last_debug_time >= 1.0 and self.core:
+            if now - last_debug_time >= 1.0 and self.core and self.core.ready:
                 self._publish_debug_headings()
                 last_debug_time = now
                 

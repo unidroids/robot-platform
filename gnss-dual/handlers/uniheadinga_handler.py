@@ -1,6 +1,7 @@
 # uniheadinga_handler.py
 from __future__ import annotations
 
+import time
 import json
 import zmq
 from typing import Optional
@@ -15,6 +16,7 @@ class UniHeadinAHandler:
     def __init__(self, zmq_pub: zmq.Socket) -> None:
         self._lastest: Optional[bytes] = None  
         self._zmq_pub = zmq_pub
+        self._last_log_time = 0
 
     # --- veřejné API ---
 
@@ -94,6 +96,12 @@ class UniHeadinAHandler:
             self._zmq_pub.send_multipart([b"UNIHEADING", self._lastest])
         except Exception as e:
             pass
+
+        current_time = time.time()
+        if current_time - self._last_log_time >= 1.0:
+            print(f"[UNIHEADINGA] {self._lastest}")
+            self._last_log_time = current_time
+        return True            
 
     def get_lastest(self) -> Optional[bytes]:
         """Vrátí naposledy přijatá data ve formátu JSON."""

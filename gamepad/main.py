@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import json
 import signal
 
 from watchdog import GamepadWatchdog
@@ -53,7 +54,7 @@ class GamepadTcpServer:
                     if self.service.start():
                         writer.write(b"OK STARTED\n")
                     else:
-                        writer.write(b"GAMEPAD NOT FOUND\n")
+                        writer.write(b"ALREADY RUNNING\n")
                         
                 elif cmd == "STOP":
                     self.service.stop()
@@ -61,18 +62,20 @@ class GamepadTcpServer:
 
                 elif cmd == "STATUS":
                     status = "RUNNING" if self.service.is_running else "IDLE"
-                    writer.write(f"{status}\n".encode())
+                    hw_status = self.watchdog.get_status()
+                    writer.write(f'{status} {{"gamepad":"{hw_status}"}}\n'.encode())
                     
                 elif cmd == "GAMEPAD":
                     status = self.watchdog.get_status()
                     writer.write(f"{status}\n".encode())
                     
                 elif cmd == "BUTTONS":
-                    if self.watchdog.get_status() == "ON":
-                        states = self.watchdog.get_button_states()
-                        writer.write(f"{states}\n".encode())
+                    status = self.watchdog.get_status()
+                    if status == "ON" and self.service.is_running:
+                        states = self.watchdog.button_states.copy()
+                        writer.write(f"{json.dumps(states)}\n".encode())
                     else:
-                        writer.write(b"{}\n")
+                        writer.write(b'{}\n')
                     
                 elif cmd == "EXIT":
                     writer.write(b"BYE GAMEPAD\n")

@@ -19,6 +19,7 @@ class GamepadService:
     def init_gamepad(self):
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         pygame.init()
+        pygame.joystick.quit()
         pygame.joystick.init()
 
         if pygame.joystick.get_count() > 0:
@@ -32,12 +33,15 @@ class GamepadService:
             return False
 
     def get_raw_state(self):
-        if self.joystick:
-            pygame.event.pump()
-            axes = [self.joystick.get_axis(i) for i in range(self.joystick.get_numaxes())]
-            buttons = [self.joystick.get_button(i) for i in range(self.joystick.get_numbuttons())]
-            hats = [self.joystick.get_hat(i) for i in range(self.joystick.get_numhats())]
-            return axes, buttons, hats
+        if self.joystick and (not self.watchdog or self.watchdog.get_status() == "ON"):
+            try:
+                pygame.event.pump()
+                axes = [self.joystick.get_axis(i) for i in range(self.joystick.get_numaxes())]
+                buttons = [self.joystick.get_button(i) for i in range(self.joystick.get_numbuttons())]
+                hats = [self.joystick.get_hat(i) for i in range(self.joystick.get_numhats())]
+                return axes, buttons, hats
+            except Exception as e:
+                return [], [], []
         else:
             pygame.event.pump()
             return [], [], []
@@ -84,8 +88,21 @@ class GamepadService:
 
     async def compute_loop(self):
         print("[GAMEPAD] Výpočetní smyčka START")
+        last_status = self.watchdog.get_status() if self.watchdog else "OFF"
         try:
             while self.is_running:
+                current_status = self.watchdog.get_status() if self.watchdog else "OFF"
+                if last_status == "OFF" and current_status == "ON":
+                    print("[GAMEPAD] Detekováno znovupřipojení, reinicializuji pygame...")
+                    # Dáme systému chvíli, než namapuje /dev/input/js0
+                    await asyncio.sleep(1.0)
+                    self.init_gamepad()
+                last_status = current_status
+                
+                if current_status == "OFF":
+                    await asyncio.sleep(self.poll_period_sec)
+                    continue
+                
                 raw_axes, raw_buttons, raw_hats = self.get_raw_state()
                 
                 axes_state = GamepadProfile.normalize_axes(raw_axes, raw_hats)
@@ -113,8 +130,7 @@ class GamepadService:
     def start(self):
         if self.is_running:
             return False
-        if not self.init_gamepad():
-            return False
+        self.init_gamepad()
         self.is_running = True
         self.button_state_tracker = {}
         self.logger_instance.start()

@@ -29,7 +29,7 @@ WorkingDirectory=$WORK_DIR
 Environment=PYTHONUNBUFFERED=1
 ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9005/tcp || true'
 ExecStartPre=/bin/sleep 0.5
-ExecStart=$VENV_BIN/python $WORK_DIR/gamepad_server.py
+ExecStart=$VENV_BIN/python $WORK_DIR/main.py
 StandardOutput=append:$LOG_DIR/service.log
 StandardError=append:$LOG_DIR/service.log
 Restart=always

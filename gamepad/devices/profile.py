@@ -80,3 +80,12 @@ class GamepadProfile:
                 if idx is not None and idx < len(raw_buttons):
                     state[name] = bool(raw_buttons[idx])
         return state
+
+    @classmethod
+    def get_default_button_states(cls):
+        state = {}
+        for attr in dir(cls):
+            if attr.startswith("btn_"):
+                name = attr[4:]
+                state[name] = "up"
+        return state

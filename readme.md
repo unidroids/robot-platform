@@ -36,20 +36,22 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | ---------------- | ---- | --------------------------------------------- |
 | **CAMERA**       | 9001 | Snímání obrazu, segmentace a logování         |
 | **LIDAR**        | 9002 | Zpracování dat z L2 lidaru                    |
-| **DRIVE**        | 9003 | Řízení podvozku (hoverboard)                  |
-| **JOURNEY**      | 9004 | Hlavní orchestrátor workflow                  |
+| **DRIVE**        | 9003 | Řízení podvozku (hoverboard) - Odometrie out |
+| **JOURNEY**      | 9004 | Hlavní orchestrátor workflow - (obsolete)     |
 | **GAMEPAD**      | 9005 | Poskytuje informace z gamepadu                |
-| **GNSS**         | 9006 | Zpracování polohy (F9R) a IMU                 |
-| **PERFECT**      | 9007 | PointPerfect NTRIP klient (korekční data)     |
-| **PILOT**        | 9008 | Autonomní řízení podle GPS                    |
+| **GNSS-DUAL**    | 9006 | Zpracování polohy UM982 (GPS + Heading) |
+| **PERFECT**      | 9007 | PointPerfect NTRIP klient (SPARTAN data)     |
+| **PILOT**        | 9008 | Autonomní řízení podle GPS - (obsolete)       |
 | **FUSION**       | 9009 | Lokální fúze polohy a odometrie               |
 | **HEADING**      | 9010 | Výpočet orientace (externí kompas/IMU)        |
-| **VISION**       | 9011 | Zpracování obrazu z kamer a detekce           |
-| **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv ze senzorů (ZMQ) do logu |
-| **OOW**          | 9013 | Out of World (BLE server, watchdog, příkazy z mobilní aplikace) |
+| **VISION**       | 9011 | Zpracování obrazu z kamer a detekce čáry      |
+| **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv (ZMQ) do logu |
+| **OOW**          | 9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
-| **RTK**          | 9015 | Mikroslužba pro stahování RTCM z PointPerfect do GPS |
+| **RTK**          | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
+| **PILOT-WAYPOINTS** | 9101 | Autonomní řízení podle waypointů        |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
+| **PILOT-MANUAL** | 9103 | Manuální řízení robota gamepadem        |
 
 
 ## 🏆 Soutěže a mise (Challenges)

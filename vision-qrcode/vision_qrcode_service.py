@@ -1,11 +1,13 @@
 import os
 from datetime import datetime
+import yaml
 import zmq
 import threading
 import time
 import struct
 import cv2
 import numpy as np
+import os
 from multiprocessing import shared_memory
 from multiprocessing.resource_tracker import unregister
 from pyzbar.pyzbar import decode, ZBarSymbol
@@ -34,16 +36,37 @@ class VisionQRCodeService:
         self.last_log_time = 0.0
 
     def _init_model(self):
-        print("🚀 [Vision-QRCode] Načítání transformačních map...")
+        print("🚀 [Vision-QRCode] Načítání fisheye kalibrací a generování transformačních map...")
         try:
-            data = np.load('/opt/projects/robotour/vision/00_bev_transform.npz')
-            self.u_map_L = data['u_map_L']
-            self.v_map_L = data['v_map_L']
-            self.u_map_R = data['u_map_R']
-            self.v_map_R = data['v_map_R']
-            print("✅ [Vision-QRCode] Transformační mapy načteny.")
+            # Paths to the new calibration files
+            calib_l_path = '/opt/projects/robotour/vision-qrcode/calibration/calibration-l.yaml'
+            calib_r_path = '/opt/projects/robotour/vision-qrcode/calibration/calibration-r.yaml'
+
+            def load_and_init_map(yaml_path):
+                with open(yaml_path, 'r') as f:
+                    # Using unsafe_load because of !!python/tuple tags
+                    data = yaml.unsafe_load(f)
+                K = np.array(data['camera_matrix'])
+                D = np.array(data['dist_coeffs'])
+                
+                # Pro detekci QR kódu vytvoříme symetrický výřez přesně před kamerou.
+                # Zabráníme tím extrémním deformacím na okrajích fisheye čočky.
+                zoom_factor = 1.7
+                new_K = K.copy()
+                new_K[0, 0] = K[0, 0] * zoom_factor
+                new_K[1, 1] = K[1, 1] * zoom_factor
+                new_K[0, 2] = W_IN / 2.0
+                new_K[1, 2] = H_BEV / 2.0
+                
+                u_map, v_map = cv2.fisheye.initUndistortRectifyMap(K, D, np.eye(3), new_K, (W_IN, H_BEV), cv2.CV_32FC1)
+                return u_map, v_map
+
+            self.u_map_L, self.v_map_L = load_and_init_map(calib_l_path)
+            self.u_map_R, self.v_map_R = load_and_init_map(calib_r_path)
+            
+            print("✅ [Vision-QRCode] Transformační mapy z fisheye kalibrací úspěšně vygenerovány.")
         except Exception as e:
-            print(f"❌ [Vision-QRCode] Chyba načítání map: {e}")
+            print(f"❌ [Vision-QRCode] Chyba načítání/generování map: {e}")
 
     def _free_model(self):
         self.u_map_L = None
@@ -148,17 +171,31 @@ class VisionQRCodeService:
                 transformed_left = cv2.remap(raw_left, self.u_map_L, self.v_map_L, cv2.INTER_LINEAR)
                 transformed_right = cv2.remap(raw_right, self.u_map_R, self.v_map_R, cv2.INTER_LINEAR)
                 
-                # Ukládání snímků (jednou za vteřinu)
+                # Ukládání snímků a logování progresu (jednou za vteřinu)
                 current_time = time.monotonic()
                 if current_time - self.last_log_time >= 1.0:
                     if self.log_dir:
-                        cv2.imwrite(os.path.join(self.log_dir, f"left_{zmq_frame_seq}.jpg"), transformed_left)
-                        cv2.imwrite(os.path.join(self.log_dir, f"right_{zmq_frame_seq}.jpg"), transformed_right)
+                        cv2.imwrite(os.path.join(self.log_dir, f"{zmq_frame_seq:06d}_l.jpg"), transformed_left)
+                        cv2.imwrite(os.path.join(self.log_dir, f"{zmq_frame_seq:06d}_r.jpg"), transformed_right)
+                    print(f"⏱️ [Vision-QRCode] Progres: zpracovávám frame ID {zmq_frame_seq}")
                     self.last_log_time = current_time
                 
+                def detect_qr(img):
+                    res = decode(img, symbols=[ZBarSymbol.QRCODE])
+                    if res: return res
+                    
+                    # Fallback s Otsu thresholding (pomáhá u horších světelných podmínek)
+                    try:
+                        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                        _, thresh_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                        res = decode(thresh_otsu, symbols=[ZBarSymbol.QRCODE])
+                    except Exception:
+                        pass
+                    return res
+
                 # --- Detekce QR kódu pomocí pyzbar ---
-                decoded_left = decode(transformed_left, symbols=[ZBarSymbol.QRCODE])
-                decoded_right = decode(transformed_right, symbols=[ZBarSymbol.QRCODE])
+                decoded_left = detect_qr(transformed_left)
+                decoded_right = detect_qr(transformed_right)
                 
                 found_texts = set()
                 

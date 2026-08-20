@@ -10,7 +10,7 @@ import numpy as np
 import os
 from multiprocessing import shared_memory
 from multiprocessing.resource_tracker import unregister
-from pyzbar.pyzbar import decode, ZBarSymbol
+from qr_detector import QRDetector
 
 W_BEV, H_BEV = 2464, 1640
 W_IN = 1232
@@ -34,6 +34,8 @@ class VisionQRCodeService:
         
         self.log_dir = None
         self.last_log_time = 0.0
+        
+        self.detector = QRDetector()
 
     def _init_model(self):
         print("🚀 [Vision-QRCode] Načítání fisheye kalibrací a generování transformačních map...")
@@ -162,6 +164,7 @@ class VisionQRCodeService:
                     continue
                 
                 self.processed_frames += 1
+                process_start_time = time.perf_counter()
 
                 # Rozdělení na levý a pravý obraz
                 raw_left = raw_frame[:, :W_IN]
@@ -171,36 +174,20 @@ class VisionQRCodeService:
                 transformed_left = cv2.remap(raw_left, self.u_map_L, self.v_map_L, cv2.INTER_LINEAR)
                 transformed_right = cv2.remap(raw_right, self.u_map_R, self.v_map_R, cv2.INTER_LINEAR)
                 
-                # Ukládání snímků a logování progresu (jednou za vteřinu)
+                # Ukládání snímků (jednou za vteřinu)
                 current_time = time.monotonic()
-                if current_time - self.last_log_time >= 1.0:
-                    if self.log_dir:
-                        cv2.imwrite(os.path.join(self.log_dir, f"{zmq_frame_seq:06d}_l.jpg"), transformed_left)
-                        cv2.imwrite(os.path.join(self.log_dir, f"{zmq_frame_seq:06d}_r.jpg"), transformed_right)
-                    print(f"⏱️ [Vision-QRCode] Progres: zpracovávám frame ID {zmq_frame_seq}")
-                    self.last_log_time = current_time
+                should_log = (current_time - self.last_log_time >= 1.0)
+                if should_log and self.log_dir:
+                    cv2.imwrite(os.path.join(self.log_dir, f"{zmq_frame_seq:06d}_l.jpg"), transformed_left)
+                    cv2.imwrite(os.path.join(self.log_dir, f"{zmq_frame_seq:06d}_r.jpg"), transformed_right)
                 
-                def detect_qr(img):
-                    res = decode(img, symbols=[ZBarSymbol.QRCODE])
-                    if res: return res
-                    
-                    # Fallback s Otsu thresholding (pomáhá u horších světelných podmínek)
-                    try:
-                        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                        _, thresh_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                        res = decode(thresh_otsu, symbols=[ZBarSymbol.QRCODE])
-                    except Exception:
-                        pass
-                    return res
-
-                # --- Detekce QR kódu pomocí pyzbar ---
-                decoded_left = detect_qr(transformed_left)
-                decoded_right = detect_qr(transformed_right)
+                # --- Detekce QR kódu pomocí naší nové třídy QRDetector ---
+                decoded_left_texts = self.detector.detect(transformed_left)
+                decoded_right_texts = self.detector.detect(transformed_right)
                 
                 found_texts = set()
                 
-                for obj in decoded_left + decoded_right:
-                    qr_text = obj.data.decode("utf-8")
+                for qr_text in decoded_left_texts + decoded_right_texts:
                     if qr_text in found_texts:
                         continue
                     found_texts.add(qr_text)
@@ -215,8 +202,19 @@ class VisionQRCodeService:
                         if len(possible_prefix) < 20:  # Rozumná délka prefixu
                             topic_out = possible_prefix
                     
-                    print(f"✅ [Vision-QRCode] Nalezen QR kód: '{qr_text}' -> publikuji na topic: {topic_out}")
+                    # Nalezený QR Code vypíšeme VŽDY a hned
+                    timestamp_str = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    print(f"[{timestamp_str}] ✅ [Vision-QRCode] Nalezen QR kód v ID {zmq_frame_seq}: '{qr_text}' -> publikuji na topic: {topic_out}", flush=True)
                     pub.send_multipart([topic_out.encode('utf-8'), qr_text.encode('utf-8')])
+
+                process_time_ms = (time.perf_counter() - process_start_time) * 1000.0
+
+                # Logování progresu každou vteřinu
+                if should_log:
+                    status_text = f"Nalezeno: {', '.join(found_texts)}" if found_texts else "Žádný QR kód"
+                    timestamp_str = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    print(f"[{timestamp_str}] ⏱️ [Vision-QRCode] Progres: zpracovávám frame ID {zmq_frame_seq} | Doba zpracování: {process_time_ms:.1f}ms | {status_text}", flush=True)
+                    self.last_log_time = current_time
 
         except Exception as e:
             print(f"❌ [Vision-QRCode] Chyba smyčky: {e}")

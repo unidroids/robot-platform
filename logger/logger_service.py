@@ -86,7 +86,9 @@ class LoggerService:
             "ipc:///tmp/robot-oow",
             "ipc:///tmp/robot-compass",
             "ipc:///tmp/robot-fusion",
-            "ipc:///tmp/robot-gamepad"
+            "ipc:///tmp/robot-gamepad",
+            "ipc:///tmp/robot-terminal",
+            "ipc:///tmp/robot-qrscaner"
         ]
         
         sockets = {}

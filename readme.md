@@ -34,24 +34,36 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 
 | Služba           | Port | Popis                                         |
 | ---------------- | ---- | --------------------------------------------- |
-| **CAMERA**       | 9001 | Snímání obrazu, segmentace a logování         |
+| **CAMERA-STEREO**| 9001 | Ovládání kamer a vyčítání stereo obrazu       |
 | **LIDAR**        | 9002 | Zpracování dat z L2 lidaru                    |
 | **DRIVE**        | 9003 | Řízení podvozku (hoverboard) - Odometrie out |
-| **JOURNEY**      | 9004 | Hlavní orchestrátor workflow - (obsolete)     |
+| **JOURNEY**      | *9004 | Hlavní orchestrátor workflow - (obsolete)     |
 | **GAMEPAD**      | 9005 | Poskytuje informace z gamepadu                |
 | **GNSS-DUAL**    | 9006 | Zpracování polohy UM982 (GPS + Heading) |
 | **PERFECT**      | 9007 | PointPerfect NTRIP klient (SPARTAN data)     |
-| **PILOT**        | 9008 | Autonomní řízení podle GPS - (obsolete)       |
+| **PILOT**        | *9008 | Autonomní řízení podle GPS - (obsolete)       |
 | **FUSION**       | 9009 | Lokální fúze polohy a odometrie               |
-| **HEADING**      | 9010 | Výpočet orientace (externí kompas/IMU)        |
-| **VISION**       | 9011 | Zpracování obrazu z kamer a detekce čáry      |
+| **HEADING**      | *9010 | Výpočet orientace (externí kompas/IMU)        |
+| **VISION**       | *9011 | Zpracování obrazu z kamer a detekce čáry      |
 | **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv (ZMQ) do logu |
 | **OOW**          | 9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **RTK**          | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
+
+
+| **HMI-BRIDGE**   | 9020 | Automatický servis pro HMI bridge na Android telefon|
+| **QRSCANER**     | 9021 | Virtual service na skenování QR kódů přes HMI bridge|
+| **TERMINAL**     | 9022 | Virtualní Terminál přes HMI bridge|
+
+
 | **PILOT-WAYPOINTS** | 9101 | Autonomní řízení podle waypointů        |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
 | **PILOT-MANUAL** | 9103 | Manuální řízení robota gamepadem        |
+
+
+
+| **VISION-QRCODE** | 9201 | Vyhledání QR Codu v kamerovém vstupu        |
+| **VISION-LINE** | 9202 | Future - Vyhledání čáry z kamerového vstupu      |
 
 
 ## 🏆 Soutěže a mise (Challenges)

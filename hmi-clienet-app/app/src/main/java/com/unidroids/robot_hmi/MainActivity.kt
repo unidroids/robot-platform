@@ -115,10 +115,10 @@ class MainActivity : ComponentActivity() {
                             var isVisible by remember(blinkEvent) { mutableStateOf(true) }
                             
                             LaunchedEffect(blinkEvent) {
-                                // Wake up screen
+                                // Keep CPU awake for the blink duration
                                 val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
                                 val wakeLock = powerManager.newWakeLock(
-                                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                                    PowerManager.PARTIAL_WAKE_LOCK,
                                     "RobotHMI:BlinkWakeLock"
                                 )
                                 wakeLock.acquire(blinkEvent.duration)

@@ -57,6 +57,7 @@ class HMIService:
                     device_was_connected = True
                 elif not is_connected and device_was_connected:
                     print(f"[SERVICE] Device {self.device_id} DISCONNECTED.")
+                    self.teardown_bridge()
                     device_was_connected = False
                     
             except Exception as e:
@@ -107,6 +108,8 @@ class HMIService:
                 print(f"  Exception: {e}")
                 
     def stop(self):
+        if getattr(self, '_stopped', False): return
+        self._stopped = True
         self.running = False
         if self.server_socket:
             try:

@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.RobotHMI" parent="Theme.MaterialComponents.Light" />
+</resources>

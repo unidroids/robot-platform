@@ -46,7 +46,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **HEADING**      | *9010 | Výpočet orientace (externí kompas/IMU)        |
 | **VISION**       | *9011 | Zpracování obrazu z kamer a detekce čáry      |
 | **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv (ZMQ) do logu |
-| **OOW**          | 9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
+| **OOW**          | *9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **RTK**          | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
 
@@ -55,6 +55,9 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **QRSCANER**     | 9021 | Virtual service na skenování QR kódů přes HMI bridge|
 | **TERMINAL**     | 9022 | Virtualní Terminál přes HMI bridge|
 
+| **OOW**          | 9030 | Office of Watch (BLE server, android client) |
+| **MISSION-ROBOTOUR** | 9031 | Robotour |
+| **MISSION-TULAK** | 9032 | Tulák po Krasu |
 
 | **PILOT-WAYPOINTS** | 9101 | Autonomní řízení podle waypointů        |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |

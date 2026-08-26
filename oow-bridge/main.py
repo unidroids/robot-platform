@@ -24,7 +24,7 @@ async def main():
     shutdown_event = asyncio.Event()
     tcp_server = OowTcpServer(
         host="127.0.0.1", 
-        port=9013, 
+        port=9030, 
         ble_server=ble_server, 
         watchdog=watchdog, 
         logger_comp=logger_comp,

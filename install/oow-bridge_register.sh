@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
-SERVICE_FILE="/etc/systemd/system/robot-oow.service"
-LOG_DIR="/data/logs/oow"
+SERVICE_FILE="/etc/systemd/system/robot-oow-bridge.service"
+LOG_DIR="/data/logs/oow-bridge"
 VENV_BIN="/robot/opt/projects/robotour/venv-robotour/bin"
-WORK_DIR="/opt/projects/robotour/oow"
+WORK_DIR="/opt/projects/robotour/oow-bridge"
 
 echo "📁 Vytvářím logovací složku..."
 sudo mkdir -p "$LOG_DIR"
@@ -15,7 +15,7 @@ sudo -u user "$VENV_BIN/pip" install -r "$WORK_DIR/requirements.txt"
 
 cat <<EOF | sudo tee "$SERVICE_FILE" > /dev/null
 [Unit]
-Description=Robotour 2025 – oow server (TCP 9013)
+Description=Robotour 2025 – oow server (TCP 9030)
 After=network.target bluetooth.service
 BindsTo=bluetooth.service
 StartLimitIntervalSec=0
@@ -24,7 +24,7 @@ StartLimitIntervalSec=0
 User=user
 WorkingDirectory=$WORK_DIR
 Environment=PYTHONUNBUFFERED=1
-ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9013/tcp || true'
+ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9030/tcp || true'
 ExecStartPre=/bin/sleep 0.5
 ExecStart=$VENV_BIN/python $WORK_DIR/main.py
 StandardOutput=append:$LOG_DIR/service.log
@@ -40,9 +40,9 @@ echo "🔄 Načítám systemd..."
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 echo "▶️ Povoluji a spouštím službu..."
-sudo systemctl enable --now robot-oow.service
+sudo systemctl enable --now robot-oow-bridge.service
 
 sleep 0.3
-sudo systemctl --no-pager --full status robot-oow.service || true
+sudo systemctl --no-pager --full status robot-oow-bridge.service || true
 
 echo "   tail -f $LOG_DIR/service.log"

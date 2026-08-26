@@ -55,7 +55,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **QRSCANER**     | 9021 | Virtual service na skenování QR kódů přes HMI bridge|
 | **TERMINAL**     | 9022 | Virtualní Terminál přes HMI bridge|
 
-| **OOW**          | 9030 | Office of Watch (BLE server, android client) |
+| **OOW-BRIDGE** | 9030 | Office of Watch (BLE server, android client) |
 | **MISSION-ROBOTOUR** | 9031 | Robotour |
 | **MISSION-TULAK** | 9032 | Tulák po Krasu |
 

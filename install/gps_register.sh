@@ -21,8 +21,8 @@ After=network.target
 User=user
 WorkingDirectory=/opt/projects/robotour/gps
 
-# před spuštěním ukonči libovolný proces, který drží port 9006
-ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9006/tcp || true'
+# před spuštěním ukonči libovolný proces, který drží port 9004
+ExecStartPre=/bin/bash -c '/usr/bin/fuser -k 9004/tcp || true'
 ExecStartPre=/bin/sleep 0.5
 
 Environment=PYTHONUNBUFFERED=1

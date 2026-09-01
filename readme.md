@@ -37,7 +37,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **CAMERA-STEREO**| 9001 | Ovládání kamer a vyčítání stereo obrazu       |
 | **LIDAR**        | 9002 | Zpracování dat z L2 lidaru                    |
 | **DRIVE**        | 9003 | Řízení podvozku (hoverboard) - Odometrie out |
-| **JOURNEY**      | *9004 | Hlavní orchestrátor workflow - (obsolete)     |
+| **GPS**          | 9004 | Zpracování polohy UM980 (GPS + 130mm L1/L2/L5 E6 anténa) |
 | **GAMEPAD**      | 9005 | Poskytuje informace z gamepadu                |
 | **GNSS-DUAL**    | 9006 | Zpracování polohy UM982 (GPS + Heading) |
 | **PERFECT**      | 9007 | PointPerfect NTRIP klient (SPARTAN data)     |
@@ -49,6 +49,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **OOW**          | *9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **RTK**          | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
+
 
 
 | **HMI-BRIDGE**   | 9020 | Automatický servis pro HMI bridge na Android telefon|
@@ -67,6 +68,11 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 
 | **VISION-QRCODE** | 9201 | Vyhledání QR Codu v kamerovém vstupu        |
 | **VISION-LINE** | 9202 | Future - Vyhledání čáry z kamerového vstupu      |
+
+
+## obsolete
+
+| **JOURNEY**      | *9004 | Hlavní orchestrátor workflow - (obsolete)     |
 
 
 ## 🏆 Soutěže a mise (Challenges)

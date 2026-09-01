@@ -6,7 +6,7 @@ import sys
 from service import GpsService
 from client_handler import client_thread
 
-SERVICE_PORT = 9006
+SERVICE_PORT = 9004
 
 def main():
     service = GpsService()

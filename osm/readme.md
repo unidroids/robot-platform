@@ -1,0 +1,2 @@
+# OSM - OpenStreetMap - navigační služba
+

@@ -60,6 +60,12 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **MISSION-ROBOTOUR** | 9031 | Robotour |
 | **MISSION-TULAK** | 9032 | Tulák po Krasu |
 
+
+
+| **MAPS-OSM** | 9040 | Mapová služba - postavená na OSM |
+
+
+
 | **PILOT-WAYPOINTS** | 9101 | Autonomní řízení podle waypointů        |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
 | **PILOT-MANUAL** | 9103 | Manuální řízení robota gamepadem        |

@@ -1,0 +1,47 @@
+<resources>
+    <string name="app_name">OOW Client</string>
+    <string name="status_label">Stav: %1$s</string>
+    <string name="status_disconnected">Odpojeno</string>
+    <string name="status_bluetooth_off">Bluetooth vypnuto</string>
+    <string name="status_connecting">Připojuji: %1$s...</string>
+    <string name="status_disconnecting">Odpojuji...</string>
+    <string name="status_searching_services">Hledám služby: %1$s</string>
+    <string name="status_ready">Připraveno: %1$s</string>
+    <string name="status_error_connection">Chyba spojení (%1$d)</string>
+    <string name="status_error_gatt_retry">GATT Chyba %1$d. Retry %2$d/3...</string>
+    <string name="status_error_no_service">Služba OOW nenalezena!</string>
+
+    <string name="btn_search_robot">Vyhledat robota (OOW)</string>
+    <string name="btn_disconnect">ODPOJIT</string>
+    <string name="client_id_label">ID klienta: </string>
+    <string name="on_off_watch">ON / OFF WATCH</string>
+    <string name="btn_pause">PAUSE</string>
+    <string name="btn_resume">RESUME</string>
+    <string name="btn_stop">STOP</string>
+    <string name="camera_label">CAMERA ON/OFF</string>
+    <string name="lidar_label">LIDAR ON/OFF</string>
+    <string name="rtk_label">RTK ON/OFF</string>
+    <string name="drive_label">DRIVE ON/OFF</string>
+    <string name="fusion_label">FUSION ON/OFF</string>
+    <string name="btn_status">STATUS</string>
+    <string name="btn_telemetry">ZÍSKAT TELEMETRII</string>
+    <string name="telemetry_placeholder">Telemetrie se zobrazí zde</string>
+    <string name="telemetry_loading">Načítám...</string>
+    <string name="waypoints_label">WAYPOINTS:</string>
+    <string name="btn_start">START</string>
+    <string name="btn_power_off">POWER OFF</string>
+
+    <string name="scan_dialog_title">Vyhledávám roboty...</string>
+    <string name="scan_no_robot_found">Žádný robot nenalezen</string>
+    <string name="btn_cancel">Zrušit</string>
+    <string name="toast_enable_bluetooth">Zapněte Bluetooth!</string>
+
+    <string name="dialog_power_off_title">Confirm Power Off</string>
+    <string name="dialog_power_off_message">Are you sure you want to power off the robot?</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+
+    <string name="scan_device_info">%1$s\n(%2$s) [%3$d dBm]</string>
+    <string name="default_operator_name">Operator1</string>
+    <string name="unknown_device">Neznámé</string>
+</resources>

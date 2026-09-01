@@ -9,7 +9,7 @@ from rtk_poller import RtkPoller
 
 class GpsService:
     def __init__(self):
-        self.device = '/dev/robot-gps'
+        self.device = '/dev/robot-gnss-gps'
         self.baudrate = 921600
         
         self.running = False

@@ -132,10 +132,10 @@ sudo systemctl restart robot-compass
 sudo systemctl restart robot-drive
 sudo systemctl restart robot-fusion
 sudo systemctl restart robot-gamepad
-sudo systemctl restart robot-gnss
-sudo systemctl restart robot-gps
+sudo systemctl restart robot-gnss-dual
+sudo systemctl restart robot-gnss-gps
+sudo systemctl restart robot-gnss-rtk
 sudo systemctl restart robot-heading
-sudo systemctl restart robot-journey
 sudo systemctl restart robot-lidar
 sudo systemctl restart robot-logger
 sudo systemctl restart robot-oow
@@ -143,7 +143,7 @@ sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-pilot-waypoints
 sudo systemctl restart robot-pointperfect
-sudo systemctl restart robot-rtk
+
 sudo systemctl restart robot-vision
 sudo systemctl restart zeroconf
 

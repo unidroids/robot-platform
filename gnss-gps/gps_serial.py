@@ -49,7 +49,7 @@ def calculate_unicore_crc32(data: bytes) -> int:
     return crc
 
 class GpsSerialIO:
-    def __init__(self, device: str = '/dev/robot-gps', baudrate: int = 115200, fifo_size: int = 100):
+    def __init__(self, device: str = '/dev/robot-gnss-gps', baudrate: int = 115200, fifo_size: int = 100):
         self.device = device
         self.baudrate = baudrate
         self._ser: Optional[serial.Serial] = None

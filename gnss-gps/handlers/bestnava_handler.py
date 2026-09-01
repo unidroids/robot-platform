@@ -84,7 +84,7 @@ class BestnavaHandler:
                 
             json_data = self.to_json(parsed_data)
             self._last_json = json_data
-            self._zmq_pub.send_string(f"BESTNAV/{json_data}")
+            self._zmq_pub.send_multipart([b"BESTNAV", json_data.encode('utf-8')])
             
             current_time = time.time()
             if current_time - self._last_log_time >= 1.0:

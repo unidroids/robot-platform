@@ -78,13 +78,21 @@ class RtkWorker:
 
     def _run(self):
         ctx = zmq.Context()
-        zmq_sub = ctx.socket(zmq.SUB)
-        zmq_sub.connect("ipc:///tmp/robot-gnss-dual")
-        zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "GPGGA")
-        zmq_sub.setsockopt(zmq.RCVTIMEO, 1000)
+        
+        zmq_sub_dual = ctx.socket(zmq.SUB)
+        zmq_sub_dual.connect("ipc:///tmp/robot-gnss-dual")
+        zmq_sub_dual.setsockopt_string(zmq.SUBSCRIBE, "GPGGA")
+        
+        zmq_sub_gps = ctx.socket(zmq.SUB)
+        zmq_sub_gps.connect("ipc:///tmp/robot-gnss-gps")
+        zmq_sub_gps.setsockopt_string(zmq.SUBSCRIBE, "GPGGA")
+        
+        poller = zmq.Poller()
+        poller.register(zmq_sub_dual, zmq.POLLIN)
+        poller.register(zmq_sub_gps, zmq.POLLIN)
 
         self.zmq_rtcm_pub = ctx.socket(zmq.PUB)
-        self.zmq_rtcm_pub.bind("ipc:///tmp/robot-rtk")
+        self.zmq_rtcm_pub.bind("ipc:///tmp/robot-gnss-rtk")
 
         self.ntrip = NtripClient(
             host=self.ntrip_host,
@@ -94,10 +102,37 @@ class RtkWorker:
             tls=self.tls
         )
         ntrip_started = False
+        last_dual_time = 0.0
         
         while not self._stop_event.is_set():
             try:
-                parts = zmq_sub.recv_multipart()
+                events = dict(poller.poll(1000))
+                if not events:
+                    continue
+                    
+                parts_dual = None
+                while True:
+                    try:
+                        parts_dual = zmq_sub_dual.recv_multipart(flags=zmq.NOBLOCK)
+                        last_dual_time = time.time()
+                    except zmq.error.Again:
+                        break
+                        
+                parts_gps = None
+                while True:
+                    try:
+                        parts_gps = zmq_sub_gps.recv_multipart(flags=zmq.NOBLOCK)
+                    except zmq.error.Again:
+                        break
+                        
+                parts_to_process = parts_dual
+                if not parts_to_process and parts_gps and (time.time() - last_dual_time > 15.0):
+                    parts_to_process = parts_gps
+                    
+                if not parts_to_process:
+                    continue
+                    
+                parts = parts_to_process
                 if len(parts) == 2:
                     topic = parts[0].decode('utf-8', errors='ignore')
                     json_str = parts[1].decode('utf-8', errors='ignore')
@@ -144,7 +179,8 @@ class RtkWorker:
                 traceback.print_exc()
                 
         # Úklid ZMQ
-        zmq_sub.close()
+        zmq_sub_dual.close()
+        zmq_sub_gps.close()
         ctx.term()
 
     def _on_rtcm_data(self, data: bytes):
@@ -167,7 +203,7 @@ class RtkWorker:
         try:
             if self.zmq_rtcm_pub:
                 self.zmq_rtcm_pub.send_multipart([b"RTCM", data])
-                print(f"[RTK] Odesláno {len(data)} bytů RTCM dat přes ZMQ (ipc:///tmp/robot-rtk).")
+                print(f"[RTK] Odesláno {len(data)} bytů RTCM dat přes ZMQ (ipc:///tmp/robot-gnss-rtk).")
         except Exception as e:
             print(f"[RTK] Chyba při předávání RTCM dat: {e}")
             traceback.print_exc()

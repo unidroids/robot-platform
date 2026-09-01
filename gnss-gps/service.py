@@ -5,7 +5,7 @@ from gps_serial import GpsSerialIO
 from handlers.bestnava_handler import BestnavaHandler
 from handlers.gpgga_handler import GpggaHandler
 from handlers.hwstatusa_handler import HwstatusaHandler
-from tcp_server import GpsTcpServer
+from rtk_poller import RtkPoller
 
 class GpsService:
     def __init__(self):
@@ -26,7 +26,7 @@ class GpsService:
         self.gpgga_handler = None
         self.bestnava_handler = None
         self.hwstatusa_handler = None
-        self.tcp_server = None
+        self.rtk_poller = None
         
     def start(self):
         with self._lock:
@@ -36,7 +36,7 @@ class GpsService:
             # Kompletní reinicializace prostředků při každém startu
             self.zmq_context = zmq.Context.instance()
             self.zmq_pub = self.zmq_context.socket(zmq.PUB)
-            self.zmq_pub.bind("ipc:///tmp/robot-gps")
+            self.zmq_pub.bind("ipc:///tmp/robot-gnss-gps")
             
             self.gps_serial = GpsSerialIO(self.device, self.baudrate)
             
@@ -50,8 +50,8 @@ class GpsService:
             self._stop_event.clear()
             self.gps_serial.open()
             
-            self.tcp_server = GpsTcpServer(port=5001, serial_io=self.gps_serial)
-            self.tcp_server.start()
+            self.rtk_poller = RtkPoller(self.gps_serial)
+            self.rtk_poller.start()
             
             self._dispatcher_thread = threading.Thread(target=self._dispatcher, daemon=True)
             self._dispatcher_thread.start()
@@ -67,9 +67,9 @@ class GpsService:
                 
             self._stop_event.set()
             
-            if self.tcp_server:
-                self.tcp_server.stop()
-                self.tcp_server = None
+            if self.rtk_poller:
+                self.rtk_poller.stop()
+                self.rtk_poller = None
             
             # Zrušíme serial port první, to pomůže uvolnit read vlákno
             if self.gps_serial:

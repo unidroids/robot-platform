@@ -104,7 +104,8 @@ class GpsService:
             stats_json = json.dumps({"handled": self.stats_handled, "errors": errors, "unknown": self.stats_unknown})
             last_gpgga = self.gpgga_handler.get_last_json() if self.gpgga_handler else "{}"
             last_hwstatusa = self.hwstatusa_handler.get_last_json() if self.hwstatusa_handler else "{}"
-            return f"RUNNING {stats_json} {last_gpgga} {last_hwstatusa}"
+            last_bestnava = self.bestnava_handler.get_last_json() if self.bestnava_handler else "{}"
+            return f"RUNNING {stats_json} {last_gpgga} {last_hwstatusa} {last_bestnava}"
             
     def _dispatcher(self):
         print("[SERVICE] Dispatcher thread started")

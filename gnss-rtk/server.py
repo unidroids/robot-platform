@@ -72,7 +72,7 @@ class RtkServer:
                             print(f"[SERVER] Přijat příkaz: '{cmd}' od klienta {addr}")
                             
                             if cmd == "PING":
-                                conn.sendall(b"PONG RTK\n")
+                                conn.sendall(b"PONG GNSS-RTK\n")
                             elif cmd == "START":
                                 self.worker.start()
                                 conn.sendall(b"OK\n")

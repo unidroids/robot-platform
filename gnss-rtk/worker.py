@@ -126,9 +126,9 @@ class RtkWorker:
                     except zmq.error.Again:
                         break
                         
-                parts_to_process = parts_gps
-                if not parts_to_process and parts_dual and (time.time() - last_dual_time > 15.0):
-                    parts_to_process = parts_dual
+                parts_to_process = parts_dual
+                if not parts_to_process and parts_gps and (time.time() - last_dual_time > 15.0):
+                    parts_to_process = parts_gps
                     
                 if not parts_to_process:
                     continue

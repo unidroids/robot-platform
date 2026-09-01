@@ -14,7 +14,7 @@ def client_thread(sock, addr, service):
             
             try:
                 if line == "PING":
-                    f.write(b'PONG GPS\n')
+                    f.write(b'PONG GNSS-GPS\n')
                 elif line == "START":
                     res = service.start()
                     f.write((res+'\n').encode('utf-8'))

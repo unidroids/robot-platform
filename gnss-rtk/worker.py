@@ -1,3 +1,4 @@
+from proto import pointperfect_ntrip_client
 import base64
 import socket
 import threading
@@ -125,9 +126,9 @@ class RtkWorker:
                     except zmq.error.Again:
                         break
                         
-                parts_to_process = parts_dual
-                if not parts_to_process and parts_gps and (time.time() - last_dual_time > 15.0):
-                    parts_to_process = parts_gps
+                parts_to_process = parts_gps
+                if not parts_to_process and parts_dual and (time.time() - last_dual_time > 15.0):
+                    parts_to_process = parts_dual
                     
                 if not parts_to_process:
                     continue
@@ -136,14 +137,8 @@ class RtkWorker:
                 if len(parts) == 2:
                     topic = parts[0].decode('utf-8', errors='ignore')
                     json_str = parts[1].decode('utf-8', errors='ignore')
-                elif len(parts) == 1:
-                    msg = parts[0].decode('utf-8', errors='ignore')
-                    if "{" in msg:
-                        prefix, json_str = msg.split("{", 1)
-                        json_str = "{" + json_str
-                    else:
-                        continue
                 else:
+                    print("Invalid parts: ", parts) 
                     continue
                 data = json.loads(json_str)
                 raw_gga = data.get("raw", "").strip()

@@ -37,7 +37,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **CAMERA-STEREO**| 9001 | Ovládání kamer a vyčítání stereo obrazu       |
 | **LIDAR**        | 9002 | Zpracování dat z L2 lidaru                    |
 | **DRIVE**        | 9003 | Řízení podvozku (hoverboard) - Odometrie out |
-| **GPS**          | 9004 | Zpracování polohy UM980 (GPS + 130mm L1/L2/L5 E6 anténa) |
+| **GNSS-GPS**     | 9004 | Zpracování polohy UM980 (GPS + 130mm L1/L2/L5 E6 anténa) |
 | **GAMEPAD**      | 9005 | Poskytuje informace z gamepadu                |
 | **GNSS-DUAL**    | 9006 | Zpracování polohy UM982 (GPS + Heading) |
 | **PERFECT**      | 9007 | PointPerfect NTRIP klient (SPARTAN data)     |

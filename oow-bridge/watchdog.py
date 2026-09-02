@@ -9,6 +9,7 @@ from pilot_waypoints_client import PilotWaypointsClient
 from drive_client import DriveClient
 from rtk_client import RtkClient
 from gamepad_client import GamepadClient
+from logger_client import LoggerClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
@@ -16,6 +17,7 @@ class OfficerWatchdog:
         self.last_heartbeat = 0.0
         self.is_running = False
         self.ble_server = None
+        self.logger_client = LoggerClient()
         self.camera_client = CameraClient()
         self.fusion_client = FusionClient()
         self.lidar_client = LidarClient()
@@ -71,6 +73,7 @@ class OfficerWatchdog:
             return
             
         clients = [
+            self.logger_client,
             self.camera_client,
             self.fusion_client,
             self.lidar_client,

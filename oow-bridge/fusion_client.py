@@ -6,7 +6,7 @@ class FusionClient:
         self.host = host
         # Služby a jejich očekávané PONG odpovědi
         self.services = {
-            "LOGGER": {"port": 9012, "pong": "PONG LOGGER"},
+            "GNSS-GPS": {"port": 9004, "pong": "PONG GNSS-GPS"},
             "GNSS-DUAL": {"port": 9006, "pong": "PONG GNSS-DUAL"},
             "DRIVE": {"port": 9003, "pong": "PONG DRIVE"},
             "COMPASS": {"port": 9014, "pong": "PONG COMPASS"}

@@ -247,18 +247,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun cancelAllPendingTasks() {
-        handler.removeCallbacks(requestPriorityRunnable)
         handler.removeCallbacks(discoverServicesRunnable)
         handler.removeCallbacks(discoverTimeoutRunnable)
         handler.removeCallbacks(retryRunnable)
-    }
-
-    private val requestPriorityRunnable = Runnable {
-        val gatt = bluetoothGatt
-        if (gatt != null && isDiscoveringServices) {
-            Log.d("OowBLE", "Odesilam zadost o CONNECTION_PRIORITY_BALANCED...")
-            gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
-        }
     }
 
     private val discoveredDevices = mutableListOf<BluetoothDevice>()
@@ -401,12 +392,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 
                 cancelAllPendingTasks()
-                
-                // Zažádáme o BALANCED
-                handler.postDelayed(requestPriorityRunnable, 200)
 
-                // Spustíme discoverServices
-                handler.postDelayed(discoverServicesRunnable, 350)
+                // Spustíme přímo vyhledání služeb
+                handler.postDelayed(discoverServicesRunnable, 250)
                 handler.postDelayed(discoverTimeoutRunnable, 10000)
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {

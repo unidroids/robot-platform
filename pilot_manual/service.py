@@ -143,19 +143,47 @@ class PilotManualService:
                 pass
 
     async def _gamepad_tcp_check(self):
+        reader = None
+        writer = None
         while self.is_running:
             try:
-                reader, writer = await asyncio.open_connection("127.0.0.1", 9005)
+                if writer is None or writer.is_closing():
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection("127.0.0.1", 9005),
+                        timeout=1.0
+                    )
+
                 writer.write(b"GAMEPAD\n")
                 await writer.drain()
-                data = await asyncio.wait_for(reader.readline(), timeout=0.5)
+
+                data = await asyncio.wait_for(reader.readline(), timeout=1.0)
+                if not data:
+                    raise ConnectionResetError("Connection closed by Gamepad server")
+
                 status = data.decode("utf-8").strip()
                 self.gamepad_ok = (status == "ON")
-                writer.close()
-                await writer.wait_closed()
+
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.gamepad_ok = False
+                if writer is not None:
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+                    writer = None
+                    reader = None
+
             await asyncio.sleep(1.0)
+
+        if writer is not None:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
 
     async def _control_loop(self):
         # 10 Hz smyčka

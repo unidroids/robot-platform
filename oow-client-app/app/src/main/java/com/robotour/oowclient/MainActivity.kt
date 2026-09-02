@@ -218,19 +218,23 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("MissingPermission")
     private fun disconnectGatt() {
         Log.d("OowBLE", "disconnectGatt() vyvoláno")
-        tvStatus.text = getString(R.string.status_disconnecting)
+        cancelAllPendingTasks()
+        runOnUiThread { tvStatus.text = getString(R.string.status_disconnecting) }
         val gatt = bluetoothGatt
-        bluetoothGatt = null
-        gatt?.disconnect()
-        gatt?.close()
-        resetBluetoothState()
+        if (gatt != null) {
+            gatt.disconnect()
+        } else {
+            resetBluetoothState()
+        }
     }
 
     private fun resetBluetoothState() {
         stopHeartbeat()
+        cancelAllPendingTasks()
         isDiscoveringServices = false
         isReadingTelemetry = false
         retryCount = 0
+        discoveryAttempts = 0
         runOnUiThread {
             tvStatus.text = getString(R.string.status_disconnected)
             switchWatch.isChecked = false
@@ -239,6 +243,21 @@ class MainActivity : AppCompatActivity() {
             heartbeatCharacteristic = null
             telemetryCharacteristic = null
             setupConnectButton()
+        }
+    }
+
+    private fun cancelAllPendingTasks() {
+        handler.removeCallbacks(requestPriorityRunnable)
+        handler.removeCallbacks(discoverServicesRunnable)
+        handler.removeCallbacks(discoverTimeoutRunnable)
+        handler.removeCallbacks(retryRunnable)
+    }
+
+    private val requestPriorityRunnable = Runnable {
+        val gatt = bluetoothGatt
+        if (gatt != null && isDiscoveringServices) {
+            Log.d("OowBLE", "Odesilam zadost o CONNECTION_PRIORITY_BALANCED...")
+            gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_BALANCED)
         }
     }
 
@@ -260,8 +279,9 @@ class MainActivity : AppCompatActivity() {
         scanDialog = AlertDialog.Builder(this)
             .setTitle(R.string.scan_dialog_title)
             .setAdapter(deviceListAdapter) { _, which ->
+                val selectedDevice = discoveredDevices[which]
                 stopScan()
-                connectToGatt(discoveredDevices[which])
+                handler.postDelayed({ connectToGatt(selectedDevice) }, 150)
             }
             .setNegativeButton(R.string.btn_cancel) { _, _ -> stopScan() }
             .setOnDismissListener { stopScan() }
@@ -302,12 +322,40 @@ class MainActivity : AppCompatActivity() {
 
     private var lastDevice: BluetoothDevice? = null
     private var isDiscoveringServices = false
+    private var discoveryAttempts = 0
     private var retryCount = 0
+
+    private val discoverServicesRunnable = Runnable {
+        val gatt = bluetoothGatt
+        if (gatt != null && isDiscoveringServices) {
+            discoveryAttempts++
+            Log.d("OowBLE", "Spoustim gatt.discoverServices() (pokus $discoveryAttempts)")
+            val started = gatt.discoverServices()
+            Log.d("OowBLE", "discoverServices() started=$started")
+            if (!started) {
+                Log.e("OowBLE", "discoverServices() selhalo ihned!")
+                gatt.disconnect()
+            }
+        }
+    }
+
+    private val discoverTimeoutRunnable = Runnable {
+        if (isDiscoveringServices && bluetoothGatt != null) {
+            Log.e("OowBLE", "Timeout hledání služeb (10s)!")
+            bluetoothGatt?.disconnect()
+        }
+    }
+
+    private val retryRunnable = Runnable {
+        lastDevice?.let { connectToGatt(it) }
+    }
 
     @SuppressLint("MissingPermission")
     private fun connectToGatt(device: BluetoothDevice) {
         lastDevice = device
+        cancelAllPendingTasks()
         isDiscoveringServices = false
+        discoveryAttempts = 0
         bluetoothGatt?.close()
         bluetoothGatt = null
         
@@ -315,8 +363,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus.text = getString(R.string.status_connecting, device.name ?: getString(R.string.unknown_device))
         btnConnect.isEnabled = false
 
-        @Suppress("DEPRECATION")
-        bluetoothGatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
+        bluetoothGatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -326,15 +373,18 @@ class MainActivity : AppCompatActivity() {
             
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 isDiscoveringServices = false
+                cancelAllPendingTasks()
                 if ((status == 133 || status == 19 || status == 62) && retryCount < 3 && lastDevice != null) {
                     retryCount++
-                    handler.post { tvStatus.text = getString(R.string.status_error_gatt_retry, status, retryCount) }
-                    if (status == 133) refreshDeviceCache(gatt)
+                    runOnUiThread { tvStatus.text = getString(R.string.status_error_gatt_retry, status, retryCount) }
+                    // if (status == 133) // refreshDeviceCache(gatt) // Zakomentovano kvuli deadlocku
                     gatt.close()
-                    handler.postDelayed({ lastDevice?.let { connectToGatt(it) } }, 1000)
+                    if (bluetoothGatt == gatt) bluetoothGatt = null
+                    handler.postDelayed(retryRunnable, 1000)
                 } else {
-                    handler.post { tvStatus.text = getString(R.string.status_error_connection, status) }
+                    runOnUiThread { tvStatus.text = getString(R.string.status_error_connection, status) }
                     gatt.close()
+                    if (bluetoothGatt == gatt) bluetoothGatt = null
                     resetBluetoothState()
                 }
                 return
@@ -342,37 +392,33 @@ class MainActivity : AppCompatActivity() {
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 isDiscoveringServices = true
+                discoveryAttempts = 0
                 retryCount = 0
                 val deviceName = gatt.device.name ?: getString(R.string.unknown_device)
-                handler.post { 
+                runOnUiThread { 
                     tvStatus.text = getString(R.string.status_searching_services, deviceName)
                     setupDisconnectButton()
                 }
                 
-                handler.postDelayed({
-                    Log.d("OowBLE", "Spouštím discoverServices()")
-                    if (bluetoothGatt == null || !gatt.discoverServices()) {
-                        Log.e("OowBLE", "discoverServices() selhalo!")
-                        gatt.disconnect()
-                    }
-                }, 250)
+                cancelAllPendingTasks()
+                
+                // Zažádáme o BALANCED
+                handler.postDelayed(requestPriorityRunnable, 200)
 
-                handler.postDelayed({
-                    if (isDiscoveringServices && bluetoothGatt != null) {
-                        Log.e("OowBLE", "Timeout hledání služeb (20s)!")
-                        gatt.disconnect()
-                    }
-                }, 20000)
+                // Spustíme discoverServices
+                handler.postDelayed(discoverServicesRunnable, 350)
+                handler.postDelayed(discoverTimeoutRunnable, 10000)
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 val wasDiscovering = isDiscoveringServices
                 isDiscoveringServices = false
+                cancelAllPendingTasks()
                 gatt.close()
+                if (bluetoothGatt == gatt) bluetoothGatt = null
                 if (wasDiscovering && retryCount < 3 && lastDevice != null) {
                     retryCount++
-                    handler.postDelayed({ lastDevice?.let { connectToGatt(it) } }, 1500)
+                    handler.postDelayed(retryRunnable, 1500)
                 } else {
-                    handler.post { tvStatus.text = getString(R.string.status_disconnected) }
                     resetBluetoothState()
                 }
             }
@@ -380,9 +426,11 @@ class MainActivity : AppCompatActivity() {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            handler.removeCallbacks(discoverTimeoutRunnable)
             if (!isDiscoveringServices) return 
             
             isDiscoveringServices = false
+            discoveryAttempts = 0
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d("OowBLE", "Služby nalezeny.")
                 val service = gatt.getService(SERVICE_UUID)
@@ -393,9 +441,9 @@ class MainActivity : AppCompatActivity() {
                     enableTelemetryNotifications(gatt, telemetryCharacteristic)
                     
                     val deviceName = gatt.device.name ?: getString(R.string.unknown_device)
-                    handler.post { tvStatus.text = getString(R.string.status_ready, deviceName) }
+                    runOnUiThread { tvStatus.text = getString(R.string.status_ready, deviceName) }
                 } else {
-                    handler.post { tvStatus.text = getString(R.string.status_error_no_service) }
+                    runOnUiThread { tvStatus.text = getString(R.string.status_error_no_service) }
                     gatt.disconnect()
                 }
             } else {
@@ -418,6 +466,18 @@ class MainActivity : AppCompatActivity() {
         override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
             Log.d("OowBLE", "onCharacteristicWrite status=$status, uuid=${characteristic?.uuid}")
         }
+
+        @SuppressLint("MissingPermission")
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            Log.d("OowBLE", "onMtuChanged: mtu=$mtu, status=$status")
+            if (isDiscoveringServices) {
+                Log.d("OowBLE", "Spouštím discoverServices() po změně MTU")
+                if (!gatt.discoverServices()) {
+                    Log.e("OowBLE", "discoverServices() selhalo!")
+                    gatt.disconnect()
+                }
+            }
+        }
     }
 
     private fun refreshDeviceCache(gatt: BluetoothGatt) {
@@ -430,52 +490,52 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateTelemetryUI(value: ByteArray) {
         val data = String(value, Charsets.UTF_8)
-        handler.post { 
+        runOnUiThread { 
             tvTelemetry.text = data 
             try {
                 val json = JSONObject(data)
                 
                 // Update Camera Switch
-                    if (json.has("camera_status")) {
-                        val camStatus = json.getString("camera_status")
-                        switchCamera.setOnCheckedChangeListener(null)
-                        switchCamera.isChecked = camStatus.equals("ON", ignoreCase = true)
-                        switchCamera.setOnCheckedChangeListener { _, isChecked ->
-                            if (isChecked) sendCommand("CAMERA_ON") else sendCommand("CAMERA_OFF")
-                        }
+                if (json.has("camera_status")) {
+                    val camStatus = json.getString("camera_status")
+                    switchCamera.setOnCheckedChangeListener(null)
+                    switchCamera.isChecked = camStatus.equals("ON", ignoreCase = true)
+                    switchCamera.setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) sendCommand("CAMERA_ON") else sendCommand("CAMERA_OFF")
                     }
+                }
 
-                    // Update Lidar Switch
-                    if (json.has("lidar_status")) {
-                        val lidarStatus = json.getString("lidar_status")
-                        switchLidar.setOnCheckedChangeListener(null)
-                        switchLidar.isChecked = lidarStatus.equals("ON", ignoreCase = true)
-                        switchLidar.setOnCheckedChangeListener { _, isChecked ->
-                            if (isChecked) sendCommand("LIDAR_ON") else sendCommand("LIDAR_OFF")
-                        }
+                // Update Lidar Switch
+                if (json.has("lidar_status")) {
+                    val lidarStatus = json.getString("lidar_status")
+                    switchLidar.setOnCheckedChangeListener(null)
+                    switchLidar.isChecked = lidarStatus.equals("ON", ignoreCase = true)
+                    switchLidar.setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) sendCommand("LIDAR_ON") else sendCommand("LIDAR_OFF")
                     }
+                }
 
-                    // Update RTK Switch
-                    if (json.has("rtk_status")) {
-                        val rtkStatus = json.getString("rtk_status")
-                        switchRtk.setOnCheckedChangeListener(null)
-                        switchRtk.isChecked = rtkStatus.equals("ON", ignoreCase = true)
-                        switchRtk.setOnCheckedChangeListener { _, isChecked ->
-                            if (isChecked) sendCommand("RTK_ON") else sendCommand("RTK_OFF")
-                        }
+                // Update RTK Switch
+                if (json.has("rtk_status")) {
+                    val rtkStatus = json.getString("rtk_status")
+                    switchRtk.setOnCheckedChangeListener(null)
+                    switchRtk.isChecked = rtkStatus.equals("ON", ignoreCase = true)
+                    switchRtk.setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) sendCommand("RTK_ON") else sendCommand("RTK_OFF")
                     }
+                }
 
-                    // Update Drive Switch
-                    if (json.has("drive_status")) {
-                        val driveStatus = json.getString("drive_status")
-                        switchDrive.setOnCheckedChangeListener(null)
-                        switchDrive.isChecked = driveStatus.equals("ON", ignoreCase = true)
-                        switchDrive.setOnCheckedChangeListener { _, isChecked ->
-                            if (isChecked) sendCommand("DRIVE_ON") else sendCommand("DRIVE_OFF")
-                        }
+                // Update Drive Switch
+                if (json.has("drive_status")) {
+                    val driveStatus = json.getString("drive_status")
+                    switchDrive.setOnCheckedChangeListener(null)
+                    switchDrive.isChecked = driveStatus.equals("ON", ignoreCase = true)
+                    switchDrive.setOnCheckedChangeListener { _, isChecked ->
+                        if (isChecked) sendCommand("DRIVE_ON") else sendCommand("DRIVE_OFF")
                     }
-                    
-                    // Update Fusion Switch
+                }
+                
+                // Update Fusion Switch
                 if (json.has("fusion_status")) {
                     val fusionStatus = json.getString("fusion_status")
                     switchFusion.setOnCheckedChangeListener(null)

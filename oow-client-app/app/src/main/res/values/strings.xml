@@ -20,6 +20,7 @@
     <string name="btn_stop">STOP</string>
     <string name="camera_label">CAMERA ON/OFF</string>
     <string name="lidar_label">LIDAR ON/OFF</string>
+    <string name="gamepad_label">GAMEPAD ON/OFF</string>
     <string name="rtk_label">RTK ON/OFF</string>
     <string name="drive_label">DRIVE ON/OFF</string>
     <string name="fusion_label">FUSION ON/OFF</string>

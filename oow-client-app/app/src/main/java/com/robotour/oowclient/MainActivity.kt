@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var switchWatch: SwitchCompat
     private lateinit var switchCamera: SwitchCompat
     private lateinit var switchLidar: SwitchCompat
+    private lateinit var switchGamepad: SwitchCompat
     private lateinit var switchRtk: SwitchCompat
     private lateinit var switchFusion: SwitchCompat
     private lateinit var switchDrive: SwitchCompat
@@ -43,6 +44,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var btnPowerOff: Button
     private lateinit var btnCameraStatus: Button
     private lateinit var btnLidarStatus: Button
+    private lateinit var btnGamepadStatus: Button
     private lateinit var btnRtkStatus: Button
     private lateinit var btnFusionStatus: Button
     private lateinit var btnDriveStatus: Button
@@ -75,6 +77,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         switchWatch = findViewById(R.id.switchWatch)
         switchCamera = findViewById(R.id.switchCamera)
         switchLidar = findViewById(R.id.switchLidar)
+        switchGamepad = findViewById(R.id.switchGamepad)
         switchRtk = findViewById(R.id.switchRtk)
         switchFusion = findViewById(R.id.switchFusion)
         switchDrive = findViewById(R.id.switchDrive)
@@ -84,6 +87,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnPowerOff = findViewById(R.id.btnPowerOff)
         btnCameraStatus = findViewById(R.id.btnCameraStatus)
         btnLidarStatus = findViewById(R.id.btnLidarStatus)
+        btnGamepadStatus = findViewById(R.id.btnGamepadStatus)
         btnRtkStatus = findViewById(R.id.btnRtkStatus)
         btnFusionStatus = findViewById(R.id.btnFusionStatus)
         btnDriveStatus = findViewById(R.id.btnDriveStatus)
@@ -128,6 +132,10 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             bleManager.sendCommand(getClientId(), if (isChecked) "LIDAR_ON" else "LIDAR_OFF")
         }
 
+        switchGamepad.setOnCheckedChangeListener { _, isChecked ->
+            bleManager.sendCommand(getClientId(), if (isChecked) "GAMEPAD_ON" else "GAMEPAD_OFF")
+        }
+
         switchRtk.setOnCheckedChangeListener { _, isChecked ->
             bleManager.sendCommand(getClientId(), if (isChecked) "RTK_ON" else "RTK_OFF")
         }
@@ -155,6 +163,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
 
         btnCameraStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "CAMERA_STATUS") }
         btnLidarStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "LIDAR_STATUS") }
+        btnGamepadStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "GAMEPAD_STATUS") }
         btnRtkStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "RTK_STATUS") }
         btnFusionStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "FUSION_STATUS") }
         btnDriveStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "DRIVE_STATUS") }
@@ -273,6 +282,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             tvTelemetry.text = telemetry.rawJson
             updateSwitchQuietly(switchCamera, telemetry.cameraOn, "CAMERA_ON", "CAMERA_OFF")
             updateSwitchQuietly(switchLidar, telemetry.lidarOn, "LIDAR_ON", "LIDAR_OFF")
+            updateSwitchQuietly(switchGamepad, telemetry.gamepadOn, "GAMEPAD_ON", "GAMEPAD_OFF")
             updateSwitchQuietly(switchRtk, telemetry.rtkOn, "RTK_ON", "RTK_OFF")
             updateSwitchQuietly(switchDrive, telemetry.driveOn, "DRIVE_ON", "DRIVE_OFF")
             updateSwitchQuietly(switchFusion, telemetry.fusionOn, "FUSION_ON", "FUSION_OFF")

@@ -354,7 +354,13 @@ class MainActivity : AppCompatActivity() {
         tvStatus.text = getString(R.string.status_connecting, device.name ?: getString(R.string.unknown_device))
         btnConnect.isEnabled = false
 
-        bluetoothGatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        bluetoothGatt = device.connectGatt(
+            this,
+            false,
+            gattCallback,
+            BluetoothDevice.TRANSPORT_LE,
+            BluetoothDevice.PHY_LE_1M_MASK
+        )
     }
 
     private val gattCallback = object : BluetoothGattCallback() {

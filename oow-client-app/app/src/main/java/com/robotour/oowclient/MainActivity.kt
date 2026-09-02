@@ -2,24 +2,13 @@ package com.robotour.oowclient
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.*
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
+import android.bluetooth.BluetoothDevice
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.ParcelUuid
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -31,10 +20,12 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import org.json.JSONObject
-import java.util.UUID
+import com.robotour.oowclient.ble.BleConnectionState
+import com.robotour.oowclient.ble.BleManager
+import com.robotour.oowclient.model.TelemetryData
+import com.robotour.oowclient.util.Constants
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), BleManager.BleCallback {
 
     private lateinit var tvStatus: TextView
     private lateinit var tvTelemetry: TextView
@@ -59,41 +50,24 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnWaypointsStatus: Button
     private lateinit var btnTelemetry: Button
 
-    private var bluetoothAdapter: BluetoothAdapter? = null
-    private var bluetoothGatt: BluetoothGatt? = null
-
-    private var commandCharacteristic: BluetoothGattCharacteristic? = null
-    private var heartbeatCharacteristic: BluetoothGattCharacteristic? = null
-    private var telemetryCharacteristic: BluetoothGattCharacteristic? = null
-
-    private val SERVICE_UUID: UUID = UUID.fromString("87654321-4321-4321-4321-abcdef987654")
-    private val CHAR_COMMAND_UUID: UUID = UUID.fromString("87654321-4321-4321-4321-abcdef987655")
-    private val CHAR_HEARTBEAT_UUID: UUID = UUID.fromString("87654321-4321-4321-4321-abcdef987656")
-    private val CHAR_TELEMETRY_UUID: UUID = UUID.fromString("87654321-4321-4321-4321-abcdef987657")
-
-    private val PERMISSION_REQUEST_CODE = 100
+    private lateinit var bleManager: BleManager
     private lateinit var sharedPref: SharedPreferences
-    private val handler = Handler(Looper.getMainLooper())
-    private var isHeartbeatActive = false
 
-    private val bluetoothStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
-                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
-                if (state == BluetoothAdapter.STATE_OFF || state == BluetoothAdapter.STATE_TURNING_OFF) {
-                    runOnUiThread {
-                        tvStatus.text = getString(R.string.status_bluetooth_off)
-                        resetBluetoothState()
-                    }
-                }
-            }
-        }
-    }
+    private val discoveredDevices = mutableListOf<BluetoothDevice>()
+    private var scanDialog: AlertDialog? = null
+    private var deviceListAdapter: ArrayAdapter<String>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        initViews()
+        initPreferences()
+        initBle()
+        initListeners()
+    }
+
+    private fun initViews() {
         tvStatus = findViewById(R.id.tvStatus)
         tvTelemetry = findViewById(R.id.tvTelemetry)
         btnConnect = findViewById(R.id.btnConnect)
@@ -116,69 +90,85 @@ class MainActivity : AppCompatActivity() {
         btnWaypointsStart = findViewById(R.id.btnWaypointsStart)
         btnWaypointsStatus = findViewById(R.id.btnWaypointsStatus)
         btnTelemetry = findViewById(R.id.btnTelemetry)
+    }
 
-        sharedPref = getSharedPreferences("OowClientPrefs", Context.MODE_PRIVATE)
-        etClientName.setText(sharedPref.getString("client_name", getString(R.string.default_operator_name)))
+    private fun initPreferences() {
+        sharedPref = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        etClientName.setText(sharedPref.getString(Constants.PREF_CLIENT_NAME, getString(R.string.default_operator_name)))
 
         etClientName.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                sharedPref.edit { putString("client_name", s.toString()) }
+                sharedPref.edit { putString(Constants.PREF_CLIENT_NAME, s.toString()) }
             }
         })
+    }
 
-        bluetoothAdapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+    private fun initBle() {
+        bleManager = BleManager(this, this)
+        bleManager.registerStateReceiver()
         setupConnectButton()
-        registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED), RECEIVER_EXPORTED)
+    }
 
+    private fun initListeners() {
         switchWatch.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) startHeartbeat() else stopHeartbeat()
+            if (isChecked) {
+                bleManager.startHeartbeat { getClientId() }
+            } else {
+                bleManager.stopHeartbeat()
+            }
         }
 
         switchCamera.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) sendCommand("CAMERA_ON") else sendCommand("CAMERA_OFF")
+            bleManager.sendCommand(getClientId(), if (isChecked) "CAMERA_ON" else "CAMERA_OFF")
         }
 
         switchLidar.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) sendCommand("LIDAR_ON") else sendCommand("LIDAR_OFF")
+            bleManager.sendCommand(getClientId(), if (isChecked) "LIDAR_ON" else "LIDAR_OFF")
         }
 
         switchRtk.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) sendCommand("RTK_ON") else sendCommand("RTK_OFF")
+            bleManager.sendCommand(getClientId(), if (isChecked) "RTK_ON" else "RTK_OFF")
         }
 
         switchFusion.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) sendCommand("FUSION_ON") else sendCommand("FUSION_OFF")
+            bleManager.sendCommand(getClientId(), if (isChecked) "FUSION_ON" else "FUSION_OFF")
         }
 
         switchDrive.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) sendCommand("DRIVE_ON") else sendCommand("DRIVE_OFF")
+            bleManager.sendCommand(getClientId(), if (isChecked) "DRIVE_ON" else "DRIVE_OFF")
         }
 
-        btnPause.setOnClickListener { sendCommand("PAUSE") }
-        btnResume.setOnClickListener { sendCommand("RESUME") }
-        btnStop.setOnClickListener { sendCommand("STOP") }
-        btnPowerOff.setOnClickListener { 
+        btnPause.setOnClickListener { bleManager.sendCommand(getClientId(), "PAUSE") }
+        btnResume.setOnClickListener { bleManager.sendCommand(getClientId(), "RESUME") }
+        btnStop.setOnClickListener { bleManager.sendCommand(getClientId(), "STOP") }
+
+        btnPowerOff.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_power_off_title)
                 .setMessage(R.string.dialog_power_off_message)
-                .setPositiveButton(R.string.yes) { _, _ -> sendCommand("POWEROFF") }
+                .setPositiveButton(R.string.yes) { _, _ -> bleManager.sendCommand(getClientId(), "POWEROFF") }
                 .setNegativeButton(R.string.no, null)
                 .show()
         }
-        
-        btnCameraStatus.setOnClickListener { sendCommand("CAMERA_STATUS") }
-        btnLidarStatus.setOnClickListener { sendCommand("LIDAR_STATUS") }
-        btnRtkStatus.setOnClickListener { sendCommand("RTK_STATUS") }
-        btnFusionStatus.setOnClickListener { sendCommand("FUSION_STATUS") }
-        btnDriveStatus.setOnClickListener { sendCommand("DRIVE_STATUS") }
-        btnWaypointsStart.setOnClickListener { sendCommand("PILOT_WAYPOINTS_START") }
-        btnWaypointsStatus.setOnClickListener { sendCommand("PILOT_WAYPOINTS_STATUS") }
-        btnTelemetry.setOnClickListener { readTelemetry() }
+
+        btnCameraStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "CAMERA_STATUS") }
+        btnLidarStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "LIDAR_STATUS") }
+        btnRtkStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "RTK_STATUS") }
+        btnFusionStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "FUSION_STATUS") }
+        btnDriveStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "DRIVE_STATUS") }
+        btnWaypointsStart.setOnClickListener { bleManager.sendCommand(getClientId(), "PILOT_WAYPOINTS_START") }
+        btnWaypointsStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "PILOT_WAYPOINTS_STATUS") }
+        btnTelemetry.setOnClickListener {
+            tvTelemetry.setText(R.string.telemetry_loading)
+            bleManager.readTelemetry()
+        }
     }
 
     private fun getClientId(): String = etClientName.text.toString().trim().ifEmpty { "Unknown" }
+
+    // --- BLE Scan Dialog & Permissions ---
 
     private fun checkBluetoothPermissions(): Boolean {
         val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
@@ -187,426 +177,145 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestBluetoothPermissions() {
         val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE)
+        ActivityCompat.requestPermissions(this, permissions, Constants.PERMISSION_REQUEST_CODE)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-            startDeviceScan()
+        if (requestCode == Constants.PERMISSION_REQUEST_CODE && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            startScanWithDialog()
         }
     }
 
-    private fun setupConnectButton() {
-        runOnUiThread {
-            btnConnect.setText(R.string.btn_search_robot)
-            btnConnect.isEnabled = true
-            btnConnect.setOnClickListener {
-                if (checkBluetoothPermissions()) startDeviceScan() else requestBluetoothPermissions()
-            }
-        }
-    }
-
-    private fun setupDisconnectButton() {
-        runOnUiThread {
-            btnConnect.setText(R.string.btn_disconnect)
-            btnConnect.isEnabled = true
-            btnConnect.setOnClickListener { disconnectGatt() }
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun disconnectGatt() {
-        Log.d("OowBLE", "disconnectGatt() vyvoláno")
-        cancelAllPendingTasks()
-        runOnUiThread { tvStatus.text = getString(R.string.status_disconnecting) }
-        val gatt = bluetoothGatt
-        if (gatt != null) {
-            gatt.disconnect()
-        } else {
-            resetBluetoothState()
-        }
-    }
-
-    private fun resetBluetoothState() {
-        stopHeartbeat()
-        cancelAllPendingTasks()
-        isDiscoveringServices = false
-        isReadingTelemetry = false
-        retryCount = 0
-        discoveryAttempts = 0
-        runOnUiThread {
-            tvStatus.text = getString(R.string.status_disconnected)
-            switchWatch.isChecked = false
-            btnConnect.isEnabled = true
-            commandCharacteristic = null
-            heartbeatCharacteristic = null
-            telemetryCharacteristic = null
-            setupConnectButton()
-        }
-    }
-
-    private fun cancelAllPendingTasks() {
-        handler.removeCallbacks(discoverServicesRunnable)
-        handler.removeCallbacks(discoverTimeoutRunnable)
-        handler.removeCallbacks(retryRunnable)
-    }
-
-    private val discoveredDevices = mutableListOf<BluetoothDevice>()
-    private var scanDialog: AlertDialog? = null
-    private var deviceListAdapter: ArrayAdapter<String>? = null
-
-    @SuppressLint("MissingPermission")
-    private fun startDeviceScan() {
-        if (bluetoothAdapter?.isEnabled != true) {
+    private fun startScanWithDialog() {
+        if (!bleManager.isBluetoothEnabled) {
             Toast.makeText(this, R.string.toast_enable_bluetooth, Toast.LENGTH_SHORT).show()
             return
         }
 
         discoveredDevices.clear()
-        val deviceNames = mutableListOf<String>()
-        deviceListAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, deviceNames)
+        val deviceLabels = mutableListOf<String>()
+        deviceListAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, deviceLabels)
 
         scanDialog = AlertDialog.Builder(this)
             .setTitle(R.string.scan_dialog_title)
             .setAdapter(deviceListAdapter) { _, which ->
-                val selectedDevice = discoveredDevices[which]
-                stopScan()
-                handler.postDelayed({ connectToGatt(selectedDevice) }, 150)
+                if (which in discoveredDevices.indices) {
+                    val selected = discoveredDevices[which]
+                    bleManager.stopScan()
+                    bleManager.connect(selected)
+                }
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> stopScan() }
-            .setOnDismissListener { stopScan() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> bleManager.stopScan() }
+            .setOnDismissListener { bleManager.stopScan() }
             .show()
 
-        val scanner = bluetoothAdapter?.bluetoothLeScanner
-        Log.d("OowBLE", "Spouštím filtrované skenování pro UUID: $SERVICE_UUID")
-        
-        val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE_UUID)).build()
-        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-
-        scanner?.startScan(listOf(filter), settings, scanCallback)
-        handler.postDelayed({ stopScan() }, 10000)
+        bleManager.startScan()
     }
 
-    @SuppressLint("MissingPermission")
-    private fun stopScan() {
-        bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
-        if (scanDialog?.isShowing == true && discoveredDevices.isEmpty()) {
-            scanDialog?.setTitle(R.string.scan_no_robot_found)
+    private fun setupConnectButton() {
+        btnConnect.setText(R.string.btn_search_robot)
+        btnConnect.isEnabled = true
+        btnConnect.setOnClickListener {
+            if (checkBluetoothPermissions()) startScanWithDialog() else requestBluetoothPermissions()
         }
     }
 
-    private val scanCallback = object : ScanCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val device = result.device
-            if (device !in discoveredDevices) {
-                discoveredDevices.add(device)
-                val name = device.name ?: getString(R.string.unknown_device)
-                handler.post {
-                    deviceListAdapter?.add(getString(R.string.scan_device_info, name, device.address, result.rssi))
-                    deviceListAdapter?.notifyDataSetChanged()
+    private fun setupDisconnectButton() {
+        btnConnect.setText(R.string.btn_disconnect)
+        btnConnect.isEnabled = true
+        btnConnect.setOnClickListener { bleManager.disconnect() }
+    }
+
+    // --- BleManager.BleCallback Implementation ---
+
+    override fun onStateChanged(state: BleConnectionState, deviceName: String?, errorInfo: String?) {
+        runOnUiThread {
+            @SuppressLint("MissingPermission")
+            val name = deviceName ?: getString(R.string.unknown_device)
+            when (state) {
+                BleConnectionState.DISCONNECTED -> {
+                    tvStatus.text = getString(R.string.status_disconnected)
+                    switchWatch.isChecked = false
+                    setupConnectButton()
                 }
-            }
-        }
-    }
-
-    private var lastDevice: BluetoothDevice? = null
-    private var isDiscoveringServices = false
-    private var discoveryAttempts = 0
-    private var retryCount = 0
-
-    private val discoverServicesRunnable = Runnable {
-        val gatt = bluetoothGatt
-        if (gatt != null && isDiscoveringServices) {
-            discoveryAttempts++
-            Log.d("OowBLE", "Spoustim gatt.discoverServices() (pokus $discoveryAttempts)")
-            val started = gatt.discoverServices()
-            Log.d("OowBLE", "discoverServices() started=$started")
-            if (!started) {
-                Log.e("OowBLE", "discoverServices() selhalo ihned!")
-                gatt.disconnect()
-            }
-        }
-    }
-
-    private val discoverTimeoutRunnable = Runnable {
-        if (isDiscoveringServices && bluetoothGatt != null) {
-            Log.e("OowBLE", "Timeout hledání služeb (10s)!")
-            bluetoothGatt?.disconnect()
-        }
-    }
-
-    private val retryRunnable = Runnable {
-        lastDevice?.let { connectToGatt(it) }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun connectToGatt(device: BluetoothDevice) {
-        lastDevice = device
-        cancelAllPendingTasks()
-        isDiscoveringServices = false
-        discoveryAttempts = 0
-        bluetoothGatt?.close()
-        bluetoothGatt = null
-        
-        Log.d("OowBLE", "Připojuji k: ${device.address}")
-        tvStatus.text = getString(R.string.status_connecting, device.name ?: getString(R.string.unknown_device))
-        btnConnect.isEnabled = false
-
-        bluetoothGatt = device.connectGatt(
-            this,
-            false,
-            gattCallback,
-            BluetoothDevice.TRANSPORT_LE,
-            BluetoothDevice.PHY_LE_1M_MASK
-        )
-    }
-
-    private val gattCallback = object : BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            Log.d("OowBLE", "onConnectionStateChange: status=$status, newState=$newState")
-            
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                isDiscoveringServices = false
-                cancelAllPendingTasks()
-                if ((status == 133 || status == 19 || status == 62) && retryCount < 3 && lastDevice != null) {
-                    retryCount++
-                    runOnUiThread { tvStatus.text = getString(R.string.status_error_gatt_retry, status, retryCount) }
-                    // if (status == 133) // refreshDeviceCache(gatt) // Zakomentovano kvuli deadlocku
-                    gatt.close()
-                    if (bluetoothGatt == gatt) bluetoothGatt = null
-                    handler.postDelayed(retryRunnable, 1000)
-                } else {
-                    runOnUiThread { tvStatus.text = getString(R.string.status_error_connection, status) }
-                    gatt.close()
-                    if (bluetoothGatt == gatt) bluetoothGatt = null
-                    resetBluetoothState()
+                BleConnectionState.DISCONNECTING -> {
+                    tvStatus.text = getString(R.string.status_disconnecting)
+                    btnConnect.isEnabled = false
                 }
-                return
-            }
-
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                isDiscoveringServices = true
-                discoveryAttempts = 0
-                retryCount = 0
-                val deviceName = gatt.device.name ?: getString(R.string.unknown_device)
-                runOnUiThread { 
-                    tvStatus.text = getString(R.string.status_searching_services, deviceName)
+                BleConnectionState.CONNECTING -> {
+                    tvStatus.text = getString(R.string.status_connecting, name)
+                    btnConnect.isEnabled = false
+                }
+                BleConnectionState.SEARCHING_SERVICES -> {
+                    tvStatus.text = getString(R.string.status_searching_services, name)
                     setupDisconnectButton()
                 }
-                
-                cancelAllPendingTasks()
-
-                // Spustíme přímo vyhledání služeb
-                handler.postDelayed(discoverServicesRunnable, 250)
-                handler.postDelayed(discoverTimeoutRunnable, 10000)
-
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                val wasDiscovering = isDiscoveringServices
-                isDiscoveringServices = false
-                cancelAllPendingTasks()
-                gatt.close()
-                if (bluetoothGatt == gatt) bluetoothGatt = null
-                if (wasDiscovering && retryCount < 3 && lastDevice != null) {
-                    retryCount++
-                    handler.postDelayed(retryRunnable, 1500)
-                } else {
-                    resetBluetoothState()
+                BleConnectionState.READY -> {
+                    tvStatus.text = getString(R.string.status_ready, name)
+                    setupDisconnectButton()
                 }
-            }
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            handler.removeCallbacks(discoverTimeoutRunnable)
-            if (!isDiscoveringServices) return 
-            
-            isDiscoveringServices = false
-            discoveryAttempts = 0
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.d("OowBLE", "Služby nalezeny.")
-                val service = gatt.getService(SERVICE_UUID)
-                if (service != null) {
-                    commandCharacteristic = service.getCharacteristic(CHAR_COMMAND_UUID)
-                    heartbeatCharacteristic = service.getCharacteristic(CHAR_HEARTBEAT_UUID)
-                    telemetryCharacteristic = service.getCharacteristic(CHAR_TELEMETRY_UUID)
-                    enableTelemetryNotifications(gatt, telemetryCharacteristic)
-                    
-                    val deviceName = gatt.device.name ?: getString(R.string.unknown_device)
-                    runOnUiThread { tvStatus.text = getString(R.string.status_ready, deviceName) }
-                } else {
-                    runOnUiThread { tvStatus.text = getString(R.string.status_error_no_service) }
-                    gatt.disconnect()
+                BleConnectionState.BLUETOOTH_OFF -> {
+                    tvStatus.text = getString(R.string.status_bluetooth_off)
+                    switchWatch.isChecked = false
+                    setupConnectButton()
                 }
-            } else {
-                Log.e("OowBLE", "onServicesDiscovered ERROR: $status")
-                gatt.disconnect()
-            }
-        }
-
-        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
-            isReadingTelemetry = false
-            if (status == BluetoothGatt.GATT_SUCCESS && characteristic.uuid == CHAR_TELEMETRY_UUID) {
-                updateTelemetryUI(value)
-            }
-        }
-
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-            if (characteristic.uuid == CHAR_TELEMETRY_UUID) updateTelemetryUI(value)
-        }
-
-        override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?, status: Int) {
-            Log.d("OowBLE", "onCharacteristicWrite status=$status, uuid=${characteristic?.uuid}")
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            Log.d("OowBLE", "onMtuChanged: mtu=$mtu, status=$status")
-            if (isDiscoveringServices) {
-                Log.d("OowBLE", "Spouštím discoverServices() po změně MTU")
-                if (!gatt.discoverServices()) {
-                    Log.e("OowBLE", "discoverServices() selhalo!")
-                    gatt.disconnect()
+                BleConnectionState.ERROR -> {
+                    tvStatus.text = errorInfo ?: getString(R.string.status_error_connection, 0)
+                    setupConnectButton()
                 }
             }
         }
     }
 
-    private fun refreshDeviceCache(gatt: BluetoothGatt) {
-        try {
-            val method = gatt.javaClass.getMethod("refresh")
-            method.invoke(gatt)
-            Log.d("OowBLE", "GATT cache refresh vyvolán.")
-        } catch (_: Exception) { Log.e("OowBLE", "Refresh cache selhal") }
+    override fun onTelemetryReceived(telemetry: TelemetryData) {
+        runOnUiThread {
+            tvTelemetry.text = telemetry.rawJson
+            updateSwitchQuietly(switchCamera, telemetry.cameraOn, "CAMERA_ON", "CAMERA_OFF")
+            updateSwitchQuietly(switchLidar, telemetry.lidarOn, "LIDAR_ON", "LIDAR_OFF")
+            updateSwitchQuietly(switchRtk, telemetry.rtkOn, "RTK_ON", "RTK_OFF")
+            updateSwitchQuietly(switchDrive, telemetry.driveOn, "DRIVE_ON", "DRIVE_OFF")
+            updateSwitchQuietly(switchFusion, telemetry.fusionOn, "FUSION_ON", "FUSION_OFF")
+        }
     }
 
-    private fun updateTelemetryUI(value: ByteArray) {
-        val data = String(value, Charsets.UTF_8)
-        runOnUiThread { 
-            tvTelemetry.text = data 
-            try {
-                val json = JSONObject(data)
-                
-                // Update Camera Switch
-                if (json.has("camera_status")) {
-                    val camStatus = json.getString("camera_status")
-                    switchCamera.setOnCheckedChangeListener(null)
-                    switchCamera.isChecked = camStatus.equals("ON", ignoreCase = true)
-                    switchCamera.setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) sendCommand("CAMERA_ON") else sendCommand("CAMERA_OFF")
-                    }
-                }
-
-                // Update Lidar Switch
-                if (json.has("lidar_status")) {
-                    val lidarStatus = json.getString("lidar_status")
-                    switchLidar.setOnCheckedChangeListener(null)
-                    switchLidar.isChecked = lidarStatus.equals("ON", ignoreCase = true)
-                    switchLidar.setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) sendCommand("LIDAR_ON") else sendCommand("LIDAR_OFF")
-                    }
-                }
-
-                // Update RTK Switch
-                if (json.has("rtk_status")) {
-                    val rtkStatus = json.getString("rtk_status")
-                    switchRtk.setOnCheckedChangeListener(null)
-                    switchRtk.isChecked = rtkStatus.equals("ON", ignoreCase = true)
-                    switchRtk.setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) sendCommand("RTK_ON") else sendCommand("RTK_OFF")
-                    }
-                }
-
-                // Update Drive Switch
-                if (json.has("drive_status")) {
-                    val driveStatus = json.getString("drive_status")
-                    switchDrive.setOnCheckedChangeListener(null)
-                    switchDrive.isChecked = driveStatus.equals("ON", ignoreCase = true)
-                    switchDrive.setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) sendCommand("DRIVE_ON") else sendCommand("DRIVE_OFF")
-                    }
-                }
-                
-                // Update Fusion Switch
-                if (json.has("fusion_status")) {
-                    val fusionStatus = json.getString("fusion_status")
-                    switchFusion.setOnCheckedChangeListener(null)
-                    switchFusion.isChecked = fusionStatus.equals("ON", ignoreCase = true)
-                    switchFusion.setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) sendCommand("FUSION_ON") else sendCommand("FUSION_OFF")
-                    }
-                }
-            } catch (_: Exception) {
-                // Tichá chyba, pokud data nejsou JSON
-            }
+    private fun updateSwitchQuietly(switch: SwitchCompat, isChecked: Boolean?, onCommand: String, offCommand: String) {
+        if (isChecked == null) return
+        switch.setOnCheckedChangeListener(null)
+        switch.isChecked = isChecked
+        switch.setOnCheckedChangeListener { _, checked ->
+            bleManager.sendCommand(getClientId(), if (checked) onCommand else offCommand)
         }
     }
 
     @SuppressLint("MissingPermission")
-    private fun sendCommand(command: String) {
-        val gatt = bluetoothGatt
-        val char = commandCharacteristic
-        if (gatt != null && char != null) {
-            val payload = "${getClientId()}:$command".toByteArray()
-            gatt.writeCharacteristic(char, payload, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
-        }
-    }
-
-    private val heartbeatRunnable = object : Runnable {
-        @SuppressLint("MissingPermission")
-        override fun run() {
-            if (!isHeartbeatActive) return
-            val gatt = bluetoothGatt
-            val char = heartbeatCharacteristic
-            if (gatt != null && char != null && !isReadingTelemetry) {
-                val payload = getClientId().toByteArray()
-                gatt.writeCharacteristic(char, payload, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
-            }
-            handler.postDelayed(this, 333)
-        }
-    }
-
-    private fun startHeartbeat() {
-        if (isHeartbeatActive) return
-        Log.d("OowBLE", "Start Heartbeat (333ms)")
-        isHeartbeatActive = true
-        handler.post(heartbeatRunnable)
-    }
-
-    private fun stopHeartbeat() {
-        Log.d("OowBLE", "Stop Heartbeat")
-        isHeartbeatActive = false
-        handler.removeCallbacks(heartbeatRunnable)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun enableTelemetryNotifications(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic?) {
-        if (characteristic != null && (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0)) {
-            gatt.setCharacteristicNotification(characteristic, true)
-            val desc = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
-            if (desc != null) {
-                gatt.writeDescriptor(desc, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+    override fun onDeviceDiscovered(device: BluetoothDevice, rssi: Int) {
+        runOnUiThread {
+            if (discoveredDevices.none { it.address == device.address }) {
+                discoveredDevices.add(device)
+                val name = device.name ?: getString(R.string.unknown_device)
+                deviceListAdapter?.add(getString(R.string.scan_device_info, name, device.address, rssi))
+                deviceListAdapter?.notifyDataSetChanged()
             }
         }
     }
 
-    private var isReadingTelemetry = false
-    @SuppressLint("MissingPermission")
-    private fun readTelemetry() {
-        val gatt = bluetoothGatt
-        val char = telemetryCharacteristic
-        if (gatt != null && char != null && !isReadingTelemetry) {
-            isReadingTelemetry = true
-            tvTelemetry.setText(R.string.telemetry_loading)
-            if (!gatt.readCharacteristic(char)) isReadingTelemetry = false
+    override fun onScanFinished(devicesFoundCount: Int) {
+        runOnUiThread {
+            if (scanDialog?.isShowing == true && devicesFoundCount == 0 && discoveredDevices.isEmpty()) {
+                scanDialog?.setTitle(R.string.scan_no_robot_found)
+            }
+        }
+    }
+
+    override fun onGattRetry(status: Int, retryCount: Int) {
+        runOnUiThread {
+            tvStatus.text = getString(R.string.status_error_gatt_retry, status, retryCount)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        try { unregisterReceiver(bluetoothStateReceiver) } catch (_: Exception) { }
-        disconnectGatt()
+        bleManager.cleanup()
     }
 }

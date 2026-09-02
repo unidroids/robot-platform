@@ -84,6 +84,16 @@ class PilotManualService:
             pass
         print("[PilotManual] Service stopped.")
 
+    def get_status(self):
+        state = "RUNNING" if self.is_running else "IDLE"
+        info = {
+            "state": state,
+            "max_speed": round(self.max_speed, 2),
+            "gamepad_ok": self.gamepad_ok,
+            "current_base_speed": round(self.current_base_speed, 2)
+        }
+        return f"{state} {json.dumps(info)}"
+
     async def _zmq_gamepad_loop(self):
         sub = self.ctx.socket(zmq.SUB)
         sub.connect("ipc:///tmp/robot-gamepad")

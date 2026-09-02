@@ -57,7 +57,7 @@ class PilotManualTcpServer:
                     writer.write(b"OK STOPPED\n")
 
                 elif cmd == "STATUS":
-                    status = "RUNNING" if self.service.is_running else "IDLE"
+                    status = self.service.get_status()
                     writer.write(f"{status}\n".encode())
                     
                 elif cmd == "EXIT":

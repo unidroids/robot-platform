@@ -6,6 +6,7 @@ from camera_client import CameraClient
 from fusion_client import FusionClient
 from lidar_client import LidarClient
 from pilot_waypoints_client import PilotWaypointsClient
+from pilot_manual_client import PilotManualClient
 from drive_client import DriveClient
 from rtk_client import RtkClient
 from gamepad_client import GamepadClient
@@ -23,6 +24,7 @@ class OfficerWatchdog:
         self.lidar_client = LidarClient()
         self.gamepad_client = GamepadClient()
         self.pilot_waypoints_client = PilotWaypointsClient()
+        self.pilot_manual_client = PilotManualClient()
         self.drive_client = DriveClient()
         self.rtk_client = RtkClient()
         
@@ -79,6 +81,7 @@ class OfficerWatchdog:
             self.lidar_client,
             self.gamepad_client,
             self.pilot_waypoints_client,
+            self.pilot_manual_client,
             self.drive_client,
             self.rtk_client
         ]

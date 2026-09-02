@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var btnConnect: Button
     private lateinit var etClientName: EditText
     private lateinit var switchWatch: SwitchCompat
+    private lateinit var switchLogger: SwitchCompat
     private lateinit var switchCamera: SwitchCompat
     private lateinit var switchLidar: SwitchCompat
     private lateinit var switchGamepad: SwitchCompat
@@ -42,6 +43,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var btnResume: Button
     private lateinit var btnStop: Button
     private lateinit var btnPowerOff: Button
+    private lateinit var btnLoggerStatus: Button
     private lateinit var btnCameraStatus: Button
     private lateinit var btnLidarStatus: Button
     private lateinit var btnGamepadStatus: Button
@@ -75,6 +77,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnConnect = findViewById(R.id.btnConnect)
         etClientName = findViewById(R.id.etClientName)
         switchWatch = findViewById(R.id.switchWatch)
+        switchLogger = findViewById(R.id.switchLogger)
         switchCamera = findViewById(R.id.switchCamera)
         switchLidar = findViewById(R.id.switchLidar)
         switchGamepad = findViewById(R.id.switchGamepad)
@@ -85,6 +88,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnResume = findViewById(R.id.btnResume)
         btnStop = findViewById(R.id.btnStop)
         btnPowerOff = findViewById(R.id.btnPowerOff)
+        btnLoggerStatus = findViewById(R.id.btnLoggerStatus)
         btnCameraStatus = findViewById(R.id.btnCameraStatus)
         btnLidarStatus = findViewById(R.id.btnLidarStatus)
         btnGamepadStatus = findViewById(R.id.btnGamepadStatus)
@@ -124,6 +128,10 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             }
         }
 
+        switchLogger.setOnCheckedChangeListener { _, isChecked ->
+            bleManager.sendCommand(getClientId(), if (isChecked) "LOGGER_ON" else "LOGGER_OFF")
+        }
+
         switchCamera.setOnCheckedChangeListener { _, isChecked ->
             bleManager.sendCommand(getClientId(), if (isChecked) "CAMERA_ON" else "CAMERA_OFF")
         }
@@ -161,6 +169,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
                 .show()
         }
 
+        btnLoggerStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "LOGGER_STATUS") }
         btnCameraStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "CAMERA_STATUS") }
         btnLidarStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "LIDAR_STATUS") }
         btnGamepadStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "GAMEPAD_STATUS") }
@@ -280,6 +289,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     override fun onTelemetryReceived(telemetry: TelemetryData) {
         runOnUiThread {
             tvTelemetry.text = telemetry.rawJson
+            updateSwitchQuietly(switchLogger, telemetry.loggerOn, "LOGGER_ON", "LOGGER_OFF")
             updateSwitchQuietly(switchCamera, telemetry.cameraOn, "CAMERA_ON", "CAMERA_OFF")
             updateSwitchQuietly(switchLidar, telemetry.lidarOn, "LIDAR_ON", "LIDAR_OFF")
             updateSwitchQuietly(switchGamepad, telemetry.gamepadOn, "GAMEPAD_ON", "GAMEPAD_OFF")

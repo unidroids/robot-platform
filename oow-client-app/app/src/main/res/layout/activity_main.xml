@@ -29,6 +29,31 @@
             android:textSize="16sp"
             android:layout_marginBottom="16dp"/>
 
+        <!-- Logger Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switchLogger"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/logger_label"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnLoggerStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_status"
+                android:layout_marginStart="8dp"/>
+        </LinearLayout>
+
         <!-- Camera Section -->
         <LinearLayout
             android:layout_width="match_parent"

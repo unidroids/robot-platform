@@ -4,6 +4,7 @@ import org.json.JSONObject
 
 data class TelemetryData(
     val rawJson: String,
+    val loggerOn: Boolean? = null,
     val cameraOn: Boolean? = null,
     val lidarOn: Boolean? = null,
     val gamepadOn: Boolean? = null,
@@ -13,6 +14,7 @@ data class TelemetryData(
 ) {
     companion object {
         fun fromJson(raw: String): TelemetryData {
+            var logger: Boolean? = null
             var camera: Boolean? = null
             var lidar: Boolean? = null
             var gamepad: Boolean? = null
@@ -22,6 +24,9 @@ data class TelemetryData(
 
             try {
                 val json = JSONObject(raw)
+                if (json.has("logger_status")) {
+                    logger = json.optString("logger_status").equals("ON", ignoreCase = true)
+                }
                 if (json.has("camera_status")) {
                     camera = json.optString("camera_status").equals("ON", ignoreCase = true)
                 }
@@ -46,6 +51,7 @@ data class TelemetryData(
 
             return TelemetryData(
                 rawJson = raw,
+                loggerOn = logger,
                 cameraOn = camera,
                 lidarOn = lidar,
                 gamepadOn = gamepad,

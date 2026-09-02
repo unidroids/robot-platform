@@ -18,6 +18,7 @@
     <string name="btn_pause">PAUSE</string>
     <string name="btn_resume">RESUME</string>
     <string name="btn_stop">STOP</string>
+    <string name="logger_label">LOGGER ON/OFF</string>
     <string name="camera_label">CAMERA ON/OFF</string>
     <string name="lidar_label">LIDAR ON/OFF</string>
     <string name="gamepad_label">GAMEPAD ON/OFF</string>

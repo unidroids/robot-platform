@@ -52,6 +52,8 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var btnDriveStatus: Button
     private lateinit var btnWaypointsStart: Button
     private lateinit var btnWaypointsStatus: Button
+    private lateinit var switchPilotManual: SwitchCompat
+    private lateinit var btnPilotManualStatus: Button
     private lateinit var btnTelemetry: Button
 
     private lateinit var bleManager: BleManager
@@ -97,6 +99,8 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnDriveStatus = findViewById(R.id.btnDriveStatus)
         btnWaypointsStart = findViewById(R.id.btnWaypointsStart)
         btnWaypointsStatus = findViewById(R.id.btnWaypointsStatus)
+        switchPilotManual = findViewById(R.id.switchPilotManual)
+        btnPilotManualStatus = findViewById(R.id.btnPilotManualStatus)
         btnTelemetry = findViewById(R.id.btnTelemetry)
     }
 
@@ -178,6 +182,12 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnDriveStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "DRIVE_STATUS") }
         btnWaypointsStart.setOnClickListener { bleManager.sendCommand(getClientId(), "PILOT_WAYPOINTS_START") }
         btnWaypointsStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "PILOT_WAYPOINTS_STATUS") }
+
+        switchPilotManual.setOnCheckedChangeListener { _, isChecked ->
+            bleManager.sendCommand(getClientId(), if (isChecked) "PILOT_MANUAL_START" else "PILOT_MANUAL_STOP")
+        }
+        btnPilotManualStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "PILOT_MANUAL_STATUS") }
+
         btnTelemetry.setOnClickListener {
             tvTelemetry.setText(R.string.telemetry_loading)
             bleManager.readTelemetry()
@@ -296,6 +306,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             updateSwitchQuietly(switchRtk, telemetry.rtkOn, "RTK_ON", "RTK_OFF")
             updateSwitchQuietly(switchDrive, telemetry.driveOn, "DRIVE_ON", "DRIVE_OFF")
             updateSwitchQuietly(switchFusion, telemetry.fusionOn, "FUSION_ON", "FUSION_OFF")
+            updateSwitchQuietly(switchPilotManual, telemetry.pilotManualOn, "PILOT_MANUAL_START", "PILOT_MANUAL_STOP")
         }
     }
 

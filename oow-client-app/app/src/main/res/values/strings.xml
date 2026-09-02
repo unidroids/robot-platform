@@ -30,6 +30,7 @@
     <string name="telemetry_placeholder">Telemetrie se zobrazí zde</string>
     <string name="telemetry_loading">Načítám...</string>
     <string name="waypoints_label">WAYPOINTS:</string>
+    <string name="manual_label">MANUAL GO/STOP:</string>
     <string name="btn_start">START</string>
     <string name="btn_power_off">POWER OFF</string>
 

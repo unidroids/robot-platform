@@ -3,7 +3,7 @@ import serial
 import threading
 import os
 
-DEVICE = '/dev/robot-gnss-gps' # /dev/robot-gps /dev/robot-heading /dev/robot-compass
+DEVICE = '/dev/robot-gnss-dual' # /dev/robot-gps /dev/robot-heading /dev/robot-compass
 BAUD = 921600 #  115200  921600
 TCP_PORT = 5000
 

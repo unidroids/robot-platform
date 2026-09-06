@@ -106,12 +106,7 @@ class GnssDualService:
             last_gpgga = self.gpgga_handler.get_last_json() if self.gpgga_handler else "{}"
             last_hwstatusa = self.hwstatusa_handler.get_last_json() if self.hwstatusa_handler else "{}"
             last_bestnava = self.bestnava_handler.get_last_json() if self.bestnava_handler else "{}"
-            
-            last_heading = "{}"
-            if self.uniheadinga_handler:
-                h = self.uniheadinga_handler.get_lastest()
-                if h:
-                    last_heading = h.decode('utf-8')
+            last_heading = self.uniheadinga_handler.get_last_json() if self.uniheadinga_handler else "{}"
             
             return f"RUNNING {stats_json} {last_gpgga} {last_hwstatusa} {last_bestnava} {last_heading}"
             
@@ -141,14 +136,11 @@ class GnssDualService:
                     else:
                         self.stats_unknown += 1
                 elif sentence.startswith("#UNIHEADINGA"):
-                    if self.uniheadinga_handler:
-                        try:
-                            # UniHeadinAHandler expects bytes with \r\n
-                            self.uniheadinga_handler.handle(sentence.encode('ascii') + b'\r\n')
-                            self.stats_handled += 1
-                        except Exception as e:
-                            print(f"[SERVICE] Exception in UNIHEADINGA handler: {e}")
-                            self.stats_unknown += 1
+                    success = self.uniheadinga_handler.handle(sentence) if self.uniheadinga_handler else False
+                    if success:
+                        self.stats_handled += 1
+                    else:
+                        self.stats_unknown += 1
                 else:
                     self.stats_unknown += 1
                     # To reduce log spam, we might only log unknown messages occasionally or hide them

@@ -14,11 +14,19 @@ class UniHeadinAHandler:
     """
 
     def __init__(self, zmq_pub: zmq.Socket) -> None:
-        self._lastest: Optional[bytes] = None  
         self._zmq_pub = zmq_pub
-        self._last_log_time = 0
+        self._last_json: str = "{}"
+        self._last_log_time: float = 0
 
     # --- veřejné API ---
+
+    def get_last_json(self) -> str:
+        """Vrátí naposledy přijatá data ve formátu JSON řetězce."""
+        return self._last_json
+
+    def get_lastest(self) -> Optional[bytes]:
+        """Vrátí naposledy přijatá data v bytes (pro zpětnou kompatibilitu)."""
+        return self._last_json.encode('utf-8') if self._last_json != "{}" else None
 
     def _parse_message(self, message: str) -> dict:
         if ";" not in message:
@@ -71,58 +79,55 @@ class UniHeadinAHandler:
             "gps_glonass_bds2_mask": data_parts[16]
         }
 
-    def handle(self, message_bytes: bytes):
+    def to_json(self, parsed_data: dict) -> str:
+        return json.dumps(parsed_data)
+
+    def handle(self, message: str | bytes) -> bool:
         """
-        Zpracuje jednu syrovou zprávu.
+        Zpracuje jednu UNIHEADINGA zprávu.
         """
         try:
-            message = message_bytes.decode('ascii', errors='ignore').strip()
-        except Exception:
-            return
+            if isinstance(message, bytes):
+                message = message.decode('ascii', errors='ignore')
+            message = message.strip()
 
-        if not message.startswith('#UNIHEADINGA'):
-            raise Exception(f"[UNIHEADINGA] Not a #UNIHEADINGA message: {message}")
-            
-        parsed_data = self._parse_message(message)
-        if "error" in parsed_data:
-            raise Exception(f"[UNIHEADINGA] Error: {parsed_data['error']} | Msg: {message}")
-            
-        json_data = json.dumps(parsed_data)
-        
-        # 1) uložit na _lastest
-        self._lastest = json_data.encode('utf-8')
+            if not message.startswith('#UNIHEADINGA'):
+                print(f"[UNIHEADINGA] Not a #UNIHEADINGA message: {message}")
+                return False
 
-        try:
-            self._zmq_pub.send_multipart([b"UNIHEADING", self._lastest])
+            parsed_data = self._parse_message(message)
+            if "error" in parsed_data:
+                print(f"[UNIHEADINGA] Error: {parsed_data['error']} | Msg: {message}")
+                return False
+
+            json_data = self.to_json(parsed_data)
+            self._last_json = json_data
+
+            if self._zmq_pub:
+                try:
+                    self._zmq_pub.send_multipart([b"UNIHEADING", json_data.encode('utf-8')])
+                except Exception as e:
+                    print(f"[UNIHEADINGA] ZMQ send error: {e}")
+
+            current_time = time.time()
+            if current_time - self._last_log_time >= 1.0:
+                print(f"[UNIHEADINGA] {message}")
+                self._last_log_time = current_time
+
+            return True
+
         except Exception as e:
-            pass
-
-        current_time = time.time()
-        if current_time - self._last_log_time >= 1.0:
-            print(f"[UNIHEADINGA] {self._lastest}")
-            self._last_log_time = current_time
-        return True            
-
-    def get_lastest(self) -> Optional[bytes]:
-        """Vrátí naposledy přijatá data ve formátu JSON."""
-        return self._lastest
-
-    def __del__(self):
-        pass
+            print(f"[UNIHEADINGA] Parse error: {e} | Msg: {message}")
+            return False
 
 
 # --- jednoduchý lokální test bez sítě ---
 if __name__ == "__main__":
     h = UniHeadinAHandler(None)  
-    msg = b'#UNIHEADINGA,92,GPS,FINE,2392,519230000,0,0,18,8;INSUFFICIENT_OBS,NONE,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,"",0,0,0,0,0,00,0,0*f25b9a39\r\n'
-    h.handle(msg)
-    last = h.get_lastest()
-    print("Lastest:", last)
-    if last:
-        print("Serialized length:", len(last), "bytes")
-    msg = b'#UNIHEADINGA,92,GPS,FINE,2392,519238000,0,0,18,8;INSUFFICIENT_OBS,NONE,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,"",0,0,0,0,0,00,0,0*e914be33\r\n'
-    h.handle(msg)
-    last = h.get_lastest()
-    print("Lastest:", last)
-    if last:
-        print("Serialized length:", len(last), "bytes")
+    msg = '#UNIHEADINGA,92,GPS,FINE,2392,519230000,0,0,18,8;INSUFFICIENT_OBS,NONE,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,"",0,0,0,0,0,00,0,0*f25b9a39'
+    success = h.handle(msg)
+    print("Success:", success)
+    last = h.get_last_json()
+    print("Last JSON:", last)
+    print("Serialized length:", len(last), "bytes")
+

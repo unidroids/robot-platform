@@ -4,8 +4,10 @@ import json
 
 from gnss_serial import GnssDualSerialIO
 from handlers.bestnava_handler import BestnavaHandler
+from handlers.bestnavha_handler import BestnavhaHandler
 from handlers.gpgga_handler import GpggaHandler
 from handlers.hwstatusa_handler import HwstatusaHandler
+from handlers.msposa_handler import MsposaHandler
 from handlers.uniheadinga_handler import UniHeadinAHandler
 from rtk_poller import RtkPoller
 
@@ -25,10 +27,13 @@ class GnssDualService:
         self.stats_handled = 0
         self.stats_unknown = 0
         
+        self.handlers = []
         self.gpgga_handler = None
         self.bestnava_handler = None
+        self.bestnavha_handler = None
         self.hwstatusa_handler = None
         self.uniheadinga_handler = None
+        self.msposa_handler = None
         self.rtk_poller = None
         
     def start(self):
@@ -43,9 +48,19 @@ class GnssDualService:
             self.gnss_serial = GnssDualSerialIO(self.device, self.baudrate)
             
             self.bestnava_handler = BestnavaHandler(self.zmq_pub)
+            self.bestnavha_handler = BestnavhaHandler(self.zmq_pub)
             self.gpgga_handler = GpggaHandler(self.zmq_pub)
             self.hwstatusa_handler = HwstatusaHandler(self.zmq_pub)
             self.uniheadinga_handler = UniHeadinAHandler(self.zmq_pub)
+            self.msposa_handler = MsposaHandler(self.zmq_pub)
+            
+            self.handlers = []
+            self.register_handler(self._is_gga, self.gpgga_handler)
+            self.register_handler("#BESTNAVA", self.bestnava_handler)
+            self.register_handler("#BESTNAVHA", self.bestnavha_handler)
+            self.register_handler("#HWSTATUSA", self.hwstatusa_handler)
+            self.register_handler("#UNIHEADINGA", self.uniheadinga_handler)
+            self.register_handler("#MSPOSA", self.msposa_handler)
                 
             self.stats_handled = 0
             self.stats_unknown = 0
@@ -88,10 +103,13 @@ class GnssDualService:
                 
             self.zmq_context = None
             
+            self.handlers = []
             self.gpgga_handler = None
             self.bestnava_handler = None
+            self.bestnavha_handler = None
             self.hwstatusa_handler = None
             self.uniheadinga_handler = None
+            self.msposa_handler = None
                 
             self.running = False
             print("[SERVICE] GNSS-DUAL STOPPED")
@@ -106,10 +124,19 @@ class GnssDualService:
             last_gpgga = self.gpgga_handler.get_last_json() if self.gpgga_handler else "{}"
             last_hwstatusa = self.hwstatusa_handler.get_last_json() if self.hwstatusa_handler else "{}"
             last_bestnava = self.bestnava_handler.get_last_json() if self.bestnava_handler else "{}"
+            last_bestnavha = self.bestnavha_handler.get_last_json() if self.bestnavha_handler else "{}"
             last_heading = self.uniheadinga_handler.get_last_json() if self.uniheadinga_handler else "{}"
+            last_msposa = self.msposa_handler.get_last_json() if self.msposa_handler else "{}"
             
-            return f"RUNNING {stats_json} {last_gpgga} {last_hwstatusa} {last_bestnava} {last_heading}"
+            return f"RUNNING {stats_json} {last_gpgga} {last_hwstatusa} {last_bestnava} {last_bestnavha} {last_heading} {last_msposa}"
             
+    @staticmethod
+    def _is_gga(sentence: str) -> bool:
+        return sentence.startswith("$") and len(sentence.split(',', 1)[0]) == 6 and sentence.split(',', 1)[0].endswith("GGA")
+
+    def register_handler(self, matcher, handler):
+        self.handlers.append((matcher, handler))
+
     def _dispatcher(self):
         print("[SERVICE] Dispatcher thread started")
         while not self._stop_event.is_set():
@@ -117,31 +144,17 @@ class GnssDualService:
                 break
             sentence = self.gnss_serial.get_sentence(timeout=0.1)
             if sentence:
-                if sentence.startswith("$") and len(sentence.split(',', 1)[0]) == 6 and sentence.split(',', 1)[0].endswith("GGA"):
-                    success = self.gpgga_handler.handle(sentence) if self.gpgga_handler else False
-                    if success:
-                        self.stats_handled += 1
-                    else:
-                        self.stats_unknown += 1
-                elif sentence.startswith("#BESTNAVA"):
-                    success = self.bestnava_handler.handle(sentence) if self.bestnava_handler else False
-                    if success:
-                        self.stats_handled += 1
-                    else:
-                        self.stats_unknown += 1
-                elif sentence.startswith("#HWSTATUSA"):
-                    success = self.hwstatusa_handler.handle(sentence) if self.hwstatusa_handler else False
-                    if success:
-                        self.stats_handled += 1
-                    else:
-                        self.stats_unknown += 1
-                elif sentence.startswith("#UNIHEADINGA"):
-                    success = self.uniheadinga_handler.handle(sentence) if self.uniheadinga_handler else False
-                    if success:
-                        self.stats_handled += 1
-                    else:
-                        self.stats_unknown += 1
-                else:
+                handled = False
+                for matcher, handler in self.handlers:
+                    matched = matcher(sentence) if callable(matcher) else sentence.startswith(matcher)
+                    if matched:
+                        if handler and handler.handle(sentence):
+                            self.stats_handled += 1
+                        else:
+                            self.stats_unknown += 1
+                        handled = True
+                        break
+                if not handled:
                     self.stats_unknown += 1
                     # To reduce log spam, we might only log unknown messages occasionally or hide them
                     # print(f"[SERVICE] Unknown or unhandled sentence: {sentence}")

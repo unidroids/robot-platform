@@ -4,6 +4,7 @@ import subprocess
 import os
 import glob
 import time
+import json
 
 class HMIService:
     def __init__(self, device_id, port, sound_path):
@@ -191,6 +192,20 @@ class HMIService:
             print(f"[SERVICE] {msg}")
             return msg
 
+    def _ping_port(self, port, timeout=1.0):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                s.connect(("127.0.0.1", port))
+                s.sendall(b"PING\n")
+                data = s.recv(1024)
+                if not data:
+                    return "unavailable"
+                res = data.decode("utf-8").strip()
+                return res if res else "unavailable"
+        except Exception:
+            return "unavailable"
+
     def get_status(self):
         try:
             # Check device state
@@ -206,7 +221,16 @@ class HMIService:
                     if len(parts) >= 2:
                         state = parts[1]
                         
-            status_msg = f"STATUS Device: {self.device_id} | Connected: {device_connected} | State: {state}"
+            ports = [9021, 9022]
+            ports_status = [
+                {
+                    "port": port,
+                    "status": self._ping_port(port) if (device_connected and state == "device") else "unavailable"
+                }
+                for port in ports
+            ]
+
+            status_msg = f"STATUS Device: {self.device_id} | Connected: {device_connected} | State: {state} | {json.dumps(ports_status)}"
             print(f"[SERVICE] {status_msg}")
             return status_msg
         except Exception as e:

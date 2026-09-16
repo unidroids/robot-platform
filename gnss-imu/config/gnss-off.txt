@@ -1,0 +1,31 @@
+# Config changes format version 1.0
+# created by u-center version 25.06 at 22:09:26 on Monday, 22 Sep 2025
+[del]
+[set]
+  RAM CFG-RATE-MEAS        0x1f4                # write value 500  0x1f4           to item id 0x30210001 in layer 0
+  BBR CFG-RATE-MEAS        0x1f4                # write value 500  0x1f4           to item id 0x30210001 in layer 1
+Flash CFG-RATE-MEAS        0x1f4                # write value 500  0x1f4           to item id 0x30210001 in layer 2
+  RAM CFG-USBOUTPROT-NMEA  0                    # write value 0                    to item id 0x10780002 in layer 0
+  BBR CFG-USBOUTPROT-NMEA  0                    # write value 0                    to item id 0x10780002 in layer 1
+Flash CFG-USBOUTPROT-NMEA  0                    # write value 0                    to item id 0x10780002 in layer 2
+  RAM CFG-UART1OUTPROT-UBX 0                    # write value 0                    to item id 0x10740001 in layer 0
+  BBR CFG-UART1OUTPROT-UBX 0                    # write value 0                    to item id 0x10740001 in layer 1
+Flash CFG-UART1OUTPROT-UBX 0                    # write value 0                    to item id 0x10740001 in layer 2
+  RAM CFG-UART1OUTPROT-NMEA 0                    # write value 0                    to item id 0x10740002 in layer 0
+  BBR CFG-UART1OUTPROT-NMEA 0                    # write value 0                    to item id 0x10740002 in layer 1
+Flash CFG-UART1OUTPROT-NMEA 0                    # write value 0                    to item id 0x10740002 in layer 2
+  RAM CFG-SPIOUTPROT-UBX   0                    # write value 0                    to item id 0x107a0001 in layer 0
+  BBR CFG-SPIOUTPROT-UBX   0                    # write value 0                    to item id 0x107a0001 in layer 1
+Flash CFG-SPIOUTPROT-UBX   0                    # write value 0                    to item id 0x107a0001 in layer 2
+  RAM CFG-SPIOUTPROT-NMEA  0                    # write value 0                    to item id 0x107a0002 in layer 0
+  BBR CFG-SPIOUTPROT-NMEA  0                    # write value 0                    to item id 0x107a0002 in layer 1
+Flash CFG-SPIOUTPROT-NMEA  0                    # write value 0                    to item id 0x107a0002 in layer 2
+  RAM CFG-I2COUTPROT-UBX   0                    # write value 0                    to item id 0x10720001 in layer 0
+  BBR CFG-I2COUTPROT-UBX   0                    # write value 0                    to item id 0x10720001 in layer 1
+Flash CFG-I2COUTPROT-UBX   0                    # write value 0                    to item id 0x10720001 in layer 2
+  RAM CFG-I2COUTPROT-NMEA  0                    # write value 0                    to item id 0x10720002 in layer 0
+  BBR CFG-I2COUTPROT-NMEA  0                    # write value 0                    to item id 0x10720002 in layer 1
+Flash CFG-I2COUTPROT-NMEA  0                    # write value 0                    to item id 0x10720002 in layer 2
+  RAM CFG-USBOUTPROT-UBX   0                    # write value 0                    to item id 0x10780001 in layer 0
+  BBR CFG-USBOUTPROT-UBX   0                    # write value 0                    to item id 0x10780001 in layer 1
+Flash CFG-USBOUTPROT-UBX   0                    # write value 0                    to item id 0x10780001 in layer 2

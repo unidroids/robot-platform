@@ -1,0 +1,10 @@
+# Config changes format version 1.0
+# created by u-center version 25.06 at 17:19:24 on Monday, 10 Nov 2025
+[del]
+[set]
+  RAM CFG-RATE-MEAS        0x2710               # write value 10000  0x2710        to item id 0x30210001 in layer 0
+  BBR CFG-RATE-MEAS        0x2710               # write value 10000  0x2710        to item id 0x30210001 in layer 1
+Flash CFG-RATE-MEAS        0x2710               # write value 10000  0x2710        to item id 0x30210001 in layer 2
+  RAM CFG-RATE-NAV_PRIO    0x0                  # write value 0  0x0               to item id 0x20210004 in layer 0
+Flash CFG-RATE-NAV_PRIO    0x0                  # write value 0  0x0               to item id 0x20210004 in layer 2
+  BBR CFG-RATE-NAV_PRIO    0x0                  # write value 0  0x0               to item id 0x20210004 in layer 1

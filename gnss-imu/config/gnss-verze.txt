@@ -1,0 +1,5 @@
+# Config changes format version 1.0
+# created by u-center version 25.06 at 11:20:24 on Friday, 19 Sep 2025
+[del]
+[set]
+  RAM CFG-NAVSPG-DYNMODEL  11                   # write value 11 - MOWER           to item id 0x20110021 in layer 0

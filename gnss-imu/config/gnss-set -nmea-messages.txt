@@ -1,0 +1,25 @@
+# Config changes format version 1.0
+# created by u-center version 25.06 at 05:20:04 on Thursday, 30 Oct 2025
+[del]
+[set]
+  RAM CFG-USBOUTPROT-NMEA  1                    # write value 1                    to item id 0x10780002 in layer 0
+  BBR CFG-USBOUTPROT-NMEA  1                    # write value 1                    to item id 0x10780002 in layer 1
+Flash CFG-USBOUTPROT-NMEA  1                    # write value 1                    to item id 0x10780002 in layer 2
+  RAM CFG-MSGOUT-NMEA_ID_GSA_USB 0x0                  # write value 0  0x0               to item id 0x209100c2 in layer
+  RAM CFG-MSGOUT-NMEA_ID_GSV_USB 0x0                  # write value 0  0x0               to item id 0x209100c7 in layer
+  RAM CFG-MSGOUT-NMEA_ID_RMC_USB 0x0                  # write value 0  0x0               to item id 0x209100ae in layer
+  RAM CFG-MSGOUT-NMEA_ID_VTG_USB 0x0                  # write value 0  0x0               to item id 0x209100b3 in layer
+  BBR CFG-MSGOUT-NMEA_ID_GSA_USB 0x0                  # write value 0  0x0               to item id 0x209100c2 in layer
+  BBR CFG-MSGOUT-NMEA_ID_GSV_USB 0x0                  # write value 0  0x0               to item id 0x209100c7 in layer
+  BBR CFG-MSGOUT-NMEA_ID_RMC_USB 0x0                  # write value 0  0x0               to item id 0x209100ae in layer
+  BBR CFG-MSGOUT-NMEA_ID_VTG_USB 0x0                  # write value 0  0x0               to item id 0x209100b3 in layer
+Flash CFG-MSGOUT-NMEA_ID_GSA_USB 0x0                  # write value 0  0x0               to item id 0x209100c2 in layer
+Flash CFG-MSGOUT-NMEA_ID_GSV_USB 0x0                  # write value 0  0x0               to item id 0x209100c7 in layer
+Flash CFG-MSGOUT-NMEA_ID_RMC_USB 0x0                  # write value 0  0x0               to item id 0x209100ae in layer
+Flash CFG-MSGOUT-NMEA_ID_VTG_USB 0x0                  # write value 0  0x0               to item id 0x209100b3 in layer
+  RAM CFG-MSGOUT-NMEA_ID_GLL_USB 0x0                  # write value 0  0x0               to item id 0x209100cc in layer
+  BBR CFG-MSGOUT-NMEA_ID_GLL_USB 0x0                  # write value 0  0x0               to item id 0x209100cc in layer
+Flash CFG-MSGOUT-NMEA_ID_GLL_USB 0x0                  # write value 0  0x0               to item id 0x209100cc in layer
+  RAM CFG-MSGOUT-NMEA_ID_GGA_USB 0x64                 # write value 100  0x64            to item id 0x209100bd in layer
+  BBR CFG-MSGOUT-NMEA_ID_GGA_USB 0x64                 # write value 100  0x64            to item id 0x209100bd in layer
+Flash CFG-MSGOUT-NMEA_ID_GGA_USB 0x64                 # write value 100  0x64            to item id 0x209100bd in layer

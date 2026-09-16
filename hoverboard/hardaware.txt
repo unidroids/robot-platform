@@ -1,0 +1,12 @@
+2x IMU - ICM-40607
+
+CHIP A PINOUT (Pravá strana) :
+SDA PB4
+SCL PB3
+AD0 PF6
+INT PF7
+
+CHIP B PINOUT (Levá strana):
+SDA PC15
+SCL PC14
+

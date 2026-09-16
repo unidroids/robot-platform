@@ -1,0 +1,10 @@
+# Config changes format version 1.0
+# created by u-center version 25.06 at 22:21:57 on Monday, 22 Sep 2025
+[del]
+[set]
+  RAM CFG-MSGOUT-UBX_NAV_PVAT_USB 0x1                  # write value 1  0x1               to item id 0x2091062d in laye
+  BBR CFG-MSGOUT-UBX_NAV_PVAT_USB 0x1                  # write value 1  0x1               to item id 0x2091062d in laye
+Flash CFG-MSGOUT-UBX_NAV_PVAT_USB 0x1                  # write value 1  0x1               to item id 0x2091062d in laye
+  RAM CFG-USBOUTPROT-UBX   1                    # write value 1                    to item id 0x10780001 in layer 0
+  BBR CFG-USBOUTPROT-UBX   1                    # write value 1                    to item id 0x10780001 in layer 1
+Flash CFG-USBOUTPROT-UBX   1                    # write value 1                    to item id 0x10780001 in layer 2

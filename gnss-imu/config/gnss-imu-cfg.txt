@@ -1,0 +1,64 @@
+# Config changes format version 1.0
+# created by u-center version 25.06 at 17:18:32 on Monday, 10 Nov 2025
+[del]
+[set]
+  RAM CFG-SFIMU-IMU2ANT_LA_X 0x4                  # write value 4  0x4               to item id 0x30060020 in layer 0
+  BBR CFG-SFIMU-IMU2ANT_LA_X 0x4                  # write value 4  0x4               to item id 0x30060020 in layer 1
+Flash CFG-SFIMU-IMU2ANT_LA_X 0x4                  # write value 4  0x4               to item id 0x30060020 in layer 2
+  RAM CFG-SFIMU-IMU2ANT_LA_Y 0xffffffffffffffff   # write value -1  0xffffffffffffffff to item id 0x30060021 in layer 0
+  BBR CFG-SFIMU-IMU2ANT_LA_Y 0xffffffffffffffff   # write value -1  0xffffffffffffffff to item id 0x30060021 in layer 1
+Flash CFG-SFIMU-IMU2ANT_LA_Y 0xffffffffffffffff   # write value -1  0xffffffffffffffff to item id 0x30060021 in layer 2
+  RAM CFG-SFIMU-IMU2ANT_LA_Z 0x3                  # write value 3  0x3               to item id 0x30060022 in layer 0
+  BBR CFG-SFIMU-IMU2ANT_LA_Z 0x3                  # write value 3  0x3               to item id 0x30060022 in layer 1
+Flash CFG-SFIMU-IMU2ANT_LA_Z 0x3                  # write value 3  0x3               to item id 0x30060022 in layer 2
+  RAM CFG-SFIMU-IMU_MNTALG_YAW 0x2328               # write value 9000  0x2328         to item id 0x4006002d in layer 0
+  BBR CFG-SFIMU-IMU_MNTALG_YAW 0x2328               # write value 9000  0x2328         to item id 0x4006002d in layer 1
+Flash CFG-SFIMU-IMU_MNTALG_YAW 0x2328               # write value 9000  0x2328         to item id 0x4006002d in layer 2
+  RAM CFG-SFIMU-IMU_MNTALG_PITCH 0xca                 # write value 202  0xca            to item id 0x3006002e in layer
+  BBR CFG-SFIMU-IMU_MNTALG_PITCH 0xca                 # write value 202  0xca            to item id 0x3006002e in layer
+Flash CFG-SFIMU-IMU_MNTALG_PITCH 0xca                 # write value 202  0xca            to item id 0x3006002e in layer
+  RAM CFG-SFIMU-IMU_MNTALG_ROLL 0xffffffffffffffaa   # write value -86  0xffffffffffffffaa to item id 0x3006002f in lay
+  BBR CFG-SFIMU-IMU_MNTALG_ROLL 0xffffffffffffffaa   # write value -86  0xffffffffffffffaa to item id 0x3006002f in lay
+Flash CFG-SFIMU-IMU_MNTALG_ROLL 0xffffffffffffffaa   # write value -86  0xffffffffffffffaa to item id 0x3006002f in lay
+  RAM CFG-SFIMU-AUTO_MNTALG_ENA 0                    # write value 0                    to item id 0x10060027 in layer 
+  BBR CFG-SFIMU-AUTO_MNTALG_ENA 0                    # write value 0                    to item id 0x10060027 in layer 
+Flash CFG-SFIMU-AUTO_MNTALG_ENA 0                    # write value 0                    to item id 0x10060027 in layer 
+  RAM CFG-SFODO-USE_WT_PIN 0                    # write value 0                    to item id 0x1007000f in layer 0
+  BBR CFG-SFODO-USE_WT_PIN 0                    # write value 0                    to item id 0x1007000f in layer 1
+Flash CFG-SFODO-USE_WT_PIN 0                    # write value 0                    to item id 0x1007000f in layer 2
+  RAM CFG-SFODO-DIS_AUTODIRPINPOL 1                    # write value 1                    to item id 0x10070005 in laye
+  BBR CFG-SFODO-DIS_AUTODIRPINPOL 1                    # write value 1                    to item id 0x10070005 in laye
+Flash CFG-SFODO-DIS_AUTODIRPINPOL 1                    # write value 1                    to item id 0x10070005 in laye
+  RAM CFG-NAVSPG-DYNMODEL  12                   # write value 12 - ESCOOTER        to item id 0x20110021 in layer 0
+  BBR CFG-NAVSPG-DYNMODEL  12                   # write value 12 - ESCOOTER        to item id 0x20110021 in layer 1
+Flash CFG-NAVSPG-DYNMODEL  12                   # write value 12 - ESCOOTER        to item id 0x20110021 in layer 2
+  RAM CFG-SFODO-IMU2VRP_LA_Z 0x0                  # write value 0  0x0               to item id 0x30070014 in layer 0
+  BBR CFG-SFODO-IMU2VRP_LA_Z 0x0                  # write value 0  0x0               to item id 0x30070014 in layer 1
+Flash CFG-SFODO-IMU2VRP_LA_Z 0x0                  # write value 0  0x0               to item id 0x30070014 in layer 2
+  RAM CFG-SFODO-IMU2VRP_LA_X 0xffffffffffffffe2   # write value -30  0xffffffffffffffe2 to item id 0x30070012 in layer 
+  BBR CFG-SFODO-IMU2VRP_LA_X 0xffffffffffffffe2   # write value -30  0xffffffffffffffe2 to item id 0x30070012 in layer 
+Flash CFG-SFODO-IMU2VRP_LA_X 0xffffffffffffffe2   # write value -30  0xffffffffffffffe2 to item id 0x30070012 in layer 
+  RAM CFG-SFODO-IMU2VRP_LA_Y 0xfffffffffffffffd   # write value -3  0xfffffffffffffffd to item id 0x30070013 in layer 0
+  BBR CFG-SFODO-IMU2VRP_LA_Y 0xfffffffffffffffd   # write value -3  0xfffffffffffffffd to item id 0x30070013 in layer 1
+Flash CFG-SFODO-IMU2VRP_LA_Y 0xfffffffffffffffd   # write value -3  0xfffffffffffffffd to item id 0x30070013 in layer 2
+  RAM CFG-SFCORE-IMU2CRP_LA_Y 0xfffffffffffffffd   # write value -3  0xfffffffffffffffd to item id 0x30080003 in layer 
+  BBR CFG-SFCORE-IMU2CRP_LA_Y 0xfffffffffffffffd   # write value -3  0xfffffffffffffffd to item id 0x30080003 in layer 
+Flash CFG-SFCORE-IMU2CRP_LA_Y 0xfffffffffffffffd   # write value -3  0xfffffffffffffffd to item id 0x30080003 in layer 
+  RAM CFG-SFCORE-IMU2CRP_LA_X 0xffffffffffffffe2   # write value -30  0xffffffffffffffe2 to item id 0x30080002 in layer
+  BBR CFG-SFCORE-IMU2CRP_LA_X 0xffffffffffffffe2   # write value -30  0xffffffffffffffe2 to item id 0x30080002 in layer
+Flash CFG-SFCORE-IMU2CRP_LA_X 0xffffffffffffffe2   # write value -30  0xffffffffffffffe2 to item id 0x30080002 in layer
+  RAM CFG-SFODO-COMBINE_TICKS 0                    # write value 0                    to item id 0x10070001 in layer 0
+  BBR CFG-SFODO-COMBINE_TICKS 0                    # write value 0                    to item id 0x10070001 in layer 1
+Flash CFG-SFODO-COMBINE_TICKS 0                    # write value 0                    to item id 0x10070001 in layer 2
+  RAM CFG-SFODO-USE_SPEED  1                    # write value 1                    to item id 0x10070003 in layer 0
+  BBR CFG-SFODO-USE_SPEED  1                    # write value 1                    to item id 0x10070003 in layer 1
+Flash CFG-SFODO-USE_SPEED  1                    # write value 1                    to item id 0x10070003 in layer 2
+  RAM CFG-SFODO-LATENCY    0x2                  # write value 2  0x2               to item id 0x3007000a in layer 0
+  BBR CFG-SFODO-LATENCY    0x2                  # write value 2  0x2               to item id 0x3007000a in layer 1
+Flash CFG-SFODO-LATENCY    0x2                  # write value 2  0x2               to item id 0x3007000a in layer 2
+  RAM CFG-SFODO-FREQUENCY  0xa                  # write value 10  0xa              to item id 0x2007000b in layer 0
+  BBR CFG-SFODO-FREQUENCY  0xa                  # write value 10  0xa              to item id 0x2007000b in layer 1
+Flash CFG-SFODO-FREQUENCY  0xa                  # write value 10  0xa              to item id 0x2007000b in layer 2
+  RAM CFG-SFCORE-USE_SF    0                    # write value 0                    to item id 0x10080001 in layer 0
+  BBR CFG-SFCORE-USE_SF    0                    # write value 0                    to item id 0x10080001 in layer 1
+Flash CFG-SFCORE-USE_SF    0                    # write value 0                    to item id 0x10080001 in layer 2

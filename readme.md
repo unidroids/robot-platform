@@ -63,7 +63,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 
 
 
-| **MAPS-OSM** | 9040 | Mapová služba - postavená na OSM |
+| **MAPS-STROMOVKA** | 9040 | Mapová služba - postavená na OSM odladěná pro Stromovku |
 
 
 

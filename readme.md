@@ -49,6 +49,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **OOW**          | *9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **GNSS-RTK**     | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
+| **GNSS-IMU**     | 9016 | Zpracování UBX-ESF-RAW (100Hz IMU ze ZED-F9R) a 20Hz úhlový přírůstek |
 
 
 

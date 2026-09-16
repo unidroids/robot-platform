@@ -166,6 +166,42 @@ class TestLightFusion(unittest.TestCase):
         extracted_payload = bytes(buffer[6:6 + payload_len])
         self.assertEqual(extracted_payload, payload)
 
+    def test_raw_data_logging(self):
+        import tempfile
+        import os
+        from datetime import datetime
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            serial_io = GnssSerialIO(log_dir=tmpdir)
+            # Ručně zavoláme inicializaci logů (která probíhá v open)
+            now = datetime.now()
+            date_dir = os.path.join(tmpdir, now.strftime('%Y-%m-%d'))
+            os.makedirs(date_dir, exist_ok=True)
+            time_prefix = now.strftime('%H-%M-%S')
+            serial_io._rx_log_file = open(os.path.join(date_dir, f"{time_prefix}-rx.bin"), "wb")
+            serial_io._tx_log_file = open(os.path.join(date_dir, f"{time_prefix}-tx.bin"), "wb")
+
+            test_rx_bytes = b'\xB5\x62\x10\x03\x08\x00'
+            test_tx_bytes = b'\xB5\x62\x06\x01\x08\x00'
+
+            # Zápis do rx logu (jako v _reader)
+            serial_io._rx_log_file.write(test_rx_bytes)
+            # Zápis do tx logu (přes send_raw logiku)
+            serial_io._tx_log_file.write(test_tx_bytes)
+
+            serial_io.close()
+
+            # Ověření, že soubory existují a obsahují očekávaná data
+            rx_path = os.path.join(date_dir, f"{time_prefix}-rx.bin")
+            tx_path = os.path.join(date_dir, f"{time_prefix}-tx.bin")
+
+            self.assertTrue(os.path.exists(rx_path))
+            self.assertTrue(os.path.exists(tx_path))
+
+            with open(rx_path, "rb") as f:
+                self.assertEqual(f.read(), test_rx_bytes)
+            with open(tx_path, "rb") as f:
+                self.assertEqual(f.read(), test_tx_bytes)
 
 
 if __name__ == '__main__':

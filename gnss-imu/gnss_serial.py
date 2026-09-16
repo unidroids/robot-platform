@@ -1,13 +1,16 @@
 # gnss_serial.py
+import os
 import serial
 import threading
 import queue
 import sys
+from datetime import datetime
 from typing import Optional, Tuple
 
 # Konfigurace zařízení - konstanty na začátku souboru dle zadání
 DEFAULT_DEVICE = '/dev/robot-gnss-imu'
 DEFAULT_BAUDRATE = 921600
+DEFAULT_LOG_DIR = '/data/robot/gnss-imu'
 
 class GnssSerialIO:
     """
@@ -15,28 +18,67 @@ class GnssSerialIO:
     - Otevírá sériový port a běží ve vyhrazeném čtecím vlákně
     - Provádí rychlý UBX framing (Sync 0xB5 0x62, kontrola Fletcher checksumu)
     - Ukládá validní UBX zprávy (msg_class, msg_id, payload) do FIFO fronty
+    - Loguje surová data ze sériové linky do /data/robot/gnss-imu/<rrrr-mm-dd>/<hh-mm-ss>-rx/tx.bin
     """
 
-    def __init__(self, device: str = DEFAULT_DEVICE, baudrate: int = DEFAULT_BAUDRATE, fifo_size: int = 150):
+    def __init__(
+        self,
+        device: str = DEFAULT_DEVICE,
+        baudrate: int = DEFAULT_BAUDRATE,
+        fifo_size: int = 150,
+        log_dir: str = DEFAULT_LOG_DIR
+    ):
         self.device = device
         self.baudrate = baudrate
+        self.log_dir = log_dir
         self._fifo: "queue.Queue[Tuple[int, int, bytes]]" = queue.Queue(maxsize=fifo_size)
 
         self._ser: Optional[serial.Serial] = None
         self._stop_event = threading.Event()
         self._reader_thread: Optional[threading.Thread] = None
 
+        self._rx_log_file = None
+        self._tx_log_file = None
+        self._rx_log_path = None
+        self._tx_log_path = None
+
         self.stats_received = 0
         self.stats_corrupted = 0
         self.stats_checksum_err = 0
 
-    def open(self) -> None:
+    @property
+    def rx_log_path(self) -> Optional[str]:
+        return self._rx_log_path
+
+    @property
+    def tx_log_path(self) -> Optional[str]:
+        return self._tx_log_path
+
+    def open(self, start_time: Optional[datetime] = None) -> None:
         self._stop_event.clear()
         while not self._fifo.empty():
             try:
                 self._fifo.get_nowait()
             except queue.Empty:
                 break
+
+        # Otevření logovacích souborů pro surová data (rx / tx) s časem příkazu START
+        now = start_time or datetime.now()
+        try:
+            date_dir = os.path.join(self.log_dir, now.strftime('%Y-%m-%d'))
+            os.makedirs(date_dir, exist_ok=True)
+            time_prefix = now.strftime('%H-%M-%S')
+            self._rx_log_path = os.path.join(date_dir, f"{time_prefix}-rx.bin")
+            self._tx_log_path = os.path.join(date_dir, f"{time_prefix}-tx.bin")
+            self._rx_log_file = open(self._rx_log_path, "wb")
+            self._tx_log_file = open(self._tx_log_path, "wb")
+            print(f"[GnssSerialIO] Log files opened on START: {self._rx_log_path}")
+        except Exception as e:
+            print(f"[GnssSerialIO] Logging disabled: {e}", file=sys.stderr)
+            self._rx_log_file = None
+            self._tx_log_file = None
+            self._rx_log_path = None
+            self._tx_log_path = None
 
         self._ser = serial.Serial(self.device, self.baudrate, timeout=0.05)
         self._reader_thread = threading.Thread(target=self._reader, daemon=True)
@@ -54,6 +96,46 @@ class GnssSerialIO:
             except Exception:
                 pass
             self._ser = None
+
+        # Uzavření logovacích souborů na příkaz STOP
+        if self._rx_log_file:
+            try:
+                self._rx_log_file.flush()
+                self._rx_log_file.close()
+                if self._rx_log_path:
+                    print(f"[GnssSerialIO] Log file closed on STOP: {self._rx_log_path}")
+            except Exception:
+                pass
+            self._rx_log_file = None
+            self._rx_log_path = None
+
+        if self._tx_log_file:
+            try:
+                self._tx_log_file.flush()
+                self._tx_log_file.close()
+                if self._tx_log_path:
+                    print(f"[GnssSerialIO] Log file closed on STOP: {self._tx_log_path}")
+            except Exception:
+                pass
+            self._tx_log_file = None
+            self._tx_log_path = None
+
+    def send_raw(self, data: bytes) -> bool:
+        """Odešle data na sériový port a zaloguje je do tx.bin."""
+        if not self._ser or not self._ser.is_open:
+            return False
+        try:
+            self._ser.write(data)
+            if self._tx_log_file:
+                try:
+                    self._tx_log_file.write(data)
+                    self._tx_log_file.flush()
+                except Exception:
+                    pass
+            return True
+        except Exception as e:
+            print(f"[GnssSerialIO] Write error: {e}", file=sys.stderr)
+            return False
 
     def get_message(self, timeout: Optional[float] = 0.1) -> Optional[Tuple[int, int, bytes]]:
         """Vyzvedne z fronty jednu validní zprávu (msg_class, msg_id, payload)."""
@@ -87,6 +169,13 @@ class GnssSerialIO:
                 chunk = self._ser.read(in_waiting if in_waiting > 0 else 1)
                 if not chunk:
                     continue
+
+                if self._rx_log_file:
+                    try:
+                        self._rx_log_file.write(chunk)
+                        self._rx_log_file.flush()
+                    except Exception:
+                        pass
 
                 buffer.extend(chunk)
 

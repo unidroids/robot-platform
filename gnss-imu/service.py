@@ -3,6 +3,7 @@ import threading
 import time
 import json
 import zmq
+from datetime import datetime
 from typing import Optional
 
 from gnss_serial import GnssSerialIO, DEFAULT_DEVICE, DEFAULT_BAUDRATE
@@ -54,10 +55,11 @@ class GnssImuService:
             self.zmq_pub = self.zmq_context.socket(zmq.PUB)
             self.zmq_pub.bind(ZMQ_IPC_ENDPOINT)
 
-            # 2. Otevření sériového portu
+            # 2. Otevření sériového portu (čas logu je dán okamžikem příkazu START)
+            start_time = datetime.now()
             self.gnss_serial = GnssSerialIO(self.device, self.baudrate)
             try:
-                self.gnss_serial.open()
+                self.gnss_serial.open(start_time=start_time)
             except Exception as e:
                 self._cleanup_resources()
                 return f"ERR SERIAL_OPEN_FAILED: {e}"
@@ -137,6 +139,7 @@ class GnssImuService:
                 "published": self.stats_published,
                 "bias_z": round(fusion_stats.get("bias_z", 0.0), 4),
                 "latest_wz": round(fusion_stats.get("latest_wz", 0.0), 3),
+                "rx_log": self.gnss_serial.rx_log_path if self.gnss_serial else None,
                 "corrupted": corrupted,
                 "chk_err": chk_err
             }

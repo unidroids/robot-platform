@@ -9,6 +9,7 @@ Odlehčená služba pro příjem zpráv `UBX-ESF-RAW` (100Hz IMU surová data) z
 * **ZeroMQ IPC:** `ipc:///tmp/robot-gnss-imu`
 * **ZeroMQ Topic:** `GYRO`
 * **Výstupní frekvence:** 20 Hz (interval 50 ms)
+* **Logování surových dat:** `/data/robot/gnss-imu/<rrrr-mm-dd>/<hh-mm-ss>-rx.bin` a `<hh-mm-ss>-tx.bin` (den a čas je dán okamžikem příkazu `START`, log se uzavře s příkazem `STOP`)
 * **Formát JSON zprávy:**
   ```json
   {

@@ -10,6 +10,11 @@ sudo mkdir -p "$LOG_DIR"
 sudo touch "$LOG_FILE"
 sudo chmod 664 "$LOG_FILE"
 
+echo "📁 Creating raw serial data directory..."
+sudo mkdir -p "/data/robot/gnss-imu"
+sudo chown -R user:user "/data/robot/gnss-imu" || true
+sudo chmod -R 775 "/data/robot/gnss-imu" || true
+
 echo "🛠  Creating systemd service robot-gnss-imu"
 
 sudo tee "$SERVICE_PATH" > /dev/null <<'EOF'

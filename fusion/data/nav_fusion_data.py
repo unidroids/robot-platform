@@ -30,6 +30,10 @@ class NavFusionData:
     fusionSol: str
     bestnav_pos_type: str = "NONE"
     uniheading_pos_type: str = "NONE"
+    pitch: float = 0.0
+    roll: float = 0.0
+    heading_source: str = "NONE"
+    antenna_status: str = "INIT"
 
     # --- API ---
     def to_json(self) -> str:
@@ -50,6 +54,10 @@ class NavFusionData:
             "fusionSol": self.fusionSol,
             "bestnav_pos_type": self.bestnav_pos_type,
             "uniheading_pos_type": self.uniheading_pos_type,
+            "pitch": self.pitch,
+            "roll": self.roll,
+            "heading_source": self.heading_source,
+            "antenna_status": self.antenna_status,
         })
 
 

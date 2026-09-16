@@ -55,6 +55,8 @@ class FusionService:
                 return "IDLE"
             state_dict = asdict(self._state)
             mode = state_dict.pop("mode", "IDLE")
+            if self.core:
+                state_dict["diagnostics"] = self.core.get_diagnostics()
             state_json = json.dumps(state_dict)
             solution = asdict(self.core.get_solution()) if self.core else {}
             solution_json = json.dumps(solution)

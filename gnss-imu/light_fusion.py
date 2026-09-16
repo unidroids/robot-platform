@@ -11,10 +11,11 @@ class LightFusion:
     """
     Light fúze pro zpracování 100Hz vzorků z UBX-ESF-RAW:
     - 2s synchronní kalibrace nulového biasu s detekcí klidu přes akcelerometr
+    - Výpočet normálového gravitačního vektoru g0 a kalibrace nulového náklonu (pitch_bias, roll_bias)
     - Výpočet časového kroku dt z hardwarového sTtag (s ošetřením 32-bit rolloveru)
     - Numerická integrace přírůstku úhlu delta_yaw kolem osy Z (kompasová konvence: CW = +)
-    - Uchování okamžité úhlové rychlosti wz z posledního vzorku
-    - Poskytování delta_yaw a wz pro 20Hz publikaci přes pop_20hz_increment()
+    - Dynamický komplementární filtr pro předklon (pitch) a boční náklon (roll)
+    - Poskytování delta_yaw, wz, pitch, roll a zrychlení pro 20Hz publikaci
     """
 
     def __init__(self, orientation_sign: float = DEFAULT_ORIENTATION_SIGN):
@@ -24,6 +25,9 @@ class LightFusion:
         # Kalibrace
         self.is_calibrating = False
         self.bias_z = 0.0
+        self.pitch_bias = 0.0
+        self.roll_bias = 0.0
+        self.gravity_norm = 9.81
         self._calib_gyro_samples: List[float] = []
         self._calib_acc_samples: List[Tuple[float, float, float]] = []
 
@@ -35,6 +39,13 @@ class LightFusion:
         self._sample_count: int = 0
         self._total_samples: int = 0
 
+        # Stav náklonu (pitch, roll) a zrychlení
+        self._pitch: Optional[float] = None
+        self._roll: Optional[float] = None
+        self._latest_ax: float = 0.0
+        self._latest_ay: float = 0.0
+        self._latest_az: float = 9.81
+
     def start_calibration(self) -> None:
         """Přepne fúzi do režimu sběru vzorků pro kalibraci."""
         with self._lock:
@@ -44,10 +55,12 @@ class LightFusion:
             self._last_sTtag = None
             self._accumulated_delta_yaw = 0.0
             self._sample_count = 0
+            self._pitch = None
+            self._roll = None
 
     def finish_calibration(self, max_acc_std: float = 0.6, max_gyro_std: float = 1.5) -> Tuple[bool, str]:
         """
-        Ukončí kalibraci, vyhodnotí klid robota a spočítá gyro bias.
+        Ukončí kalibraci, vyhodnotí klid robota, spočítá gyro bias a gravitační vektor (nulový náklon).
         Vrací (úspěch: bool, zpráva: str).
         """
         with self._lock:
@@ -57,7 +70,6 @@ class LightFusion:
                 return False, f"ERR NOT ENOUGH SAMPLES ({n} < 30)"
 
             # Kontrola stability akcelerometru (klid robota)
-            # Spočítáme velikost zrychlení norm = sqrt(ax^2 + ay^2 + az^2) pro každý vzorek
             norms = [math.sqrt(ax * ax + ay * ay + az * az) for ax, ay, az in self._calib_acc_samples]
             mean_norm = sum(norms) / n
             acc_var = sum((x - mean_norm) ** 2 for x in norms) / n
@@ -71,12 +83,25 @@ class LightFusion:
             if acc_std > max_acc_std or gyro_std > max_gyro_std:
                 return False, f"ERR MOTION DETECTED (acc_std={acc_std:.3f}>{max_acc_std}, gyro_std={gyro_std:.3f}>{max_gyro_std})"
 
-            # Robot je v klidu - uložíme bias
+            # Průměrný vektor tíhového zrychlení v klidu
+            mean_ax = sum(ax for ax, ay, az in self._calib_acc_samples) / n
+            mean_ay = sum(ay for ax, ay, az in self._calib_acc_samples) / n
+            mean_az = sum(az for ax, ay, az in self._calib_acc_samples) / n
+
             self.bias_z = mean_gyro
+            self.gravity_norm = mean_norm
+
+            # Referenční úhly náklonu při stání na rovině (montážní offset senzoru)
+            self.pitch_bias = math.degrees(math.atan2(mean_ax, math.sqrt(mean_ay * mean_ay + mean_az * mean_az)))
+            self.roll_bias = math.degrees(math.atan2(mean_ay, mean_az))
+
             self._accumulated_delta_yaw = 0.0
             self._last_sTtag = None
             self._sample_count = 0
-            return True, f"OK bias={self.bias_z:.4f} samples={n}"
+            self._pitch = None
+            self._roll = None
+
+            return True, f"OK bias_z={self.bias_z:.4f} pitch_0={self.pitch_bias:.2f}° roll_0={self.roll_bias:.2f}° g={self.gravity_norm:.2f} samples={n}"
 
     def update_sample(
         self,
@@ -113,36 +138,64 @@ class LightFusion:
 
             self._last_sTtag = sTtag
 
-            # Odečtení biasu a převod na kompasovou konvenci (CW = +)
+            # 1. Yaw & Wz: odečtení biasu a převod na kompasovou konvenci (CW = +)
             wz_calib = (gyroZ - self.bias_z) * self.orientation_sign
-
-            # Integrace přírůstku úhlu
             self._accumulated_delta_yaw += wz_calib * dt_sec
             self._latest_wz = wz_calib
             self._latest_ts = rx_mono
             self._sample_count += 1
 
-    def pop_20hz_increment(self) -> Tuple[float, float, float, int]:
+            # 2. Zrychlení
+            self._latest_ax = accX
+            self._latest_ay = accY
+            self._latest_az = accZ
+
+            # 3. Pitch & Roll: statický odhad z akcelerometru minus kalibrovaný offset
+            acc_pitch = math.degrees(math.atan2(accX, math.sqrt(accY * accY + accZ * accZ))) - self.pitch_bias
+            acc_roll = math.degrees(math.atan2(accY, accZ)) - self.roll_bias
+
+            # Komplementární filtr: 98 % integrace z gyra, 2 % dotahování k akcelerometru
+            if self._pitch is None or dt_sec <= 0:
+                self._pitch = acc_pitch
+                self._roll = acc_roll
+            else:
+                alpha = 0.98
+                # gyroY je rychlost klopení (pitch rate), gyroX je rychlost klonění (roll rate)
+                self._pitch = alpha * (self._pitch + gyroY * dt_sec) + (1.0 - alpha) * acc_pitch
+                self._roll = alpha * (self._roll + gyroX * dt_sec) + (1.0 - alpha) * acc_roll
+
+    def pop_20hz_increment(self) -> Tuple[float, float, float, int, float, float, float, float, float]:
         """
-        Atomicky vrátí (ts, delta_yaw, wz, samples_count) za uplynulou 20Hz periodu
-        a vynuluje akumulátor delta_yaw pro další periodu.
+        Atomicky vrátí:
+        (ts, delta_yaw, wz, samples_count, pitch, roll, ax, ay, az)
+        za uplynulou 20Hz periodu a vynuluje akumulátor delta_yaw pro další periodu.
         """
         with self._lock:
             ts = self._latest_ts if self._latest_ts > 0.0 else time.monotonic()
             delta_yaw = self._accumulated_delta_yaw
             wz = self._latest_wz
             samples = self._sample_count
+            pitch = self._pitch if self._pitch is not None else 0.0
+            roll = self._roll if self._roll is not None else 0.0
+            ax = self._latest_ax
+            ay = self._latest_ay
+            az = self._latest_az
 
             # Nulování pro další 20Hz periodu
             self._accumulated_delta_yaw = 0.0
             self._sample_count = 0
 
-            return ts, delta_yaw, wz, samples
+            return ts, delta_yaw, wz, samples, pitch, roll, ax, ay, az
 
     def get_stats(self) -> dict:
         with self._lock:
             return {
                 "bias_z": self.bias_z,
+                "pitch_bias": self.pitch_bias,
+                "roll_bias": self.roll_bias,
+                "gravity_norm": self.gravity_norm,
+                "latest_pitch": self._pitch if self._pitch is not None else 0.0,
+                "latest_roll": self._roll if self._roll is not None else 0.0,
                 "total_samples": self._total_samples,
                 "latest_wz": self._latest_wz,
                 "is_calibrating": self.is_calibrating

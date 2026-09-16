@@ -24,7 +24,10 @@ class FusionPublisher:
     def start(self):
         if self.running: return
         self._zmq_pub = self._zmq_context.socket(zmq.PUB)
-        self._zmq_pub.bind("ipc:///tmp/robot-fusion")
+        try:
+            self._zmq_pub.bind("ipc:///tmp/robot-fusion")
+        except zmq.error.ZMQError as e:
+            print(f"[FusionPublisher] Warning: bind to ipc:///tmp/robot-fusion failed: {e}")
         
         self.running = True
         self._publish_counter = 0
@@ -81,8 +84,8 @@ class FusionPublisher:
         debug_data = {
             "gps_heading": asdict(self.core.gps_heading),
             "dual_heading": asdict(self.core.dual_heading),
-            "compass_heading": asdict(self.core.compass_heading),
-            "fused_heading": asdict(self.core.fused_heading)
+            "fused_heading": asdict(self.core.fused_heading),
+            "diagnostics": self.core.get_diagnostics()
         }
         try:
             self._zmq_pub.send_multipart([b"DEBUG_HEADING", json.dumps(debug_data).encode('utf-8')])

@@ -138,6 +138,10 @@ class GnssImuService:
                 "handled": handled,
                 "published": self.stats_published,
                 "bias_z": round(fusion_stats.get("bias_z", 0.0), 4),
+                "pitch_bias": round(fusion_stats.get("pitch_bias", 0.0), 2),
+                "roll_bias": round(fusion_stats.get("roll_bias", 0.0), 2),
+                "latest_pitch": round(fusion_stats.get("latest_pitch", 0.0), 2),
+                "latest_roll": round(fusion_stats.get("latest_roll", 0.0), 2),
                 "latest_wz": round(fusion_stats.get("latest_wz", 0.0), 3),
                 "rx_log": self.gnss_serial.rx_log_path if self.gnss_serial else None,
                 "corrupted": corrupted,
@@ -171,12 +175,17 @@ class GnssImuService:
             if next_publish_time < time.monotonic():
                 next_publish_time = time.monotonic() + PUBLISH_INTERVAL_SEC
 
-            ts, delta_yaw, wz, samples = self.light_fusion.pop_20hz_increment()
+            ts, delta_yaw, wz, samples, pitch, roll, ax, ay, az = self.light_fusion.pop_20hz_increment()
 
             data = {
                 "ts": round(ts, 4),
                 "delta_yaw": round(delta_yaw, 4),
-                "wz": round(wz, 4)
+                "wz": round(wz, 4),
+                "pitch": round(pitch, 2),
+                "roll": round(roll, 2),
+                "ax": round(ax, 3),
+                "ay": round(ay, 3),
+                "az": round(az, 3)
             }
             json_str = json.dumps(data)
             self.last_published_json = json_str

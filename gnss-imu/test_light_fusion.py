@@ -86,7 +86,7 @@ class TestLightFusion(unittest.TestCase):
             )
             # Každých 5 vzorků (50 ms = 20 Hz) vyčteme přírůstek
             if (i + 1) % 5 == 0:
-                ts, delta, wz, samples = fusion.pop_20hz_increment()
+                ts, delta, wz, samples, pitch, roll, ax, ay, az = fusion.pop_20hz_increment()
                 self.assertEqual(samples, 5)
                 self.assertAlmostEqual(wz, 60.0, places=2)
                 self.assertAlmostEqual(delta, 3.0, places=2)  # 60 °/s * 0.05 s = 3.0°
@@ -107,7 +107,7 @@ class TestLightFusion(unittest.TestCase):
         t2 = 0x0000000A
         fusion.update_sample(0, 0, -50.0, 0, 0, 9.81, t2, 1.02)
 
-        ts, delta, wz, samples = fusion.pop_20hz_increment()
+        ts, delta, wz, samples, pitch, roll, ax, ay, az = fusion.pop_20hz_increment()
         # dt = 20 ms = 0.02 s -> delta = 50.0 * 0.02 = 1.0°
         self.assertAlmostEqual(delta, 1.0, places=2)
 
@@ -126,9 +126,27 @@ class TestLightFusion(unittest.TestCase):
         ok2 = handler.handle(0x10, 0x03, payload2)
         self.assertTrue(ok2)
 
-        ts, delta, wz, samples = fusion.pop_20hz_increment()
+        ts, delta, wz, samples, pitch, roll, ax, ay, az = fusion.pop_20hz_increment()
         self.assertAlmostEqual(wz, 30.0, places=1)
         self.assertAlmostEqual(delta, 0.3, places=2)  # 30 deg/s * 0.01 s = 0.3°
+
+    def test_pitch_roll_calculation(self):
+        fusion = LightFusion()
+        # Kalibrace na vodorovné podložce
+        fusion.start_calibration()
+        for t in range(1000, 1500, 10):
+            fusion.update_sample(0, 0, 0, 0.0, 0.0, 9.81, t, t / 1000.0)
+        ok, msg = fusion.finish_calibration()
+        self.assertTrue(ok)
+        self.assertAlmostEqual(fusion.pitch_bias, 0.0, places=1)
+        self.assertAlmostEqual(fusion.roll_bias, 0.0, places=1)
+
+        # Simulujeme náklon robota dopředu (pitch ~ 5.7°: ax = 1.0 m/s^2, az = 9.76 m/s^2)
+        fusion.update_sample(0, 0, 0, 1.0, 0.0, 9.76, 1600, 1.6)
+        ts, delta, wz, samples, pitch, roll, ax, ay, az = fusion.pop_20hz_increment()
+        self.assertGreater(pitch, 4.0)
+        self.assertLess(pitch, 7.0)
+        self.assertAlmostEqual(roll, 0.0, places=1)
 
     def test_ubx_checksum(self):
         # Ověření Fletcherova kontrolního součtu pro [0x10, 0x03, 0x00, 0x00]

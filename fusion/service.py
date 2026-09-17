@@ -62,7 +62,11 @@ class FusionService:
             solution_json = json.dumps(solution)
             return f"{mode} {state_json} {solution_json}"
 
-    # ---------------------- lifecycle ------------------------
+    def start(self) -> str:
+        return self._start()
+
+    def stop(self) -> str:
+        return self._stop()
 
     def _start(self):
         with self._lock:

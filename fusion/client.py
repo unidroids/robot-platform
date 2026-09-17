@@ -40,6 +40,18 @@ def client_thread(sock:socket.socket, addr, fusion : FusionService):
 
                 # --- standard API ---
 
+                elif line == "START":
+                    if fusion.running:
+                        fusion.restart()
+                        f.write(b'OK ALREADY_RUNNING\n')
+                    else:
+                        res = fusion._start()
+                        f.write((res + '\n').encode('utf-8'))
+
+                elif line == "STOP":
+                    res = fusion._stop()
+                    f.write((res + '\n').encode('utf-8'))
+
                 elif line == "PING":
                     f.write(b'PONG FUSION\n')
 

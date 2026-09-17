@@ -14,7 +14,11 @@ echo "🗑️ Odstraňuji soubor služby $SERVICE_PATH..."
 sudo rm -f "$SERVICE_PATH"
 
 echo "🔄 Aktualizuji systemd..."
+sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl reset-failed
+
+# Uvolnění portu 9104 pokud proces ještě visí
+/usr/bin/fuser -k 9104/tcp 2>/dev/null || true
 
 echo "✅ Služba $SERVICE_NAME byla úspěšně odregistrována."

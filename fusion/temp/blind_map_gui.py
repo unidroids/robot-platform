@@ -939,7 +939,7 @@ class BlindMapApp:
             hdgs = [p.get("trk_gnd", 0.0) for p in self.loader.slave_pts if p.get("hor_spd", 0.0) > 0.25]
             self.ax_hdg.plot(ts, hdgs, color="#9467bd", linewidth=1.2, linestyle=":", label="BESTNAV Slave trk")
 
-        self.ax_hdg.axvline(x=self.current_time, color="red", linewidth=1.5, linestyle=":")
+        self.line_cursor_hdg = self.ax_hdg.axvline(x=self.current_time, color="red", linewidth=1.5, linestyle=":", label="_nolegend_")
         self.ax_hdg.set_ylim(0, 360)
         self.ax_hdg.legend(loc="upper right", fontsize=8, ncol=2)
 
@@ -961,7 +961,7 @@ class BlindMapApp:
             self.ax_spd.plot(ts, wz, color="#9467bd", linewidth=1.0, alpha=0.8, label="Gyro wz [°/s]")
 
         self.ax_spd.axhline(0.0, color="gray", linewidth=0.8, linestyle="--")
-        self.ax_spd.axvline(x=self.current_time, color="red", linewidth=1.5, linestyle=":")
+        self.line_cursor_spd = self.ax_spd.axvline(x=self.current_time, color="red", linewidth=1.5, linestyle=":", label="_nolegend_")
         self.ax_spd.legend(loc="upper right", fontsize=8)
 
     # -------------------------------------------------------------------------
@@ -1180,10 +1180,10 @@ class BlindMapApp:
 
     def update_plots_cursor_only(self):
         self._draw_map()
-        for ax in (self.ax_hdg, self.ax_spd):
-            for line in ax.lines:
-                if line.get_linestyle() == ":":
-                    line.set_xdata([self.current_time, self.current_time])
+        if hasattr(self, 'line_cursor_hdg') and self.line_cursor_hdg is not None and self.line_cursor_hdg in self.ax_hdg.lines:
+            self.line_cursor_hdg.set_xdata([self.current_time, self.current_time])
+        if hasattr(self, 'line_cursor_spd') and self.line_cursor_spd is not None and self.line_cursor_spd in self.ax_spd.lines:
+            self.line_cursor_spd.set_xdata([self.current_time, self.current_time])
         self.canvas_map.draw_idle()
         self.canvas_graphs.draw_idle()
 

@@ -804,6 +804,7 @@ class MissionRobotourService:
             self.pilot_status = status_data
             p_state = status_data.get("state", "IDLE")
             p_info = status_data.get("info", "")
+            p_source = status_data.get("source", "")
             wp_idx = status_data.get("wp_index", 0)
             wp_tot = status_data.get("wp_total", 0)
             dist_left = status_data.get("distance_to_goal_m", 0.0)
@@ -838,7 +839,7 @@ class MissionRobotourService:
                 self._stop_driving_services()
                 return
 
-            # Krok 21: Jízda běží (nebo stav není STOPPED)
+            # Krok 21: Jízda běží
             elif p_state == "RUNNING":
                 self._set_state(21, "STEP_21_DRIVING", f"WP {wp_idx}/{wp_tot}, zbývá {dist_left} m, rychlost {speed} m/s")
                 self.terminal.show_message(
@@ -860,34 +861,51 @@ class MissionRobotourService:
                     return
 
                 elif btn == "pause_mission":
-                    # Krok 21b: Pozastavení
+                    # Pozastavení uživatelem
                     self.logger.log("USER_PAUSE_MISSION")
                     self._send_cmd("PILOT-ROBOTOUR", "PAUSE", timeout=2.0)
 
-                    # Krok 22: Stav pozastavení
-                    self._set_state(22, "STEP_22_PAUSED", "Robot je pozastaven")
-                    self.terminal.show_message(
-                        header="Robotour - Pozastaveno",
-                        text="Robot je pozastaven. Čekáme na vstup uživatele.",
-                        buttons=[
-                            {"id": "resume_mission", "text": "Pokračovat"},
-                            {"id": "cancel_mission", "text": "Zrušit misi"}
-                        ]
-                    )
+            # Krok 22: Robot je pozastaven (pilotem, watchdogem, překážkou nebo uživatelem)
+            elif p_state == "PAUSED":
+                info_str = f" ({p_info})" if p_info else (f" ({p_source})" if p_source else "")
+                self._set_state(22, "STEP_22_PAUSED", f"Pilot pozastaven{info_str}")
+                self.terminal.show_message(
+                    header="Robotour - Pozastaveno",
+                    text=f"Pozastaveno{info_str}\nWaypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\nRychlost {speed} m/s | GPS: {gps_sol}",
+                    buttons=[
+                        {"id": "resume_mission", "text": "Pokračovat"},
+                        {"id": "stop_mission", "text": "Stop"}
+                    ]
+                )
 
-                    btn_pause = await self._wait_for_button(["resume_mission", "cancel_mission"])
-                    if btn_pause == "resume_mission":
-                        self.logger.log("USER_RESUME_MISSION")
-                        self._send_cmd("PILOT-ROBOTOUR", "RESUME", timeout=2.0)
-                        continue
-                    else:
-                        self.logger.log("USER_CANCEL_FROM_PAUSE")
-                        self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=2.0)
-                        self._stop_driving_services()
-                        return
+                # Čekáme až 2 sekundy na případný stisk tlačítka Resume/Stop
+                btn = await self._wait_for_button(["resume_mission", "stop_mission"], timeout=2.0)
+                if btn == "stop_mission":
+                    self.logger.log("USER_STOP_MISSION")
+                    self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=2.0)
+                    self._stop_driving_services()
+                    return
+                elif btn == "resume_mission":
+                    self.logger.log("USER_RESUME_MISSION")
+                    self._send_cmd("PILOT-ROBOTOUR", "RESUME", timeout=2.0)
 
-            # Krok 23: Perioda cyklu
-            await asyncio.sleep(1.0)
+            # Ostatní stavy pilota (např. inicializace, čekání na data)
+            else:
+                self._set_state(19, "STEP_19_CHECK_PILOT", f"Stav pilota: {p_state} ({p_info or p_source})")
+                self.terminal.show_message(
+                    header="Robotour - Čekání na pilota",
+                    text=f"Stav: {p_state}\n{p_info or p_source}\nGPS: {gps_sol}",
+                    buttons=[{"id": "stop_mission", "text": "Stop"}]
+                )
+                btn = await self._wait_for_button(["stop_mission"], timeout=2.0)
+                if btn == "stop_mission":
+                    self.logger.log("USER_STOP_MISSION")
+                    self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=2.0)
+                    self._stop_driving_services()
+                    return
+
+            # Krok 23: Krátká pauza před dalším dotazem
+            await asyncio.sleep(0.5)
 
     # =========================================================================
     # Ukončování služeb

@@ -460,6 +460,60 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         # Musí úspěšně přejít do Kroku 4 (STEP_4_SCAN_QR)
         self.assertEqual(self.service.current_step, 4)
 
+    async def test_pilot_paused_handling(self):
+        """Ověření, že pokud pilot vrátí PAUSED (např. Lost OOW connection), stavový automat přejde do STEP_22_PAUSED a terminál obdrží zprávu."""
+        # Nastavíme mock pilota tak, aby po startu hlásil PAUSED
+        self.mocks["PILOT-ROBOTOUR"].response_map["STATUS"] = json.dumps({
+            "state": "PAUSED",
+            "source": "OOW_TCP",
+            "info": "Lost OOW connection",
+            "wp_index": 0,
+            "wp_total": 2,
+            "distance_to_goal_m": 131.3,
+            "speed": 0.0,
+            "gps_sol": "FIX"
+        })
+
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("destination_ok")
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("mission_go")
+        for _ in range(40):
+            if self.service.current_step == 22:
+                break
+            await asyncio.sleep(0.1)
+
+        # Stavový automat musí přejít do Kroku 22 (STEP_22_PAUSED)
+        self.assertEqual(self.service.current_step, 22)
+
+        # Terminál musí obdržet zprávu informující o pozastavení pilota
+        term_cmds = [c for c in self.mocks["TERMINAL"].received_cmds if c.startswith("MESSAGE {")]
+        self.assertTrue(any("Robotour - Pozastaveno" in c for c in term_cmds))
+        self.assertTrue(any("Lost OOW connection" in c for c in term_cmds))
+
+
 
 
 class TestMissionRobotourTCP(unittest.TestCase):

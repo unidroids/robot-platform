@@ -12,7 +12,7 @@ Mapová služba spravuje mapové podklady robota, topologický graf cest a posky
 
 ## 🔌 Síťový protokol (TCP Port 9040)
 
-Služba naslouchá na TCP portu `9040` (výchozí bind `0.0.0.0:9040`).
+Služba naslouchá na TCP portu `9040` (výchozí bind `127.0.0.1:9040`).
 
 ### Standardní řídicí příkazy:
 | Příkaz | Odpověď | Popis |

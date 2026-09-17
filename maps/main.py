@@ -26,7 +26,7 @@ def main():
     parser = argparse.ArgumentParser(description="Unidroids Robot Platform - MAPS Service")
     parser.add_argument("--port", type=int, default=DEFAULT_SERVICE_PORT, help=f"TCP port (default: {DEFAULT_SERVICE_PORT})")
     parser.add_argument("--map", type=str, default=None, help="Cesta k souboru mapy (výchozí: defaut_map.json)")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Listen host (default: 0.0.0.0)")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Listen host (default: 127.0.0.1)")
     args = parser.parse_args()
 
     service = MapService(map_file_path=args.map)

@@ -48,6 +48,12 @@ chmod 755 /data/logs/pilot_waypoints
 touch /data/logs/pilot_waypoints/pilot_waypoints.log
 chmod 664 /data/logs/pilot_waypoints/pilot_waypoints.log
 
+mkdir -p /data/logs/maps
+chown user:user /data/logs/maps
+chmod 755 /data/logs/maps
+touch /data/logs/maps/maps.log
+chmod 664 /data/logs/maps/maps.log
+
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
 ./register_fastapi.sh
@@ -99,6 +105,10 @@ chmod +x rtk_register.sh rtk_unregister.sh
 ./rtk_register.sh
 systemctl status robot-rtk
 
+chmod +x maps_register.sh maps_unregister.sh
+./maps_register.sh
+systemctl status robot-maps
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
@@ -109,6 +119,7 @@ systemctl status robot-rtk
 ./gps_unregister.sh
 ./rtk_unregister.sh
 ./camera_stereo_unregister.sh
+./maps_unregister.sh
 
 # status
 systemctl status fastapi-server
@@ -138,6 +149,7 @@ sudo systemctl restart robot-gnss-rtk
 sudo systemctl restart robot-heading
 sudo systemctl restart robot-lidar
 sudo systemctl restart robot-logger
+sudo systemctl restart robot-maps
 sudo systemctl restart robot-oow
 sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision

@@ -25,7 +25,7 @@ class RobotourPilotService:
     bezpečnostního dohledu OOW a fúzovaných pozičních dat.
     """
 
-    def __init__(self, route_json_path: str = None):
+    def __init__(self):
         self.state = "IDLE"  # IDLE, RUNNING, PAUSED, STOPPED, FINISHED
         self.status_info = ""
         self.source = ""
@@ -46,16 +46,6 @@ class RobotourPilotService:
         self.last_w = 0.0
         self.current_speed = 0.0
         
-        # Určení cesty k trase
-        if route_json_path:
-            self.route_json_path = route_json_path
-        else:
-            default_sys = "/opt/projects/robotour/pilot_robotour/waypoints/_route.json"
-            if os.path.exists(default_sys):
-                self.route_json_path = default_sys
-            else:
-                self.route_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "waypoints", "_route.json")
-
         self.path_tracker = None
         self.drive = DriveClient()
         self.drive.connect()
@@ -78,11 +68,22 @@ class RobotourPilotService:
         self.receiver = None
         self.oow_task = None
 
-    def start_service(self, max_speed=100, max_pwm=150, route_input=None):
+    def start_service(self, max_speed=100, max_pwm=150, route_input=None) -> tuple[bool, str]:
         if self.state in ["RUNNING"]:
-            return "ALREADY RUNNING"
+            return False, "ERR: ALREADY RUNNING"
             
-        print(f"[PilotRobotour] START: max_speed={max_speed}, max_pwm={max_pwm}")
+        if route_input is None:
+            return False, "ERR: START vyžaduje JSON payload s trasou"
+
+        # Inicializace a validace trasy přes PathTracker
+        try:
+            tracker = PathTracker(route_input, L_near_m=2.0)
+            self.path_tracker = tracker
+        except Exception as e:
+            print(f"[PilotRobotour] Chyba inicializace trasy: {e}")
+            return False, f"ERR: {e}"
+
+        print(f"[PilotRobotour] START: max_speed={max_speed}, max_pwm={max_pwm}, waypoints={len(self.path_tracker.waypoints)}")
         self.max_speed = max_speed
         self.max_pwm = max_pwm
         
@@ -96,39 +97,27 @@ class RobotourPilotService:
         self.logger = DataLogger(base_dir="/data/robot/pilot_robotour")
         self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,target_left,target_right,actual_left,actual_right,lidar_dist,state")
         
-        # Zpracování trasy (pokud je předána jako JSON / objekt)
-        if route_input is not None:
-            data_to_save = route_input
-            if isinstance(route_input, str) and (route_input.startswith("{") or route_input.startswith("[")):
-                try:
-                    data_to_save = json.loads(route_input)
-                except Exception:
-                    pass
-            
-            # Uložení do /data/robot/pilot_robotour/<yyyy-mm-dd>/<HH-MM-SS>/route.json
-            now = datetime.now()
-            base_dir = Path("/data/robot/pilot_robotour") / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
+        # Uložení do /data/robot/pilot_robotour/<yyyy-mm-dd>/<HH-MM-SS>/route.json
+        now = datetime.now()
+        base_dir = Path("/data/robot/pilot_robotour") / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
+        data_to_dump = route_input if isinstance(route_input, (dict, list)) else json.loads(route_input)
+        try:
+            base_dir.mkdir(parents=True, exist_ok=True)
+            route_file = base_dir / "route.json"
+            with open(route_file, "w", encoding="utf-8") as f:
+                json.dump(data_to_dump, f, indent=2, ensure_ascii=False)
+            print(f"[PilotRobotour] Uložena kopie trasy do: {route_file}")
+        except (PermissionError, OSError):
+            local_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "robot" / "pilot_robotour" / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
             try:
-                base_dir.mkdir(parents=True, exist_ok=True)
-                route_file = base_dir / "route.json"
+                local_dir.mkdir(parents=True, exist_ok=True)
+                route_file = local_dir / "route.json"
                 with open(route_file, "w", encoding="utf-8") as f:
-                    json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-                print(f"[PilotRobotour] Uložena kopie trasy do: {route_file}")
-            except (PermissionError, OSError):
-                local_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "robot" / "pilot_robotour" / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
-                try:
-                    local_dir.mkdir(parents=True, exist_ok=True)
-                    route_file = local_dir / "route.json"
-                    with open(route_file, "w", encoding="utf-8") as f:
-                        json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-                    print(f"[PilotRobotour] Uložena kopie trasy (fallback) do: {route_file}")
-                except Exception as e:
-                    print(f"[PilotRobotour] Chyba při ukládání route.json: {e}")
+                    json.dump(data_to_dump, f, indent=2, ensure_ascii=False)
+                print(f"[PilotRobotour] Uložena kopie trasy (fallback) do: {route_file}")
+            except Exception as e:
+                print(f"[PilotRobotour] Chyba při ukládání route.json: {e}")
 
-            self.path_tracker = PathTracker(data_to_save, L_near_m=2.0)
-        else:
-            self.path_tracker = PathTracker(self.route_json_path, L_near_m=2.0)
-        
         self.state = "RUNNING"
         self.source = "USER"
         self.status_info = "Starting"
@@ -144,7 +133,7 @@ class RobotourPilotService:
             self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
             self.control_thread.start()
         
-        return "OK"
+        return True, "OK"
 
     def stop_service(self):
         print("[PilotRobotour] Zastavuji službu (zpomaluji na 0)...")

@@ -72,16 +72,21 @@ async def handle_client(reader, writer, service):
                         try:
                             route_input = json.loads(json_str)
                         except Exception as e:
-                            print(f"[TCP_Server] Chyba parsování JSON v START: {e}")
+                            writer.write(f"ERR: Neplatny JSON format trasy ({e})\n".encode("utf-8"))
+                            await writer.drain()
+                            continue
                     else:
-                        if len(parts) >= 2 and parts[1].isdigit(): speed = int(parts[1])
-                        if len(parts) >= 3 and parts[2].isdigit(): pwm = int(parts[2])
+                        writer.write(b"ERR: START vyzaduje JSON payload s trasou\n")
+                        await writer.drain()
+                        continue
 
-                    service.start_service(max_speed=speed, max_pwm=pwm, route_input=route_input)
-                    
-                    if service.oow_task is None or service.oow_task.done():
-                        service.oow_task = asyncio.create_task(oow_poller(service))
-                    writer.write(b"OK\n")
+                    ok, msg = service.start_service(max_speed=speed, max_pwm=pwm, route_input=route_input)
+                    if ok:
+                        if service.oow_task is None or service.oow_task.done():
+                            service.oow_task = asyncio.create_task(oow_poller(service))
+                        writer.write(b"OK\n")
+                    else:
+                        writer.write(f"{msg}\n".encode("utf-8"))
                 elif cmd == "STOP":
                     service.stop_service()
                     writer.write(b"OK\n")

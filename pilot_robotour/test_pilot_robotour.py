@@ -22,18 +22,26 @@ class TestPilotRobotourLogic(unittest.TestCase):
     """Jednotkové testy logiky sledování trasy a stavového automatu."""
 
     def setUp(self):
-        self.route_file = os.path.join(os.path.dirname(__file__), "waypoints", "_route.json")
-        self.service = RobotourPilotService(route_json_path=self.route_file)
+        self.route_data = {
+            "metadata": {"area_name": "UnitTest"},
+            "nodes": [
+                {"id": "n1", "lat": 49.5541, "lon": 12.7411},
+                {"id": "n2", "lat": 49.5545, "lon": 12.7415},
+                {"id": "n3", "lat": 49.5550, "lon": 12.7420}
+            ],
+            "edges": []
+        }
+        self.service = RobotourPilotService()
 
     def tearDown(self):
         self.service.shutdown()
 
     def test_path_tracker_loaded(self):
-        tracker = PathTracker(self.route_file, L_near_m=2.0)
-        self.assertGreater(len(tracker.waypoints), 0)
+        tracker = PathTracker(self.route_data, L_near_m=2.0)
+        self.assertEqual(len(tracker.waypoints), 3)
         first_wp = tracker.waypoints[0]
-        self.assertGreater(first_wp.lat, 0.0)
-        self.assertGreater(first_wp.lon, 0.0)
+        self.assertAlmostEqual(first_wp.lat, 49.5541)
+        self.assertAlmostEqual(first_wp.lon, 12.7411)
 
     def test_state_transitions(self):
         self.assertEqual(self.service.state, "IDLE")
@@ -150,6 +158,20 @@ class TestPilotRobotourTCP(unittest.TestCase):
         st = json.loads(status_resp)
         self.assertEqual(st["state"], "RUNNING")
         self.assertEqual(st["wp_total"], 2)
+
+    def test_start_without_route_fails(self):
+        resp = self._send_cmd("START")
+        self.assertTrue(resp.startswith("ERR"), f"Očekávána ERR odpověď, získáno: {resp}")
+
+    def test_start_with_invalid_json_fails(self):
+        resp = self._send_cmd("START {invalid_json")
+        self.assertTrue(resp.startswith("ERR"), f"Očekávána ERR odpověď, získáno: {resp}")
+
+    def test_start_with_insufficient_points_fails(self):
+        import json
+        bad_route = json.dumps({"nodes": [{"id": "n1", "lat": 49.5541, "lon": 12.7411}]})
+        resp = self._send_cmd(f"START {bad_route}")
+        self.assertTrue(resp.startswith("ERR"), f"Očekávána ERR odpověď, získáno: {resp}")
 
     def test_stop(self):
         resp = self._send_cmd("STOP")

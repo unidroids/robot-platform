@@ -13,14 +13,24 @@ try:
 except ImportError:
     zmq = None
 
-from .data_logger import MissionDataLogger
-from .microservices import (
-    send_tcp_command,
-    ping_service,
-    check_all_services,
-    MICROSERVICES_CONFIG
-)
-from .terminal_client import TerminalClient
+try:
+    from .data_logger import MissionDataLogger
+    from .microservices import (
+        send_tcp_command,
+        ping_service,
+        check_all_services,
+        MICROSERVICES_CONFIG
+    )
+    from .terminal_client import TerminalClient
+except (ImportError, ValueError):
+    from data_logger import MissionDataLogger
+    from microservices import (
+        send_tcp_command,
+        ping_service,
+        check_all_services,
+        MICROSERVICES_CONFIG
+    )
+    from terminal_client import TerminalClient
 
 
 def calculate_geodesic_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

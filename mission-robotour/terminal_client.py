@@ -2,7 +2,10 @@
 from __future__ import annotations
 import json
 from typing import List, Dict, Optional
-from .microservices import send_tcp_command
+try:
+    from .microservices import send_tcp_command
+except (ImportError, ValueError):
+    from microservices import send_tcp_command
 
 
 class TerminalClient:

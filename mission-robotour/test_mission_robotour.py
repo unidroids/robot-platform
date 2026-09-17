@@ -262,10 +262,12 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.1)
         self.assertIn(self.service.current_step, (19, 21))
 
-        # Ověříme, že DRIVE dostal příkaz ON a PILOT-ROBOTOUR dostal START
+        # Ověříme, že DRIVE dostal příkaz ON a PILOT-ROBOTOUR dostal START a LIDAR dostal START
         drive_cmds = self.mocks["DRIVE"].received_cmds
         pilot_cmds = self.mocks["PILOT-ROBOTOUR"].received_cmds
+        lidar_cmds = self.mocks["LIDAR"].received_cmds
         self.assertIn("ON", drive_cmds)
+        self.assertIn("START", lidar_cmds)
         self.assertTrue(any(c.startswith("START") for c in pilot_cmds))
 
         # 6. Změníme odpověď pilota na FINISHED
@@ -279,12 +281,14 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
             if self.service.current_step == 20:
                 break
             await asyncio.sleep(0.1)
+
         self.assertEqual(self.service.current_step, 20)
 
-        # Simulujeme stisk 'acknowledge' na obrazovce cíle
+        # 7. Simulace potvrzení 'acknowledge' v cíli
         self.service.on_button_pressed("acknowledge")
-        
-        # Počkáme na návrat do kroku 2
+        await asyncio.sleep(0.3)
+
+        # Mělo by dojít k návratu na úvodní obrazovku (krok 2)
         for _ in range(30):
             if self.service.current_step == 2:
                 break
@@ -347,6 +351,33 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         # Ověříme, že jsme se úspěšně dostali do jízdního režimu
         self.assertIn(self.service.current_step, (18, 19, 21))
+
+    async def test_cancel_mission_stops_all_driving_services(self):
+        """Ověření, že při zrušení mise (cancel_mission) se spolehlivě zastaví všechny pohybové služby."""
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        await asyncio.sleep(0.4)
+
+        # Krok 2 -> scan_qrcode
+        self.service.on_button_pressed("scan_qrcode")
+        await asyncio.sleep(0.2)
+
+        # Krok 4 -> QR kód
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        await asyncio.sleep(0.3)
+
+        # Krok 15 -> cancel_mission
+        self.service.on_button_pressed("cancel_mission")
+        await asyncio.sleep(0.4)
+
+        # Po zrušení musí být robot vrácen na Krok 2
+        self.assertEqual(self.service.current_step, 2)
+
+        # A všechny pohybové služby musí obdržet STOP / OFF
+        self.assertIn("OFF", self.mocks["DRIVE"].received_cmds)
+        self.assertIn("STOP", self.mocks["PILOT-ROBOTOUR"].received_cmds)
+        self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
+        self.assertIn("STOP", self.mocks["MAPS"].received_cmds)
 
 
 class TestMissionRobotourTCP(unittest.TestCase):

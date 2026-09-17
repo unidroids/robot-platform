@@ -293,7 +293,11 @@ class MissionRobotourService:
             # Smyčka mise (od kroku 2)
             # -------------------------------------------------------------
             while self.running and not self._stop_requested:
-                await self._run_mission_cycle()
+                try:
+                    await self._run_mission_cycle()
+                finally:
+                    # Po jakémkoliv ukončení mise (cíl, zrušení cancel_mission, návrat) vždy zastavíme jízdní služby
+                    self._stop_driving_services()
 
         except asyncio.CancelledError:
             print("[MissionService] Workflow mise byla zrušena.")
@@ -484,25 +488,21 @@ class MissionRobotourService:
             return
 
         # -------------------------------------------------------------
-        # Krok 16.1: Start MAPS a LIDAR
+        # Krok 16: Start MAPS (příprava mapových podkladů)
         # -------------------------------------------------------------
         self.current_step = 16
         while self.running and not self._stop_requested:
             maps_port = MICROSERVICES_CONFIG["MAPS"]["port"]
-            lidar_port = MICROSERVICES_CONFIG["LIDAR"]["port"]
-
-            ok1, resp1 = send_tcp_command(self.host, maps_port, "START", timeout=2.0)
-            ok2, resp2 = send_tcp_command(self.host, lidar_port, "START", timeout=2.0)
-
-            if ok1 and resp1.startswith("OK") and ok2 and resp2.startswith("OK"):
-                self.logger.log("STEP_16_1_SERVICES_STARTED")
+            ok, resp = send_tcp_command(self.host, maps_port, "START", timeout=3.0)
+            if ok and resp.startswith("OK"):
+                self.logger.log("STEP_16_MAPS_STARTED")
                 break
             else:
-                err_text = f"MAPS: {resp1}, LIDAR: {resp2}"
-                self.logger.log("STEP_16_1_FAILED", {"error": err_text})
+                err_text = f"MAPS: {resp}"
+                self.logger.log("STEP_16_FAILED", {"error": err_text})
                 self.terminal.show_message(
-                    header="Robotour - Chyba při startu služby",
-                    text=f"Některá služba neodpověděla OK: {err_text}",
+                    header="Robotour - Chyba při startu mapové služby",
+                    text=f"Služba MAPS neodpověděla OK: {err_text}",
                     buttons=[
                         {"id": "try_again", "text": "Zkusit znovu"},
                         {"id": "cancel_mission", "text": "Zrušit misi"}
@@ -616,20 +616,23 @@ class MissionRobotourService:
                 return
 
         # -------------------------------------------------------------
-        # Krok 18: Spuštění jízdy
+        # Krok 18: Spuštění jízdy (LIDAR, DRIVE, PILOT)
         # -------------------------------------------------------------
         self.current_step = 18
         self.state_name = "STEP_18_START_DRIVING"
         self.logger.log("STEP_18_GO")
 
-        # 1. Zapnutí motorů DRIVE ON
+        # 1. Spuštění LiDARu
+        send_tcp_command(self.host, MICROSERVICES_CONFIG["LIDAR"]["port"], "START", timeout=2.0)
+
+        # 2. Zapnutí motorů DRIVE ON
         send_tcp_command(self.host, MICROSERVICES_CONFIG["DRIVE"]["port"], "ON", timeout=2.0)
 
-        # 2. Spuštění pilota s předanou trasou
+        # 3. Spuštění pilota s předanou trasou
         pilot_cmd = f"START {self.route_json_str}"
         send_tcp_command(self.host, MICROSERVICES_CONFIG["PILOT-ROBOTOUR"]["port"], pilot_cmd, timeout=3.0)
 
-        # 3. Zvuková a vizuální signalizace
+        # 4. Zvuková a vizuální signalizace
         self.terminal.sound("barking")
         self.terminal.blink("#FFA500", 2.0, 3000)
 

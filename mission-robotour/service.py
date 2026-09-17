@@ -80,7 +80,8 @@ class MissionRobotourService:
         self.route_json_str: Optional[str] = None
         self.pilot_status: Dict[str, Any] = {}
 
-        # ZMQ odběr
+        # ZMQ odběr (připojeno pouze během aktivní mise)
+        self._zmq_shutdown = threading.Event()
         self._zmq_thread: Optional[threading.Thread] = None
 
     def _set_state(self, step: int, state_name: str, desc: str = ""):
@@ -128,10 +129,16 @@ class MissionRobotourService:
             return False, "ALREADY_RUNNING"
         self.running = True
         self._stop_requested = False
+        self._last_button = None
+        self._last_qr_code = None
+        self._button_event = asyncio.Event()
+        self._qr_event = asyncio.Event()
         try:
             self._loop = asyncio.get_running_loop()
         except RuntimeError:
             self._loop = None
+
+        # Připojíme se k ZMQ pro příjem tlačítek a QR kódu
         self._start_zmq_subscriber()
         self._loop_task = asyncio.create_task(self._run_mission_workflow())
         return True, "OK"
@@ -148,11 +155,16 @@ class MissionRobotourService:
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
 
+        # Odpojíme se ze ZMQ a uzavřeme sockety
+        self._stop_zmq_subscriber()
+
         # Konec mise: zastavíme všechny služby
         self._stop_all_services()
         self.logger.close()
         self.state_name = "STOPPED"
         self.current_step = 0
+        self._last_button = None
+        self._last_qr_code = None
         return True, "OK"
 
     def shutdown(self):
@@ -160,40 +172,46 @@ class MissionRobotourService:
         if hasattr(self, "terminal") and self.terminal:
             self.terminal.hide_message()
         self.stop_mission()
+        self._stop_zmq_subscriber()
 
     # =========================================================================
     # ZMQ Listener (tlačítka z terminálu & QR kód)
     # =========================================================================
 
     def _start_zmq_subscriber(self):
-        if zmq is None or self._zmq_thread is not None:
+        """Připojí se k ZMQ IPC socketům (pouze během aktivní mise)."""
+        if zmq is None:
+            return
+        if self._zmq_thread is not None and self._zmq_thread.is_alive():
             return
 
+        self._zmq_shutdown.clear()
+
         def zmq_worker():
-            ctx = zmq.Context()
+            print("[MissionService] Připojuji se k ZMQ (ipc:///tmp/robot-terminal & ipc:///tmp/robot-qrscaner)...")
+            ctx = zmq.Context.instance()
             sub_term = ctx.socket(zmq.SUB)
             sub_qr = ctx.socket(zmq.SUB)
+            poller = zmq.Poller()
 
             try:
                 sub_term.connect("ipc:///tmp/robot-terminal")
                 sub_term.setsockopt_string(zmq.SUBSCRIBE, "")
+                poller.register(sub_term, zmq.POLLIN)
             except Exception as e:
                 print(f"[MissionService] ZMQ connect robot-terminal warning: {e}")
 
             try:
                 sub_qr.connect("ipc:///tmp/robot-qrscaner")
                 sub_qr.setsockopt_string(zmq.SUBSCRIBE, "")
+                poller.register(sub_qr, zmq.POLLIN)
             except Exception as e:
                 print(f"[MissionService] ZMQ connect robot-qrscaner warning: {e}")
 
-            poller = zmq.Poller()
-            poller.register(sub_term, zmq.POLLIN)
-            poller.register(sub_qr, zmq.POLLIN)
-
-            while self.running:
-                try:
-                    socks = dict(poller.poll(500))
-                    if sub_term in socks:
+            try:
+                while not self._zmq_shutdown.is_set():
+                    events = dict(poller.poll(timeout=100))
+                    if sub_term in events and events[sub_term] == zmq.POLLIN:
                         msg = sub_term.recv_multipart()
                         if len(msg) >= 2:
                             frame_type = msg[0].decode("utf-8", errors="ignore")
@@ -201,42 +219,75 @@ class MissionRobotourService:
                             if frame_type == "button":
                                 self.on_button_pressed(frame_val)
 
-                    if sub_qr in socks:
+                    if sub_qr in events and events[sub_qr] == zmq.POLLIN:
                         msg = sub_qr.recv_multipart()
                         if len(msg) >= 2:
+                            frame_type = msg[0].decode("utf-8", errors="ignore")
                             frame_val = msg[1].decode("utf-8", errors="ignore")
                             self.on_qr_scanned(frame_val)
-                except Exception as e:
-                    if self.running:
-                        time.sleep(0.1)
+            except Exception as e:
+                if not self._zmq_shutdown.is_set():
+                    print(f"[MissionService] ZMQ worker chyba: {e}")
+            finally:
+                try:
+                    poller.unregister(sub_term)
+                except Exception:
+                    pass
+                try:
+                    sub_term.close(linger=0)
+                except Exception:
+                    pass
 
-            sub_term.close()
-            sub_qr.close()
-            ctx.term()
+                try:
+                    poller.unregister(sub_qr)
+                except Exception:
+                    pass
+                try:
+                    sub_qr.close(linger=0)
+                except Exception:
+                    pass
+                print("[MissionService] Odpojeno od ZMQ, sockety uzavřeny.")
 
         self._zmq_thread = threading.Thread(target=zmq_worker, daemon=True)
         self._zmq_thread.start()
+
+    def _stop_zmq_subscriber(self):
+        """Odpojí se ze ZMQ a řádně uzavře sockety a vlákno (konec mise / shutdown)."""
+        if self._zmq_thread is None:
+            return
+        self._zmq_shutdown.set()
+        if self._zmq_thread.is_alive():
+            self._zmq_thread.join(timeout=1.5)
+        self._zmq_thread = None
 
     def on_button_pressed(self, btn_id: str):
         """Callback při kliknutí na tlačítko na terminálu."""
         if btn_id == "chcek_again":
             btn_id = "check_again"
         print(f"[MissionService] [ZMQ] Stisknuto tlačítko z terminálu: '{btn_id}' (v kroku {self.current_step})")
-        self.logger.log("BUTTON_CLICKED", {"button": btn_id, "step": self.current_step})
+        if self.running:
+            self.logger.log("BUTTON_CLICKED", {"button": btn_id, "step": self.current_step})
         self._last_button = btn_id
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._button_event.set)
-        else:
+        try:
+            if self._loop and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self._button_event.set)
+            else:
+                self._button_event.set()
+        except RuntimeError:
             self._button_event.set()
 
     def on_qr_scanned(self, qr_text: str):
         """Callback při detekci QR kódu."""
         print(f"[MissionService] [ZMQ] Načten QR kód: '{qr_text}' (v kroku {self.current_step})")
-        self.logger.log("QR_DETECTED", {"raw": qr_text, "step": self.current_step})
+        if self.running:
+            self.logger.log("QR_DETECTED", {"raw": qr_text, "step": self.current_step})
         self._last_qr_code = qr_text
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._qr_event.set)
-        else:
+        try:
+            if self._loop and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self._qr_event.set)
+            else:
+                self._qr_event.set()
+        except RuntimeError:
             self._qr_event.set()
 
     async def _wait_for_button(self, allowed_buttons: List[str], timeout: Optional[float] = None) -> Optional[str]:
@@ -353,6 +404,8 @@ class MissionRobotourService:
         finally:
             if hasattr(self, "terminal") and self.terminal and (not self.running or self._stop_requested):
                 self.terminal.hide_message()
+            if not self.running or self._stop_requested:
+                self._stop_zmq_subscriber()
 
     async def _run_mission_cycle(self):
         """Jednotlivý cyklus mise od kroku 2 (úvodní obrazovka) po cíl / zastavení."""
@@ -381,8 +434,6 @@ class MissionRobotourService:
 
             # Spuštění QR scanneru
             ok, resp = self._send_cmd("QRSCANER", "START", timeout=1.5)
-            self._last_qr_code = None
-            self._qr_event.clear()
 
             # Čekání až 120s na QR kód
             print(f"[MissionService] Krok 5: Čekám až 120 s na načtení QR kódu přes ZMQ...")

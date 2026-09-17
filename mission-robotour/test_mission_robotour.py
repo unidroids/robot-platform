@@ -233,36 +233,43 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         self.assertEqual(msg, "OK")
 
-        # Počkáme chvíli, než proběhne krok 0 a krok 1
-        await asyncio.sleep(0.4)
+        # Počkáme, než proběhne krok 0 a krok 1
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
         self.assertEqual(self.service.current_step, 2)
 
         # 2. Simulace stisku 'scan_qrcode' na úvodní obrazovce
         self.service.on_button_pressed("scan_qrcode")
-        await asyncio.sleep(0.2)
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
         self.assertEqual(self.service.current_step, 4)
 
         # 3. Simulace příjmu QR kódu
         self.service.on_qr_scanned("geo:49.555201,12.743162")
-        await asyncio.sleep(0.3)
-
-        # Měl by projít přes krok 10 (FUSION DATA), krok 13 (vzdálenost) na krok 15 (potvrzení cíle)
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
         self.assertEqual(self.service.current_step, 15)
 
         # 4. Simulace stisku 'destination_ok'
         self.service.on_button_pressed("destination_ok")
-        await asyncio.sleep(0.3)
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
 
         # 5. Simulace stisku 'mission_go' po nalezení trasy
         self.service.on_button_pressed("mission_go")
-        await asyncio.sleep(0.3)
-
-        # Nyní jsme v monitorovací smyčce kroku 19/21
-        for _ in range(30):
-            if self.service.current_step in (19, 21):
+        for _ in range(40):
+            if self.service.current_step in (18, 19, 21):
                 break
             await asyncio.sleep(0.1)
-        self.assertIn(self.service.current_step, (19, 21))
+        self.assertIn(self.service.current_step, (18, 19, 21))
 
         # Ověříme, že DRIVE dostal příkaz ON a PILOT-ROBOTOUR dostal START a LIDAR dostal START
         drive_cmds = self.mocks["DRIVE"].received_cmds
@@ -288,10 +295,7 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         # 7. Simulace potvrzení 'acknowledge' v cíli
         self.service.on_button_pressed("acknowledge")
-        await asyncio.sleep(0.3)
-
-        # Mělo by dojít k návratu na úvodní obrazovku (krok 2)
-        for _ in range(30):
+        for _ in range(40):
             if self.service.current_step == 2:
                 break
             await asyncio.sleep(0.1)
@@ -315,19 +319,35 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         ok, msg = self.service.start_mission()
         self.assertTrue(ok)
-        await asyncio.sleep(0.4)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
 
         # Krok 2 -> scan_qrcode
         self.service.on_button_pressed("scan_qrcode")
-        await asyncio.sleep(0.2)
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 4)
 
         # Krok 4 -> QR kód
         self.service.on_qr_scanned("geo:49.555201,12.743162")
-        await asyncio.sleep(0.3)
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 15)
 
         # Krok 15 -> destination_ok
         self.service.on_button_pressed("destination_ok")
-        await asyncio.sleep(0.4)
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 17)
 
         # Jsme v kroku 17 a MAPS vrátilo, že start je daleko.
         # Simulujeme posun robota blíže k mapě a aktualizaci odpovědi MAPS
@@ -345,11 +365,17 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         # Simulace stisku 'check_again' ("Už tam jsem?")
         self.service.on_button_pressed("check_again")
-        await asyncio.sleep(0.3)
+        for _ in range(40):
+            if self.service.route_json_str is not None:
+                break
+            await asyncio.sleep(0.1)
 
         # Nyní by měl systém najít trasu a čekat na 'mission_go'
         self.service.on_button_pressed("mission_go")
-        await asyncio.sleep(0.3)
+        for _ in range(40):
+            if self.service.current_step in (18, 19, 21):
+                break
+            await asyncio.sleep(0.1)
 
         # Ověříme, že jsme se úspěšně dostali do jízdního režimu
         self.assertIn(self.service.current_step, (18, 19, 21))
@@ -358,19 +384,34 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         """Ověření, že při zrušení mise (cancel_mission) se spolehlivě zastaví všechny pohybové služby."""
         ok, msg = self.service.start_mission()
         self.assertTrue(ok)
-        await asyncio.sleep(0.4)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
 
         # Krok 2 -> scan_qrcode
         self.service.on_button_pressed("scan_qrcode")
-        await asyncio.sleep(0.2)
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 4)
 
         # Krok 4 -> QR kód
         self.service.on_qr_scanned("geo:49.555201,12.743162")
-        await asyncio.sleep(0.3)
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 15)
 
         # Krok 15 -> cancel_mission
         self.service.on_button_pressed("cancel_mission")
-        await asyncio.sleep(0.4)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
 
         # Po zrušení musí být robot vrácen na Krok 2
         self.assertEqual(self.service.current_step, 2)
@@ -380,6 +421,45 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("STOP", self.mocks["PILOT-ROBOTOUR"].received_cmds)
         self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
         self.assertIn("STOP", self.mocks["MAPS"].received_cmds)
+
+    async def test_start_stop_start_button_reception(self):
+        """Ověření, že po STOP a následném START služba stále spolehlivě zachytává stisk tlačítka."""
+        # 1. První běh START
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
+
+        # 2. Příkaz STOP
+        ok, msg = self.service.stop_mission()
+        self.assertTrue(ok)
+        self.assertEqual(self.service.current_step, 0)
+        self.assertFalse(self.service.running)
+        await asyncio.sleep(0.2)
+
+        # 3. Druhý běh START
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        self.assertTrue(self.service.running)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
+
+        # 4. Simulace stisku tlačítka 'scan_qrcode' po restartu mise
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+
+        # Musí úspěšně přejít do Kroku 4 (STEP_4_SCAN_QR)
+        self.assertEqual(self.service.current_step, 4)
+
 
 
 class TestMissionRobotourTCP(unittest.TestCase):

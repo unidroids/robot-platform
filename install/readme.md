@@ -48,6 +48,12 @@ chmod 755 /data/logs/pilot_waypoints
 touch /data/logs/pilot_waypoints/pilot_waypoints.log
 chmod 664 /data/logs/pilot_waypoints/pilot_waypoints.log
 
+mkdir -p /data/logs/pilot_robotour
+chown user:user /data/logs/pilot_robotour
+chmod 755 /data/logs/pilot_robotour
+touch /data/logs/pilot_robotour/pilot_robotour.log
+chmod 664 /data/logs/pilot_robotour/pilot_robotour.log
+
 mkdir -p /data/logs/maps
 chown user:user /data/logs/maps
 chmod 755 /data/logs/maps
@@ -89,6 +95,10 @@ chmod +x pilot_waypoints_register.sh pilot_waypoints_unregister.sh
 ./pilot_waypoints_register.sh
 systemctl status robot-pilot-waypoints
 
+chmod +x pilot_robotour_register.sh pilot_robotour_unregister.sh
+./pilot_robotour_register.sh
+systemctl status robot-pilot-robotour
+
 chmod +x logger_register.sh logger_unregister.sh
 ./logger_register.sh
 systemctl status robot-logger
@@ -114,6 +124,7 @@ systemctl status robot-maps
 ./unregister_zeroconf.sh 
 ./vision_unregister.sh
 ./pilot_waypoints_unregister.sh
+./pilot_robotour_unregister.sh
 ./logger_unregister.sh
 ./compass_unregister.sh
 ./gps_unregister.sh
@@ -130,6 +141,7 @@ systemctl status robot-lidar
 systemctl status robot-vision
 systemctl status robot-pilot-vision
 systemctl status robot-pilot-waypoints
+systemctl status robot-pilot-robotour
 systemctl status robot-logger
 systemctl status robot-compass
 systemctl status robot-gps
@@ -154,6 +166,7 @@ sudo systemctl restart robot-oow
 sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
 sudo systemctl restart robot-pilot-waypoints
+sudo systemctl restart robot-pilot-robotour
 sudo systemctl restart robot-pointperfect
 
 sudo systemctl restart robot-vision
@@ -185,6 +198,9 @@ tail -f /data/logs/pilot_vision/pilot_vision.log
 
 nano /data/logs/pilot_waypoints/pilot_waypoints.log
 tail -f /data/logs/pilot_waypoints/pilot_waypoints.log
+
+nano /data/logs/pilot_robotour/pilot_robotour.log
+tail -f /data/logs/pilot_robotour/pilot_robotour.log
 
 nano /data/logs/logger/logger.log
 tail -f /data/logs/logger/logger.log

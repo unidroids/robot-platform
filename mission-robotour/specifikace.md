@@ -1,9 +1,9 @@
-Pojďme napsat novou TCP službu "mission-robotour". Služba by měla mít stejné logické členění jako má oow-bridge. 
+Pojďme napsat novou TCP službu "mission-robotour". 
 Nicméně služba misson-robotour je z principu věci stavovým automatem, který postupně spouští a zastavuje microslužby robota pro dosažení mise. 
 
 Robotour se dá rozdělit do tří částí. 
 
-První je naskenování QR kódu, druhá nalezení cesty pomocí OSM a třetí je spuštění pilota, který s robotem jede k cíli po cestě dané waypointy. 
+První je naskenování QR kódu, druhá nalezení cesty pomocí MAPS a třetí je spuštění pilota, který s robotem jede k cíli po cestě dané waypointy. 
 
 Služba je TCP na portu 9031. Příkazy:
 PING odpověď PONG 
@@ -22,10 +22,12 @@ TERMINAL 9022
 LIDAR 9002
 DRIVE 9003
 GNSS-DUAL 9006
+GNSS-GPS 9004
 RTK 9015
-COMPASS 9014
+GNSS-IMU 9015
 LOGGER 9012
 FUSION 9009 
+MAPS 9040
 OOW-BRIDGE 9030
 
 

@@ -1,0 +1,885 @@
+{
+  "version": 1,
+  "waypoints": [
+    {
+      "lat": 48.88366112174,
+      "lon": 14.3489773251,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88369043728,
+      "lon": 14.34901310099,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8837187124,
+      "lon": 14.34906413562,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88375101829,
+      "lon": 14.34914674416,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88383229299,
+      "lon": 14.34929845188,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8838804178,
+      "lon": 14.34940681393,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88395698374,
+      "lon": 14.34956065071,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88403148884,
+      "lon": 14.34969072292,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88408232943,
+      "lon": 14.34976683871,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88412502112,
+      "lon": 14.34982066223,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88437402336,
+      "lon": 14.35010936674,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88445426295,
+      "lon": 14.35021674236,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88451552839,
+      "lon": 14.35031211429,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88457148243,
+      "lon": 14.35038988315,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88459377085,
+      "lon": 14.35043362468,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88464806993,
+      "lon": 14.3505174896,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88473171585,
+      "lon": 14.35065744098,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88476611405,
+      "lon": 14.35072121883,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88479201651,
+      "lon": 14.35075986468,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8848153416,
+      "lon": 14.35081035862,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88484769088,
+      "lon": 14.35086420263,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88492582095,
+      "lon": 14.35101176717,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8849865847,
+      "lon": 14.35113562672,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88503591394,
+      "lon": 14.35125646453,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88506161381,
+      "lon": 14.35132847307,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88510628504,
+      "lon": 14.35147228351,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88513252735,
+      "lon": 14.35153432702,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88517984754,
+      "lon": 14.3516216305,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88526258198,
+      "lon": 14.35174191825,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88532379721,
+      "lon": 14.35184806017,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88534935894,
+      "lon": 14.35189945739,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88539944248,
+      "lon": 14.35202353477,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88544567456,
+      "lon": 14.35212200111,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88547207055,
+      "lon": 14.35218674306,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88554516492,
+      "lon": 14.35234012462,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88565959298,
+      "lon": 14.35256537326,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88568555037,
+      "lon": 14.35261166792,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88574140624,
+      "lon": 14.35269814513,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88580254248,
+      "lon": 14.35277563423,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88583809834,
+      "lon": 14.35281455468,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88591534153,
+      "lon": 14.3529160943,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88596265659,
+      "lon": 14.35298676889,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8859990472,
+      "lon": 14.35305004739,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88630669217,
+      "lon": 14.3536437696,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88643244947,
+      "lon": 14.35390233523,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88646822503,
+      "lon": 14.35398310563,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88648596309,
+      "lon": 14.35403724518,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88650383066,
+      "lon": 14.35411257596,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88652628764,
+      "lon": 14.354245624,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88654361022,
+      "lon": 14.35439820137,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88659305744,
+      "lon": 14.35471295258,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8866285287,
+      "lon": 14.35496235686,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88665284787,
+      "lon": 14.35506987338,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88667378235,
+      "lon": 14.35513828564,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88670349498,
+      "lon": 14.35521623893,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88672387105,
+      "lon": 14.35525959998,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88677102017,
+      "lon": 14.35534992766,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88687488379,
+      "lon": 14.35552182472,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88693498247,
+      "lon": 14.35563809617,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88699800811,
+      "lon": 14.35577267782,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88702887471,
+      "lon": 14.35585936977,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88703838893,
+      "lon": 14.35592561795,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88703845424,
+      "lon": 14.35598353838,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88703187821,
+      "lon": 14.35602529151,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88701731157,
+      "lon": 14.35608296619,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88699867567,
+      "lon": 14.35613040856,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88692988664,
+      "lon": 14.35625032035,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88674646019,
+      "lon": 14.35655395421,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88670417357,
+      "lon": 14.35663819213,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88668176381,
+      "lon": 14.3567186991,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88667337515,
+      "lon": 14.35680189821,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88667769217,
+      "lon": 14.35687656148,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88669261383,
+      "lon": 14.35694721499,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88672026622,
+      "lon": 14.35702685477,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88675042572,
+      "lon": 14.35708214821,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88679261863,
+      "lon": 14.35713587596,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8868802974,
+      "lon": 14.35722807895,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88692725762,
+      "lon": 14.35729949706,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88695823852,
+      "lon": 14.35736354779,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88698575356,
+      "lon": 14.35743064167,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88701970592,
+      "lon": 14.35753168678,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88704435849,
+      "lon": 14.3576212863,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88707140187,
+      "lon": 14.35774504246,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88709591087,
+      "lon": 14.35796138368,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88710191603,
+      "lon": 14.35804656901,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88711367451,
+      "lon": 14.35812406499,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88712798638,
+      "lon": 14.35818448687,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88715760666,
+      "lon": 14.3582748418,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88719076476,
+      "lon": 14.35835747981,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88725051912,
+      "lon": 14.35848654154,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88728712871,
+      "lon": 14.35857875007,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88731102591,
+      "lon": 14.35865266272,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88733848473,
+      "lon": 14.35876099109,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88736249621,
+      "lon": 14.35888044144,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88740023652,
+      "lon": 14.35909824181,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.8874130611,
+      "lon": 14.35915321641,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88745913423,
+      "lon": 14.35931746901,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88748459349,
+      "lon": 14.35937624495,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88750246181,
+      "lon": 14.35941066079,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88752763945,
+      "lon": 14.35944773945,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88757622656,
+      "lon": 14.35949407636,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88759728027,
+      "lon": 14.35950662572,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88759824755,
+      "lon": 14.35951354258,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88761264162,
+      "lon": 14.3595217698,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88764369052,
+      "lon": 14.35953455273,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88769223339,
+      "lon": 14.35954525591,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88775935392,
+      "lon": 14.3595508453,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88781486955,
+      "lon": 14.35954823825,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88785787936,
+      "lon": 14.35955526708,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    },
+    {
+      "lat": 48.88788311611,
+      "lon": 14.35956449476,
+      "curvature": 0.0,
+      "path_width_m": 1.0,
+      "rel_azimuth_deg": 0.0,
+      "corridors": []
+    }
+  ]
+}

@@ -67,9 +67,10 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 
 
 
-| **PILOT-WAYPOINTS** | 9101 | Autonomní řízení podle waypointů        |
+| **PILOT-WAYPOINTS** | 9101 | Autonomní řízení robota podle waypointů        |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
 | **PILOT-MANUAL** | 9103 | Manuální řízení robota gamepadem        |
+| **PILOT-ROBOTOUR** | 9104 | Řízení dle waypointů se zapojením kamery a LIDARu |
 
 
 

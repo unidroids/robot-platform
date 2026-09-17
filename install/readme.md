@@ -60,6 +60,16 @@ chmod 755 /data/logs/maps
 touch /data/logs/maps/maps.log
 chmod 664 /data/logs/maps/maps.log
 
+mkdir -p /data/logs/mission_robotour
+chown user:user /data/logs/mission_robotour
+chmod 755 /data/logs/mission_robotour
+touch /data/logs/mission_robotour/mission_robotour.log
+chmod 664 /data/logs/mission_robotour/mission_robotour.log
+
+mkdir -p /data/robot/mission-robotour
+chown -R user:user /data/robot/mission-robotour
+chmod -R 775 /data/robot/mission-robotour
+
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
 ./register_fastapi.sh
@@ -119,6 +129,10 @@ chmod +x maps_register.sh maps_unregister.sh
 ./maps_register.sh
 systemctl status robot-maps
 
+chmod +x mission_robotour_register.sh mission_robotour_unregister.sh
+./mission_robotour_register.sh
+systemctl status robot-mission-robotour
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
@@ -131,6 +145,7 @@ systemctl status robot-maps
 ./rtk_unregister.sh
 ./camera_stereo_unregister.sh
 ./maps_unregister.sh
+./mission_robotour_unregister.sh
 
 # status
 systemctl status fastapi-server
@@ -142,6 +157,7 @@ systemctl status robot-vision
 systemctl status robot-pilot-vision
 systemctl status robot-pilot-waypoints
 systemctl status robot-pilot-robotour
+systemctl status robot-mission-robotour
 systemctl status robot-logger
 systemctl status robot-compass
 systemctl status robot-gps
@@ -162,6 +178,7 @@ sudo systemctl restart robot-heading
 sudo systemctl restart robot-lidar
 sudo systemctl restart robot-logger
 sudo systemctl restart robot-maps
+sudo systemctl restart robot-mission-robotour
 sudo systemctl restart robot-oow
 sudo systemctl restart robot-pilot
 sudo systemctl restart robot-pilot-vision
@@ -201,6 +218,9 @@ tail -f /data/logs/pilot_waypoints/pilot_waypoints.log
 
 nano /data/logs/pilot_robotour/pilot_robotour.log
 tail -f /data/logs/pilot_robotour/pilot_robotour.log
+
+nano /data/logs/mission_robotour/mission_robotour.log
+tail -f /data/logs/mission_robotour/mission_robotour.log
 
 nano /data/logs/logger/logger.log
 tail -f /data/logs/logger/logger.log

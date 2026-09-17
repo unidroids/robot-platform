@@ -295,6 +295,59 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         # A motory byly vypnuty DRIVE OFF
         self.assertIn("OFF", self.mocks["DRIVE"].received_cmds)
 
+    async def test_workflow_start_far_and_check_again(self):
+        """Ověření, že při startu dále než 5m z mapy systém nabídne check_again a po přiblížení najde trasu."""
+        # MAPS zpočátku vrátí, že start je moc daleko
+        self.mocks["MAPS"].response_map["FIND_ROUTE"] = json.dumps({
+            "metadata": {
+                "search_result": "cesta nenalezena",
+                "reason": "Start je dále než 5m od nejbližšího místa na mapě. Nejbližší místo je 8.50 m.",
+                "start_distance_to_map_m": 8.5,
+                "goal_distance_to_map_m": 1.2
+            }
+        })
+
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        await asyncio.sleep(0.4)
+
+        # Krok 2 -> scan_qrcode
+        self.service.on_button_pressed("scan_qrcode")
+        await asyncio.sleep(0.2)
+
+        # Krok 4 -> QR kód
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        await asyncio.sleep(0.3)
+
+        # Krok 15 -> destination_ok
+        self.service.on_button_pressed("destination_ok")
+        await asyncio.sleep(0.4)
+
+        # Jsme v kroku 17 a MAPS vrátilo, že start je daleko.
+        # Simulujeme posun robota blíže k mapě a aktualizaci odpovědi MAPS
+        self.mocks["MAPS"].response_map["FIND_ROUTE"] = json.dumps({
+            "metadata": {
+                "search_result": "found",
+                "route_length_m": 210.5
+            },
+            "nodes": [
+                {"id": "n1", "lat": 49.554131, "lon": 12.741158},
+                {"id": "n2", "lat": 49.555201, "lon": 12.743162}
+            ],
+            "edges": []
+        })
+
+        # Simulace stisku 'check_again' ("Už tam jsem?")
+        self.service.on_button_pressed("check_again")
+        await asyncio.sleep(0.3)
+
+        # Nyní by měl systém najít trasu a čekat na 'mission_go'
+        self.service.on_button_pressed("mission_go")
+        await asyncio.sleep(0.3)
+
+        # Ověříme, že jsme se úspěšně dostali do jízdního režimu
+        self.assertIn(self.service.current_step, (18, 19, 21))
+
 
 class TestMissionRobotourTCP(unittest.TestCase):
     """Test TCP rozhraní služby MISSION-ROBOTOUR na portu 9031."""

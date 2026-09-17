@@ -62,12 +62,19 @@ class DriveClient:
         resp = self._send_and_read(f"ON\n")
         return resp
 
-    def send_drive(self, left, right):
-        resp = self._send_and_read(f"DRIVE speed {left:.0f} {right:.0f}\n")
-        return resp
+    def send_drive(self, pwm, left_speed=None, right_speed=None):
+        if left_speed is None and right_speed is None:
+            # Fallback if called as send_drive(left, right)
+            pass
+        elif right_speed is None:
+            # Called as send_drive(left, right)
+            left_speed = pwm
+            right_speed = left_speed
+            pwm = 150
+        return self._send_and_read(f"DRIVE {pwm} {left_speed} {right_speed}\n")
 
     def send_drive_pwm(self, left, right):
-        resp = self._send_and_read(f"DRIVE pwm {left:.0f} {right:.0f}\n")
+        resp = self._send_and_read(f"PWM {left:.0f} {right:.0f}\n")
         return resp
 
     def send_speed(self, speed):

@@ -3,6 +3,8 @@ import threading
 import time
 import math
 import json
+from datetime import datetime
+from pathlib import Path
 import zmq
 import asyncio
 
@@ -72,10 +74,11 @@ class RobotourPilotService:
         self.oow_tcp_ok = False
         self.oow_zmq_ok = True  # Default true dokud nepřijde OFF
         
+        self.last_distance_to_goal = 0.0
         self.receiver = None
         self.oow_task = None
 
-    def start_service(self, max_speed=100, max_pwm=150):
+    def start_service(self, max_speed=100, max_pwm=150, route_input=None):
         if self.state in ["RUNNING"]:
             return "ALREADY RUNNING"
             
@@ -87,12 +90,44 @@ class RobotourPilotService:
         self.last_v = 0.0
         self.last_w = 0.0
         self.current_speed = 0.0
+        self.last_distance_to_goal = 0.0
         
         # Init logger
         self.logger = DataLogger(base_dir="/data/robot/pilot_robotour")
         self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,target_left,target_right,actual_left,actual_right,lidar_dist,state")
         
-        self.path_tracker = PathTracker(self.route_json_path, L_near_m=2.0)
+        # Zpracování trasy (pokud je předána jako JSON / objekt)
+        if route_input is not None:
+            data_to_save = route_input
+            if isinstance(route_input, str) and (route_input.startswith("{") or route_input.startswith("[")):
+                try:
+                    data_to_save = json.loads(route_input)
+                except Exception:
+                    pass
+            
+            # Uložení do /data/robot/pilot_robotour/<yyyy-mm-dd>/<HH-MM-SS>/route.json
+            now = datetime.now()
+            base_dir = Path("/data/robot/pilot_robotour") / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
+            try:
+                base_dir.mkdir(parents=True, exist_ok=True)
+                route_file = base_dir / "route.json"
+                with open(route_file, "w", encoding="utf-8") as f:
+                    json.dump(data_to_save, f, indent=2, ensure_ascii=False)
+                print(f"[PilotRobotour] Uložena kopie trasy do: {route_file}")
+            except (PermissionError, OSError):
+                local_dir = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "robot" / "pilot_robotour" / now.strftime("%Y-%m-%d") / now.strftime("%H-%M-%S")
+                try:
+                    local_dir.mkdir(parents=True, exist_ok=True)
+                    route_file = local_dir / "route.json"
+                    with open(route_file, "w", encoding="utf-8") as f:
+                        json.dump(data_to_save, f, indent=2, ensure_ascii=False)
+                    print(f"[PilotRobotour] Uložena kopie trasy (fallback) do: {route_file}")
+                except Exception as e:
+                    print(f"[PilotRobotour] Chyba při ukládání route.json: {e}")
+
+            self.path_tracker = PathTracker(data_to_save, L_near_m=2.0)
+        else:
+            self.path_tracker = PathTracker(self.route_json_path, L_near_m=2.0)
         
         self.state = "RUNNING"
         self.source = "USER"
@@ -136,31 +171,35 @@ class RobotourPilotService:
         return "OK"
         
     def get_status(self):
-        if self.state == "IDLE":
-            return "IDLE"
-        elif self.state == "RUNNING":
-            idx = self.path_tracker.current_wp_index if self.path_tracker else 0
-            if self.fusion_data:
-                lat = self.fusion_data.get('lat', 0)
-                lon = self.fusion_data.get('lon', 0)
-                heading = self.fusion_data.get('heading', 0)
-                gpsSol = self.fusion_data.get('gpsSol', 'NONE')
-                hAcc = self.fusion_data.get('hAcc', 9999)
-                headingSol = self.fusion_data.get('headingSol', 'NONE')
-                headingAcc = self.fusion_data.get('headingAcc', 9999)
-                return f"RUNNING idx:{idx} lat:{lat} lon:{lon} heading:{heading} gpsSol:{gpsSol} hAcc:{hAcc} headingSol:{headingSol} hedingAcc:{headingAcc}"
-            return f"RUNNING {idx}"
-        elif self.state == "PAUSED":
-            if self.source == "GPS" and self.fusion_data:
-                hAcc = self.fusion_data.get("hAcc", 9999)
-                headingAcc = self.fusion_data.get('headingAcc', 9999)
-                return f"PAUSED {self.source} Current hAcc: {hAcc} mm headingAcc: {headingAcc}"
-            return f"PAUSED {self.source} {self.status_info}"
-        elif self.state == "STOPPED":
-            return f"STOPPED {self.source} {self.status_info}"
-        elif self.state == "FINISHED":
-            return f"FINISHED {self.status_info}"
-        return self.state
+        wp_index = self.path_tracker.current_wp_index if self.path_tracker else 0
+        wp_total = len(self.path_tracker.waypoints) if self.path_tracker else 0
+        dist = round(float(self.last_distance_to_goal), 2) if self.last_distance_to_goal is not None else 0.0
+
+        status_dict = {
+            "state": self.state,
+            "source": self.source,
+            "info": self.status_info,
+            "wp_index": wp_index,
+            "wp_total": wp_total,
+            "distance_to_goal_m": dist,
+            "lat": 0.0,
+            "lon": 0.0,
+            "heading": 0.0,
+            "speed": round(float(self.current_speed), 2) if hasattr(self, 'current_speed') else 0.0,
+            "gps_sol": "NONE",
+            "h_acc_mm": 9999
+        }
+
+        if self.fusion_data:
+            status_dict["lat"] = self.fusion_data.get('lat', 0.0)
+            status_dict["lon"] = self.fusion_data.get('lon', 0.0)
+            status_dict["heading"] = self.fusion_data.get('heading', 0.0)
+            status_dict["gps_sol"] = self.fusion_data.get('gpsSol', 'NONE')
+            status_dict["h_acc_mm"] = self.fusion_data.get('hAcc', 9999)
+            if self.source == "GPS" and self.state == "PAUSED":
+                status_dict["info"] = f"Current hAcc: {status_dict['h_acc_mm']} mm"
+
+        return json.dumps(status_dict, ensure_ascii=False)
 
     def shutdown(self):
         print(f"[PilotRobotour] SHUTDOWN")
@@ -204,13 +243,18 @@ class RobotourPilotService:
     def _zmq_loop(self):
         context = zmq.Context()
         sub = context.socket(zmq.SUB)
-        sub.connect("ipc:///tmp/robot-fusion")
-        sub.connect("ipc:///tmp/robot-lidar")
-        sub.connect("ipc:///tmp/robot-oow")
-        sub.setsockopt_string(zmq.SUBSCRIBE, "")
-        print("[PilotRobotour] ZMQ Subscriber started.")
+        connected = False
+        try:
+            sub.connect("ipc:///tmp/robot-fusion")
+            sub.connect("ipc:///tmp/robot-lidar")
+            sub.connect("ipc:///tmp/robot-oow")
+            sub.setsockopt_string(zmq.SUBSCRIBE, "")
+            connected = True
+            print("[PilotRobotour] ZMQ Subscriber started.")
+        except Exception as e:
+            print(f"[PilotRobotour] ZMQ connect warning: {e}")
         
-        while self.running:
+        while self.running and connected:
             try:
                 parts = sub.recv_multipart(flags=zmq.NOBLOCK)
                 if len(parts) == 2:
@@ -363,6 +407,7 @@ class RobotourPilotService:
                             if near_state.heading_to_near_gnss_deg is not None:
                                 target_heading = near_state.heading_to_near_gnss_deg
                             distance_to_goal = near_state.distance_to_goal_m
+                            self.last_distance_to_goal = distance_to_goal if distance_to_goal is not None else 0.0
                             d_perp = near_state.d_perp_m
                             
                             # Korekce target_v na základě relativního azimutu (zpomalení do zatáčky)

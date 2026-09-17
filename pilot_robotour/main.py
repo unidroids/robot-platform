@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 
 try:
@@ -51,9 +52,32 @@ async def handle_client(reader, writer, service):
                 elif cmd == "START":
                     speed = 120
                     pwm = 150
-                    if len(parts) >= 2: speed = int(parts[1])
-                    if len(parts) >= 3: pwm = int(parts[2])
-                    service.start_service(max_speed=speed, max_pwm=pwm)
+                    route_input = None
+                    rest = line[len(parts[0]):].strip()
+                    
+                    # Zkontrolujeme, zda zbytek řádku obsahuje JSON (např. trasa z MAPS)
+                    json_start = -1
+                    for idx, ch in enumerate(rest):
+                        if ch in ('{', '['):
+                            json_start = idx
+                            break
+                            
+                    if json_start != -1:
+                        prefix_args = rest[:json_start].strip().split()
+                        if len(prefix_args) >= 1 and prefix_args[0].isdigit():
+                            speed = int(prefix_args[0])
+                        if len(prefix_args) >= 2 and prefix_args[1].isdigit():
+                            pwm = int(prefix_args[1])
+                        json_str = rest[json_start:].strip()
+                        try:
+                            route_input = json.loads(json_str)
+                        except Exception as e:
+                            print(f"[TCP_Server] Chyba parsování JSON v START: {e}")
+                    else:
+                        if len(parts) >= 2 and parts[1].isdigit(): speed = int(parts[1])
+                        if len(parts) >= 3 and parts[2].isdigit(): pwm = int(parts[2])
+
+                    service.start_service(max_speed=speed, max_pwm=pwm, route_input=route_input)
                     
                     if service.oow_task is None or service.oow_task.done():
                         service.oow_task = asyncio.create_task(oow_poller(service))

@@ -124,8 +124,32 @@ class TestPilotRobotourTCP(unittest.TestCase):
         self.assertEqual(resp, "PONG PILOT_ROBOTOUR")
 
     def test_status(self):
+        import json
         resp = self._send_cmd("STATUS")
-        self.assertTrue(resp.startswith("IDLE") or resp.startswith("STOPPED") or resp.startswith("RUNNING"))
+        data = json.loads(resp)
+        self.assertIn("state", data)
+        self.assertIn(data["state"], ["IDLE", "STOPPED", "RUNNING", "PAUSED", "FINISHED"])
+        self.assertIn("wp_index", data)
+        self.assertIn("wp_total", data)
+        self.assertIn("distance_to_goal_m", data)
+
+    def test_start_with_maps_json(self):
+        import json
+        maps_json = json.dumps({
+            "metadata": {"area_name": "UnitTest"},
+            "nodes": [
+                {"id": "n1", "lat": 49.5541, "lon": 12.7411},
+                {"id": "n2", "lat": 49.5545, "lon": 12.7415}
+            ],
+            "edges": []
+        })
+        resp = self._send_cmd(f"START {maps_json}")
+        self.assertEqual(resp, "OK")
+        
+        status_resp = self._send_cmd("STATUS")
+        st = json.loads(status_resp)
+        self.assertEqual(st["state"], "RUNNING")
+        self.assertEqual(st["wp_total"], 2)
 
     def test_stop(self):
         resp = self._send_cmd("STOP")

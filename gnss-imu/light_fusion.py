@@ -33,6 +33,7 @@ class LightFusion:
 
         # Stav integrace (100 Hz)
         self._last_sTtag: Optional[int] = None
+        self._last_rx_mono: Optional[float] = None
         self._accumulated_delta_yaw: float = 0.0
         self._latest_wz: float = 0.0
         self._latest_ts: float = 0.0
@@ -53,6 +54,7 @@ class LightFusion:
             self._calib_gyro_samples.clear()
             self._calib_acc_samples.clear()
             self._last_sTtag = None
+            self._last_rx_mono = None
             self._accumulated_delta_yaw = 0.0
             self._sample_count = 0
             self._pitch = None
@@ -97,6 +99,7 @@ class LightFusion:
 
             self._accumulated_delta_yaw = 0.0
             self._last_sTtag = None
+            self._last_rx_mono = None
             self._sample_count = 0
             self._pitch = None
             self._roll = None
@@ -125,17 +128,17 @@ class LightFusion:
                 self._calib_acc_samples.append((accX, accY, accZ))
                 return
 
-            # Výpočet delta t ze senzorového sTtag (v ms)
-            if self._last_sTtag is not None:
-                # 32-bit unsigned rollover
-                dt_ms = (sTtag - self._last_sTtag) & 0xFFFFFFFF
-                if 0 < dt_ms < 500:  # Ochrana před výpadky senzoru delšími než 500 ms
-                    dt_sec = dt_ms / 1000.0
+            # Výpočet delta t z časové značky zprávy rx_mono (v sekundách)
+            if self._last_rx_mono is not None:
+                dt_calc = rx_mono - self._last_rx_mono
+                if 0.002 < dt_calc < 0.100:
+                    dt_sec = dt_calc
                 else:
-                    dt_sec = 0.01  # Nominální hodnota pro 100 Hz
+                    dt_sec = 0.010  # Nominální hodnota pro 100 Hz
             else:
                 dt_sec = 0.0
 
+            self._last_rx_mono = rx_mono
             self._last_sTtag = sTtag
 
             # 1. Yaw & Wz: odečtení biasu a převod na kompasovou konvenci (CW = +)

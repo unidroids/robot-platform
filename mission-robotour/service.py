@@ -267,7 +267,7 @@ class MissionRobotourService:
                 failed_starts = []
                 for s_name in services_to_start:
                     port = MICROSERVICES_CONFIG[s_name]["port"]
-                    ok, resp = send_tcp_command(self.host, port, "START", timeout=2.0)
+                    ok, resp = send_tcp_command(self.host, port, "START", timeout=5.0)
                     if not ok or not resp.startswith("OK"):
                         failed_starts.append(f"{s_name} ({resp})")
 

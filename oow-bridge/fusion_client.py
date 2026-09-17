@@ -51,7 +51,7 @@ class FusionClient:
         except Exception as e:
             return f"ERR: {e}"
 
-    async def _control_services(self, cmd: str, reverse_order: bool = False, timeout: float = 3.0) -> str:
+    async def _control_services(self, cmd: str, reverse_order: bool = False, timeout: float = 5.0) -> str:
         """Postupně zavolá příkaz na všech službách krmících fusion i na samotné službě fusion."""
         results = {}
         items = list(self.services.items())
@@ -64,11 +64,11 @@ class FusionClient:
             
         return json.dumps(results, ensure_ascii=False)
 
-    async def fusion_on(self, timeout: float = 3.0) -> str:
+    async def fusion_on(self, timeout: float = 5.0) -> str:
         """Spustí všechny polohové služby i samotnou fúzi (START)."""
         return await self._control_services("START", reverse_order=False, timeout=timeout)
 
-    async def fusion_off(self, timeout: float = 3.0) -> str:
+    async def fusion_off(self, timeout: float = 5.0) -> str:
         """Zastaví fúzi a navazující polohové služby v obráceném pořadí (STOP)."""
         return await self._control_services("STOP", reverse_order=True, timeout=timeout)
 

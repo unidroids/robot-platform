@@ -62,6 +62,7 @@ class MissionRobotourService:
 
         self._stop_requested = False
         self._loop_task: Optional[asyncio.Task] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._state_lock = threading.Lock()
 
         # Poslední přijatá tlačítka a QR kódy
@@ -82,6 +83,32 @@ class MissionRobotourService:
         # ZMQ odběr
         self._zmq_thread: Optional[threading.Thread] = None
 
+    def _set_state(self, step: int, state_name: str, desc: str = ""):
+        """Změna stavu mise se zobrazením v konzoli (print) a uložením do dataloggeru."""
+        self.current_step = step
+        self.state_name = state_name
+        detail = f" - {desc}" if desc else ""
+        print(f"[MissionService] [Krok {step}] Přechod do stavu: {state_name}{detail}")
+        self.logger.log(state_name, {"step": step, "description": desc} if desc else {"step": step})
+
+    def _send_cmd(self, service_name: str, cmd: str, timeout: Optional[float] = None) -> Tuple[bool, str]:
+        """Odešle TCP příkaz do vybrané mikroslužby s detailním výpisem (print) pro debug."""
+        cfg = MICROSERVICES_CONFIG.get(service_name)
+        if not cfg:
+            print(f"[MissionService] [TCP CHYBA] Neznámá služba {service_name}")
+            return False, f"Unknown service {service_name}"
+        port = cfg["port"]
+        to = timeout if timeout is not None else 2.0
+        short_cmd = (cmd[:70] + "...") if len(cmd) > 70 else cmd
+        print(f"[MissionService] [TCP ODESLÁNO] -> {service_name} (port {port}): '{short_cmd}'")
+        ok, resp = send_tcp_command(self.host, port, cmd, timeout=to)
+        if ok:
+            short_resp = (resp[:70] + "...") if len(resp) > 70 else resp
+            print(f"[MissionService] [TCP ODPOVĚĎ] <- {service_name} (port {port}): ok=True, resp='{short_resp}'")
+        else:
+            print(f"[MissionService] [TCP CHYBA] <- {service_name} (port {port}): ok=False, err='{resp}'")
+        return ok, resp
+
     def get_status_dict(self) -> Dict[str, Any]:
         """Vrátí aktuální stav pro příkaz STATUS."""
         with self._state_lock:
@@ -101,6 +128,10 @@ class MissionRobotourService:
             return False, "ALREADY_RUNNING"
         self.running = True
         self._stop_requested = False
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
         self._start_zmq_subscriber()
         self._loop_task = asyncio.create_task(self._run_mission_workflow())
         return True, "OK"
@@ -190,28 +221,43 @@ class MissionRobotourService:
         """Callback při kliknutí na tlačítko na terminálu."""
         if btn_id == "chcek_again":
             btn_id = "check_again"
-        print(f"[MissionService] Stisknuto tlačítko: {btn_id}")
+        print(f"[MissionService] [ZMQ] Stisknuto tlačítko z terminálu: '{btn_id}' (v kroku {self.current_step})")
         self.logger.log("BUTTON_CLICKED", {"button": btn_id, "step": self.current_step})
         self._last_button = btn_id
-        self._button_event.set()
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._button_event.set)
+        else:
+            self._button_event.set()
 
     def on_qr_scanned(self, qr_text: str):
         """Callback při detekci QR kódu."""
-        print(f"[MissionService] Načten QR kód: {qr_text}")
+        print(f"[MissionService] [ZMQ] Načten QR kód: '{qr_text}' (v kroku {self.current_step})")
         self.logger.log("QR_DETECTED", {"raw": qr_text, "step": self.current_step})
         self._last_qr_code = qr_text
-        self._qr_event.set()
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._qr_event.set)
+        else:
+            self._qr_event.set()
 
     async def _wait_for_button(self, allowed_buttons: List[str], timeout: Optional[float] = None) -> Optional[str]:
         """Čeká na stisk povoleného tlačítka."""
+        to_str = f"{timeout} s" if timeout else "bez limitu"
+        print(f"[MissionService] Čekám na stisk tlačítka z {allowed_buttons} (timeout: {to_str})...")
         start_t = time.time()
         while self.running and not self._stop_requested:
             if self._last_button in allowed_buttons:
                 btn = self._last_button
                 self._last_button = None
+                print(f"[MissionService] _wait_for_button: zachyceno tlačítko '{btn}'")
                 return btn
 
             self._button_event.clear()
+            if self._last_button in allowed_buttons:
+                btn = self._last_button
+                self._last_button = None
+                print(f"[MissionService] _wait_for_button: zachyceno tlačítko '{btn}'")
+                return btn
+
             try:
                 to = timeout - (time.time() - start_t) if timeout else 1.0
                 if to <= 0:
@@ -223,10 +269,12 @@ class MissionRobotourService:
             if self._last_button in allowed_buttons:
                 btn = self._last_button
                 self._last_button = None
+                print(f"[MissionService] _wait_for_button: zachyceno tlačítko '{btn}'")
                 return btn
 
             if timeout and (time.time() - start_t) >= timeout:
                 break
+        print(f"[MissionService] _wait_for_button: vypršel limit (žádné tlačítko)")
         return None
 
     # =========================================================================
@@ -240,10 +288,7 @@ class MissionRobotourService:
             # Krok 0: Kontrola potřebných mikroslužeb (PING -> PONG <NAZEV>)
             # -------------------------------------------------------------
             while self.running and not self._stop_requested:
-                self.current_step = 0
-                self.state_name = "STEP_0_CHECK_SERVICES"
-                self.logger.log("STEP_0_START")
-
+                self._set_state(0, "STEP_0_CHECK_SERVICES", "Kontrola 13 mikroslužeb (PING -> PONG)")
                 all_ok, errors = check_all_services(host=self.host, timeout=1.5)
                 if all_ok:
                     print("[MissionService] Krok 0 OK: Všech 13 mikroslužeb odpovídá správným PONG.")
@@ -267,14 +312,10 @@ class MissionRobotourService:
             # -------------------------------------------------------------
             services_to_start = ["LOGGER", "DRIVE", "GNSS-DUAL", "GNSS-GPS", "GNSS-IMU", "RTK", "FUSION"]
             while self.running and not self._stop_requested:
-                self.current_step = 1
-                self.state_name = "STEP_1_START_SERVICES"
-                self.logger.log("STEP_1_START", {"services": services_to_start})
-
+                self._set_state(1, "STEP_1_START_SERVICES", f"Start polohových služeb: {services_to_start}")
                 failed_starts = []
                 for s_name in services_to_start:
-                    port = MICROSERVICES_CONFIG[s_name]["port"]
-                    ok, resp = send_tcp_command(self.host, port, "START", timeout=5.0)
+                    ok, resp = self._send_cmd(s_name, "START", timeout=5.0)
                     if not ok or not resp.startswith("OK"):
                         failed_starts.append(f"{s_name} ({resp})")
 
@@ -318,10 +359,8 @@ class MissionRobotourService:
         # -------------------------------------------------------------
         # Krok 2: Úvodní dialog & otevření logu mise
         # -------------------------------------------------------------
-        self.current_step = 2
-        self.state_name = "STEP_2_INITIAL_SCREEN"
+        self._set_state(2, "STEP_2_INITIAL_SCREEN", "Úvodní dialog (MESSAGE 'Jdeme na to!')")
         self.logger.start_mission()
-        self.logger.log("STEP_2_DISPLAY_INITIAL")
 
         self.terminal.show_message(
             header="Robotour",
@@ -331,22 +370,22 @@ class MissionRobotourService:
 
         btn = await self._wait_for_button(["scan_qrcode"])
         if btn != "scan_qrcode":
+            print(f"[MissionService] Krok 2: Konec cyklu mise (tlačítko: '{btn}')")
             return
 
         # -------------------------------------------------------------
         # Krok 4 až 9: Skenování a ověření QR kódu
         # -------------------------------------------------------------
         while self.running and not self._stop_requested:
-            self.current_step = 4
-            self.state_name = "STEP_4_SCAN_QR"
-            self.logger.log("STEP_4_QR_START")
+            self._set_state(4, "STEP_4_SCAN_QR", "Spuštění QR scanneru (START -> QRSCANER)")
 
             # Spuštění QR scanneru
-            send_tcp_command(self.host, MICROSERVICES_CONFIG["QRSCANER"]["port"], "START", timeout=1.5)
+            ok, resp = self._send_cmd("QRSCANER", "START", timeout=1.5)
             self._last_qr_code = None
             self._qr_event.clear()
 
             # Čekání až 120s na QR kód
+            print(f"[MissionService] Krok 5: Čekám až 120 s na načtení QR kódu přes ZMQ...")
             qr_text = None
             start_qr_t = time.time()
             while (time.time() - start_qr_t) < 120.0 and self.running and not self._stop_requested:
@@ -366,8 +405,8 @@ class MissionRobotourService:
             # Timeout nebo neplatný
             if not qr_text:
                 # Krok 6: Timeout 120s
-                send_tcp_command(self.host, MICROSERVICES_CONFIG["QRSCANER"]["port"], "STOP", timeout=1.5)
-                self.logger.log("STEP_6_QR_TIMEOUT")
+                self._set_state(6, "STEP_6_QR_TIMEOUT", "Vypršel limit 120 s pro načtení QR kódu")
+                self._send_cmd("QRSCANER", "STOP", timeout=1.5)
                 self.terminal.show_message(
                     header="Robotour - Nenačteny cílové souřadnice",
                     text="Během posledních dvou minut nebyl zaznamenán QR Code.",
@@ -379,6 +418,7 @@ class MissionRobotourService:
                 return
 
             # Krok 7 & 8: Ověření formátu geo:<lat>,<lon>
+            self._set_state(7, "STEP_7_CHECK_QR", f"Ověření formátu QR kódu: '{qr_text}'")
             cleaned_qr = qr_text.strip()
             if cleaned_qr.startswith("geo:"):
                 raw_coords = cleaned_qr[4:]
@@ -396,14 +436,13 @@ class MissionRobotourService:
                     pass
 
             if not valid:
-                print(f"[MissionService] Neplatný formát QR kódu: {qr_text}")
-                self.logger.log("STEP_8_QR_INVALID", {"raw": qr_text})
+                self._set_state(8, "STEP_8_QR_INVALID", f"Neplatný formát QR kódu: '{qr_text}', opakuji...")
                 continue
 
             # Krok 9: Formát OK
-            send_tcp_command(self.host, MICROSERVICES_CONFIG["QRSCANER"]["port"], "STOP", timeout=1.5)
+            self._set_state(9, "STEP_9_QR_VALID", f"QR kód platný: lat={self.target_lat}, lon={self.target_lon}")
+            self._send_cmd("QRSCANER", "STOP", timeout=1.5)
             self.terminal.sound("notification")
-            self.logger.log("STEP_9_QR_VALID", {"lat": self.target_lat, "lon": self.target_lon})
             break
 
         if not self.running or self._stop_requested:
@@ -412,13 +451,10 @@ class MissionRobotourService:
         # -------------------------------------------------------------
         # Krok 10 až 12: Ověření připravenosti GPS (FUSION DATA)
         # -------------------------------------------------------------
-        self.current_step = 10
-        self.state_name = "STEP_10_WAIT_FOR_GPS"
-        fusion_port = MICROSERVICES_CONFIG["FUSION"]["port"]
+        self._set_state(10, "STEP_10_WAIT_FOR_GPS", "Dotaz na stav GPS polohy (FUSION DATA)")
 
         while self.running and not self._stop_requested:
-            self.logger.log("STEP_10_FUSION_QUERY")
-            ok, resp = send_tcp_command(self.host, fusion_port, "DATA", timeout=2.0)
+            ok, resp = self._send_cmd("FUSION", "DATA", timeout=2.0)
             fusion_data = {}
             if ok and resp and resp.startswith("{"):
                 try:
@@ -441,10 +477,11 @@ class MissionRobotourService:
             if gps_sol and str(gps_sol).upper() not in ["NONE", "NULL"] and h_acc_mm <= 10000.0 and lat != 0.0:
                 self.start_lat = lat
                 self.start_lon = lon
-                self.logger.log("STEP_11_GPS_READY", {"lat": lat, "lon": lon, "gpsSol": gps_sol, "hAcc": h_acc_int})
+                self._set_state(11, "STEP_11_GPS_READY", f"GPS poloha nalezena: lat={lat}, lon={lon}, hAcc={h_acc_int} mm")
                 break
 
             # Krok 12: Zobrazení hlášky o čekání
+            self._set_state(12, "STEP_12_WAITING_FOR_FIX", f"Čekání na přesnější polohu (hAcc={h_acc_int} mm)")
             self.terminal.show_message(
                 header="Robotour - Čekání na polohu",
                 text=f"Poloha robota nebyla vyhodnocena. Aktuální stav řešení polohy je {gps_sol}, přesnost polohy je {h_acc_int} mm. Gps poloha je {lat}, {lon}.",
@@ -453,6 +490,7 @@ class MissionRobotourService:
             btn = await self._wait_for_button(["cancel_mission"], timeout=1.0)
             if btn == "cancel_mission":
                 self.logger.log("MISSION_CANCELLED_AT_GPS")
+                print("[MissionService] Krok 12: Uživatel zrušil misi při čekání na GPS.")
                 return
 
         if not self.running or self._stop_requested:
@@ -462,11 +500,11 @@ class MissionRobotourService:
         # Krok 13 až 16: Výpočet vzdálenosti k cíli a potvrzení
         # -------------------------------------------------------------
         dist_m = calculate_geodesic_distance_m(self.start_lat, self.start_lon, self.target_lat, self.target_lon)
-        self.logger.log("STEP_13_DISTANCE_CALCULATED", {"distance_m": dist_m})
+        self._set_state(13, "STEP_13_DISTANCE_CALCULATED", f"Vzdálenost vzdušnou čarou: {round(dist_m, 1)} m")
 
         if dist_m >= 3000.0:
             # Krok 14: Cíl je příliš daleko
-            self.current_step = 14
+            self._set_state(14, "STEP_14_TARGET_TOO_FAR", f"Cíl příliš daleko ({round(dist_m)} m >= 3000 m)")
             self.terminal.show_message(
                 header="Robotour - Cíl je příliš daleko",
                 text=f"Cílové souřadnice jsou geo:{self.target_lat},{self.target_lon}. Vzdušná vzdálenost k cíli je {round(dist_m)} m a je mimo parametry soutěže Robotour.",
@@ -476,7 +514,7 @@ class MissionRobotourService:
             return
 
         # Krok 15 & 16: Potvrzení cíle
-        self.current_step = 15
+        self._set_state(15, "STEP_15_CONFIRM_TARGET", f"Potvrzení cíle ({round(dist_m)} m)")
         self.terminal.show_message(
             header="Robotour - Potvrzení cíle",
             text=f"Cílové souřadnice jsou geo:{self.target_lat},{self.target_lon}. Vzdušná vzdálenost k cíli je {round(dist_m)} m.",
@@ -498,12 +536,10 @@ class MissionRobotourService:
         # -------------------------------------------------------------
         # Krok 16: Start MAPS (příprava mapových podkladů)
         # -------------------------------------------------------------
-        self.current_step = 16
+        self._set_state(16, "STEP_16_START_MAPS", "Start mapové služby MAPS")
         while self.running and not self._stop_requested:
-            maps_port = MICROSERVICES_CONFIG["MAPS"]["port"]
-            ok, resp = send_tcp_command(self.host, maps_port, "START", timeout=3.0)
+            ok, resp = self._send_cmd("MAPS", "START", timeout=3.0)
             if ok and resp.startswith("OK"):
-                self.logger.log("STEP_16_MAPS_STARTED")
                 break
             else:
                 err_text = f"MAPS: {resp}"
@@ -524,9 +560,7 @@ class MissionRobotourService:
         # -------------------------------------------------------------
         # Krok 17 až 17.3: Hledání trasy přes MAPS FIND_ROUTE
         # -------------------------------------------------------------
-        self.current_step = 17
-        maps_port = MICROSERVICES_CONFIG["MAPS"]["port"]
-        fusion_port = MICROSERVICES_CONFIG["FUSION"]["port"]
+        self._set_state(17, "STEP_17_FIND_ROUTE", "Hledání trasy v mapových podkladech")
 
         # Úvodní zobrazení hlášky o vyhledávání trasy
         self.terminal.show_message(
@@ -537,7 +571,7 @@ class MissionRobotourService:
 
         find_cmd = f"FIND_ROUTE {self.start_lat} {self.start_lon} {self.target_lat} {self.target_lon}"
         self.logger.log("STEP_17_1_FIND_ROUTE", {"cmd": find_cmd})
-        ok, route_resp = send_tcp_command(self.host, maps_port, find_cmd, timeout=5.0)
+        ok, route_resp = self._send_cmd("MAPS", find_cmd, timeout=5.0)
 
         route_data = {}
         if ok and route_resp.startswith("{"):
@@ -553,7 +587,7 @@ class MissionRobotourService:
             # Krok 17.3: Cesta nalezena na první pokus
             self.route_json_str = route_resp
             route_len = meta.get("route_length_m", 0.0)
-            self.logger.log("STEP_17_3_ROUTE_FOUND", {"length_m": route_len})
+            self._set_state(17, "STEP_17_3_ROUTE_FOUND", f"Trasa nalezena! Délka: {round(route_len, 1)} m")
             self.terminal.sound("notification")
 
             self.terminal.show_message(
@@ -575,6 +609,7 @@ class MissionRobotourService:
             start_dist = meta.get("start_distance_to_map_m", 0.0)
             goal_dist = meta.get("goal_distance_to_map_m", 0.0)
             self.logger.log("STEP_17_2_ROUTE_NOT_FOUND", {"reason": reason, "start_dist": start_dist, "goal_dist": goal_dist})
+            print(f"[MissionService] Krok 17.2: Trasa nenalezena: {reason}")
 
             is_start_far = start_dist > 5.0 or "Start je dále" in reason
             if not is_start_far:
@@ -612,7 +647,7 @@ class MissionRobotourService:
                     return
 
                 # Aktualizujeme polohu z FUSION pro další pokus FIND_ROUTE
-                ok_f, resp_f = send_tcp_command(self.host, fusion_port, "DATA", timeout=1.5)
+                ok_f, resp_f = self._send_cmd("FUSION", "DATA", timeout=1.5)
                 if ok_f and resp_f.startswith("{"):
                     try:
                         f_data = json.loads(resp_f)
@@ -627,7 +662,7 @@ class MissionRobotourService:
                 # Hledáme trasu na pozadí BEZ probliknutí meziobrazovky
                 find_cmd = f"FIND_ROUTE {self.start_lat} {self.start_lon} {self.target_lat} {self.target_lon}"
                 self.logger.log("STEP_17_RETRY_FIND_ROUTE", {"cmd": find_cmd})
-                ok, route_resp = send_tcp_command(self.host, maps_port, find_cmd, timeout=5.0)
+                ok, route_resp = self._send_cmd("MAPS", find_cmd, timeout=5.0)
 
                 route_data = {}
                 if ok and route_resp.startswith("{"):
@@ -643,7 +678,7 @@ class MissionRobotourService:
                     # Trasa nalezena!
                     self.route_json_str = route_resp
                     route_len = meta.get("route_length_m", 0.0)
-                    self.logger.log("STEP_17_3_ROUTE_FOUND", {"length_m": route_len})
+                    self._set_state(17, "STEP_17_3_ROUTE_FOUND", f"Trasa nalezena! Délka: {round(route_len, 1)} m")
                     self.terminal.sound("notification")
 
                     self.terminal.show_message(
@@ -666,6 +701,7 @@ class MissionRobotourService:
                 start_dist = meta.get("start_distance_to_map_m", 0.0)
                 goal_dist = meta.get("goal_distance_to_map_m", 0.0)
                 self.logger.log("STEP_17_RETRY_NOT_FOUND", {"reason": reason, "start_dist": start_dist, "goal_dist": goal_dist})
+                print(f"[MissionService] Krok 17 opakování: trasa nenalezena ({reason}, start_dist={start_dist}m)")
 
                 is_start_far = start_dist > 5.0 or "Start je dále" in reason
                 if not is_start_far:
@@ -684,19 +720,17 @@ class MissionRobotourService:
         # -------------------------------------------------------------
         # Krok 18: Spuštění jízdy (LIDAR, DRIVE, PILOT)
         # -------------------------------------------------------------
-        self.current_step = 18
-        self.state_name = "STEP_18_START_DRIVING"
-        self.logger.log("STEP_18_GO")
+        self._set_state(18, "STEP_18_START_DRIVING", "Spuštění LiDARu, DRIVE ON a PILOT-ROBOTOUR")
 
         # 1. Spuštění LiDARu
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["LIDAR"]["port"], "START", timeout=2.0)
+        self._send_cmd("LIDAR", "START", timeout=2.0)
 
         # 2. Zapnutí motorů DRIVE ON
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["DRIVE"]["port"], "ON", timeout=2.0)
+        self._send_cmd("DRIVE", "ON", timeout=2.0)
 
         # 3. Spuštění pilota s předanou trasou
         pilot_cmd = f"START {self.route_json_str}"
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["PILOT-ROBOTOUR"]["port"], pilot_cmd, timeout=3.0)
+        self._send_cmd("PILOT-ROBOTOUR", pilot_cmd, timeout=3.0)
 
         # 4. Zvuková a vizuální signalizace
         self.terminal.sound("barking")
@@ -705,12 +739,10 @@ class MissionRobotourService:
         # -------------------------------------------------------------
         # Kroky 19 až 23: Monitorovací smyčka jízdy
         # -------------------------------------------------------------
-        pilot_port = MICROSERVICES_CONFIG["PILOT-ROBOTOUR"]["port"]
         while self.running and not self._stop_requested:
-            self.current_step = 19
-            self.logger.log("STEP_19_CHECK_PILOT")
+            self._set_state(19, "STEP_19_CHECK_PILOT", "Kontrola stavu pilota")
 
-            ok, st_resp = send_tcp_command(self.host, pilot_port, "STATUS", timeout=2.0)
+            ok, st_resp = self._send_cmd("PILOT-ROBOTOUR", "STATUS", timeout=2.0)
             status_data = {}
             if ok and st_resp.startswith("{"):
                 try:
@@ -729,9 +761,7 @@ class MissionRobotourService:
 
             # Krok 20: PILOT STOPPED
             if p_state == "STOPPED":
-                self.current_step = 20
-                self.state_name = "STEP_20_PILOT_STOPPED"
-                self.logger.log("STEP_20_PILOT_STOPPED", {"info": p_info})
+                self._set_state(20, "STEP_20_PILOT_STOPPED", f"Pilot zastaven: {p_info}")
                 self.terminal.sound("game-over")
                 self.terminal.blink("#FF0000", 2.0, 3000)
                 self.terminal.show_message(
@@ -745,9 +775,7 @@ class MissionRobotourService:
 
             # Krok 20.1: PILOT FINISHED
             elif p_state == "FINISHED":
-                self.current_step = 20
-                self.state_name = "STEP_20_1_PILOT_FINISHED"
-                self.logger.log("STEP_20_1_PILOT_FINISHED", {"info": p_info})
+                self._set_state(20, "STEP_20_1_PILOT_FINISHED", f"Cíl dosažen: {p_info}")
                 self.terminal.sound("meow")
                 self.terminal.blink("#00FF00", 2.0, 2000)
                 self.terminal.show_message(
@@ -761,8 +789,7 @@ class MissionRobotourService:
 
             # Krok 21: Jízda běží (nebo stav není STOPPED)
             elif p_state == "RUNNING":
-                self.current_step = 21
-                self.state_name = "STEP_21_DRIVING"
+                self._set_state(21, "STEP_21_DRIVING", f"WP {wp_idx}/{wp_tot}, zbývá {dist_left} m, rychlost {speed} m/s")
                 self.terminal.show_message(
                     header="Robotour - Jízda",
                     text=f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\nRychlost {speed} m/s | GPS: {gps_sol}",
@@ -777,17 +804,17 @@ class MissionRobotourService:
 
                 if btn == "stop_mission":
                     self.logger.log("USER_STOP_MISSION")
-                    send_tcp_command(self.host, pilot_port, "STOP", timeout=2.0)
+                    self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=2.0)
                     self._stop_driving_services()
                     return
 
                 elif btn == "pause_mission":
                     # Krok 21b: Pozastavení
                     self.logger.log("USER_PAUSE_MISSION")
-                    send_tcp_command(self.host, pilot_port, "PAUSE", timeout=2.0)
+                    self._send_cmd("PILOT-ROBOTOUR", "PAUSE", timeout=2.0)
 
                     # Krok 22: Stav pozastavení
-                    self.current_step = 22
+                    self._set_state(22, "STEP_22_PAUSED", "Robot je pozastaven")
                     self.terminal.show_message(
                         header="Robotour - Pozastaveno",
                         text="Robot je pozastaven. Čekáme na vstup uživatele.",
@@ -800,11 +827,11 @@ class MissionRobotourService:
                     btn_pause = await self._wait_for_button(["resume_mission", "cancel_mission"])
                     if btn_pause == "resume_mission":
                         self.logger.log("USER_RESUME_MISSION")
-                        send_tcp_command(self.host, pilot_port, "RESUME", timeout=2.0)
+                        self._send_cmd("PILOT-ROBOTOUR", "RESUME", timeout=2.0)
                         continue
                     else:
                         self.logger.log("USER_CANCEL_FROM_PAUSE")
-                        send_tcp_command(self.host, pilot_port, "STOP", timeout=2.0)
+                        self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=2.0)
                         self._stop_driving_services()
                         return
 
@@ -822,10 +849,10 @@ class MissionRobotourService:
         Polohové služby (GNSS, RTK, FUSION, LOGGER, DRIVE proces) zůstávají běžet.
         """
         print("[MissionService] Zastavuji jízdní služby (konec etapy)...")
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["PILOT-ROBOTOUR"]["port"], "STOP", timeout=1.5)
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["DRIVE"]["port"], "OFF", timeout=1.5)
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["MAPS"]["port"], "STOP", timeout=1.5)
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["LIDAR"]["port"], "STOP", timeout=1.5)
+        self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=1.5)
+        self._send_cmd("DRIVE", "OFF", timeout=1.5)
+        self._send_cmd("MAPS", "STOP", timeout=1.5)
+        self._send_cmd("LIDAR", "STOP", timeout=1.5)
         self.logger.close()
 
     def _stop_all_services(self):
@@ -848,9 +875,9 @@ class MissionRobotourService:
             "QRSCANER"
         ]
         # Motory nejdříve vypneme
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["DRIVE"]["port"], "OFF", timeout=1.5)
-        send_tcp_command(self.host, MICROSERVICES_CONFIG["DRIVE"]["port"], "STOP", timeout=1.5)
+        self._send_cmd("DRIVE", "OFF", timeout=1.5)
+        self._send_cmd("DRIVE", "STOP", timeout=1.5)
 
         for s_name in all_stoppable:
-            port = MICROSERVICES_CONFIG[s_name]["port"]
-            send_tcp_command(self.host, port, "STOP", timeout=1.0)
+            self._send_cmd(s_name, "STOP", timeout=1.0)
+

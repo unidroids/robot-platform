@@ -41,12 +41,8 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **GAMEPAD**      | 9005 | Poskytuje informace z gamepadu                |
 | **GNSS-DUAL**    | 9006 | Zpracování polohy UM982 (GPS + Heading) |
 | **PERFECT**      | 9007 | PointPerfect NTRIP klient (SPARTAN data)     |
-| **PILOT**        | *9008 | Autonomní řízení podle GPS - (obsolete)       |
 | **FUSION**       | 9009 | Lokální fúze polohy a odometrie               |
-| **HEADING**      | *9010 | Výpočet orientace (externí kompas/IMU)        |
-| **VISION**       | *9011 | Zpracování obrazu z kamer a detekce čáry      |
 | **LOGGER**       | 9012 | Centrální sběr a ukládání zpráv (ZMQ) do logu |
-| **OOW**          | *9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **GNSS-RTK**     | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
 | **GNSS-IMU**     | 9016 | Zpracování UBX-ESF-RAW (100Hz IMU ze ZED-F9R) a 20Hz úhlový přírůstek |
@@ -81,6 +77,10 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 ## obsolete
 
 | **JOURNEY**      | *9004 | Hlavní orchestrátor workflow - (obsolete)     |
+| **PILOT**        | *9008 | Autonomní řízení podle GPS - (obsolete)       |
+| **HEADING**      | *9010 | Výpočet orientace (externí kompas/IMU)        |
+| **VISION**       | *9011 | Zpracování obrazu z kamer a detekce čáry      |
+| **OOW**          | *9013 | Office of Watch (BLE server, watchdog, příkazy z mobilní aplikace) |
 
 
 ## 🏆 Soutěže a mise (Challenges)

@@ -9,11 +9,13 @@ except (ImportError, ValueError):
 
 SERVICE_PORT = 9104
 
+OOW_PORT = 9030
+
 async def oow_poller(service):
-    print("[OOW_Poller] Spouštím TCP poller OOW na portu 9013/9030 (každou 1s)")
+    print(f"[OOW_Poller] Spouštím TCP poller OOW na portu {OOW_PORT} (každou 1s)")
     while service.running:
         try:
-            reader, writer = await asyncio.open_connection("127.0.0.1", 9013)
+            reader, writer = await asyncio.open_connection("127.0.0.1", OOW_PORT)
             writer.write(b"OOW\n")
             await writer.drain()
             data = await asyncio.wait_for(reader.readline(), timeout=0.5)
@@ -24,7 +26,7 @@ async def oow_poller(service):
                 service.set_oow_tcp_ok(False)
             writer.close()
             await writer.wait_closed()
-        except Exception as e:
+        except Exception:
             service.set_oow_tcp_ok(False)
             
         await asyncio.sleep(1.0)

@@ -19,7 +19,7 @@ Služba aktivně naslouchá na následujících ZMQ IPC soketech:
 ### 2. Odchozí TCP komunikace (Klienti)
 *   **Drive Služba (`127.0.0.1:9003`)**
     *   Pomocí modulu `drive_client.py` se služba připojuje k ovládání motorů. Posílá příkazy jako `DRIVE pwm left right`, `STOP`, `BREAK`, jimiž fyzicky pohybuje robotem na základě vypočtené dráhy.
-*   **OOW Poller (`127.0.0.1:9013` / TCP OOW)** *(Pozn.: port 9013 může být zastaralý vzhledem k přesunu OOW na 9030)*
+*   **OOW Poller (`127.0.0.1:9030` / TCP OOW)**
     *   Záložní kontrolní mechanismus. Každou vteřinu posílá TCP dotaz `OOW\n` a očekává odpověď `ON` nebo `OFF`. Pokud OOW neodpoví nebo odpoví `OFF`, pilot se automaticky přepne do stavu `PAUSED`.
 
 ### 3. Příchozí TCP komunikace (Ovládání služby)

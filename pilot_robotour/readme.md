@@ -13,7 +13,7 @@ V této fázi vychází ze služby `pilot_waypoints`, používá identické ří
 
 ### 2. Odchozí TCP komunikace
 * **DRIVE (`127.0.0.1:9003`)** – posílání povelů motorům (`DRIVE pwm ...`, `STOP`, `BREAK`).
-* **OOW Poller (`127.0.0.1:9013`)** – periodický heartbeat dotaz `OOW\n`.
+* **OOW Poller (`127.0.0.1:9030`)** – periodický heartbeat dotaz `OOW\n`.
 
 ### 3. Příchozí TCP komunikace (Port 9104)
 Služba naslouchá na portu **`9104`**:

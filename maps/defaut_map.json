@@ -1,0 +1,599 @@
+{
+  "metadata": {
+    "area_name": "Kramolín 2026-07-29",
+    "type": "manual_edit_road_model",
+    "saved_at": "2026-09-17T04:02:33.822Z"
+  },
+  "nodes": [
+    {
+      "id": "osm_node_1",
+      "lat": 49.55413174725328,
+      "lon": 12.741158443871242,
+      "label": "OSM Bod 1"
+    },
+    {
+      "id": "osm_node_3",
+      "lat": 49.55424401979044,
+      "lon": 12.74106076854981,
+      "label": "OSM Bod 3"
+    },
+    {
+      "id": "osm_node_4",
+      "lat": 49.55432930437602,
+      "lon": 12.740919291973116,
+      "label": "OSM Bod 4"
+    },
+    {
+      "id": "osm_node_5",
+      "lat": 49.55436152118308,
+      "lon": 12.741344785625227,
+      "label": "OSM Bod 5"
+    },
+    {
+      "id": "osm_node_6",
+      "lat": 49.55439843255697,
+      "lon": 12.741610784922896,
+      "label": "OSM Bod 6"
+    },
+    {
+      "id": "osm_node_7",
+      "lat": 49.55445023566201,
+      "lon": 12.74193048477173,
+      "label": "OSM Bod 7"
+    },
+    {
+      "id": "osm_node_8",
+      "lat": 49.55453469680402,
+      "lon": 12.742423955681346,
+      "label": "OSM Bod 8"
+    },
+    {
+      "id": "osm_node_9",
+      "lat": 49.55456659911675,
+      "lon": 12.74255979806185,
+      "label": "OSM Bod 9"
+    },
+    {
+      "id": "osm_node_10",
+      "lat": 49.55465490465624,
+      "lon": 12.742769345641138,
+      "label": "OSM Bod 10"
+    },
+    {
+      "id": "osm_node_11",
+      "lat": 49.554759957590115,
+      "lon": 12.74293765425682,
+      "label": "OSM Bod 11"
+    },
+    {
+      "id": "osm_node_12",
+      "lat": 49.55485348278627,
+      "lon": 12.743047960102562,
+      "label": "OSM Bod 12"
+    },
+    {
+      "id": "osm_node_13",
+      "lat": 49.555024437681894,
+      "lon": 12.743136137723925,
+      "label": "OSM Bod 13"
+    },
+    {
+      "id": "osm_node_14",
+      "lat": 49.555201916940455,
+      "lon": 12.743162959814072,
+      "label": "OSM Bod 14"
+    },
+    {
+      "id": "osm_node_19",
+      "lat": 49.55428667385132,
+      "lon": 12.740508913993837,
+      "label": "OSM Bod 19"
+    },
+    {
+      "id": "osm_node_20",
+      "lat": 49.5542713957946,
+      "lon": 12.740380360364176,
+      "label": "OSM Bod 20"
+    },
+    {
+      "id": "node_20_1230",
+      "lat": 49.55424863372481,
+      "lon": 12.741224825157628,
+      "label": "Uzel 20"
+    },
+    {
+      "id": "node_21_9054",
+      "lat": 49.55431199837929,
+      "lon": 12.741264179777433,
+      "label": "Uzel 21"
+    },
+    {
+      "id": "node_22_9126",
+      "lat": 49.55448721099543,
+      "lon": 12.742177918553352,
+      "label": "Uzel 22"
+    },
+    {
+      "id": "node_23_4815",
+      "lat": 49.55460618437832,
+      "lon": 12.742671780288221,
+      "label": "Uzel 23"
+    },
+    {
+      "id": "node_20_3654",
+      "lat": 49.554705364892854,
+      "lon": 12.74285685271025,
+      "label": "Uzel 20"
+    },
+    {
+      "id": "node_21_0918",
+      "lat": 49.55481063521864,
+      "lon": 12.743001356720926,
+      "label": "Uzel 21"
+    },
+    {
+      "id": "node_22_9678",
+      "lat": 49.5549372203099,
+      "lon": 12.743104621768,
+      "label": "Uzel 22"
+    },
+    {
+      "id": "node_23_1334",
+      "lat": 49.55489415531568,
+      "lon": 12.743079811334612,
+      "label": "Uzel 23"
+    },
+    {
+      "id": "node_24_9390",
+      "lat": 49.554980285266154,
+      "lon": 12.74312272667885,
+      "label": "Uzel 24"
+    },
+    {
+      "id": "node_25_4526",
+      "lat": 49.555109044908896,
+      "lon": 12.743151225149633,
+      "label": "Uzel 25"
+    },
+    {
+      "id": "node_26_8694",
+      "lat": 49.55450896117849,
+      "lon": 12.742301970720293,
+      "label": "Uzel 26"
+    },
+    {
+      "id": "node_27_2198",
+      "lat": 49.554354754094845,
+      "lon": 12.741201591707386,
+      "label": "Uzel 27"
+    },
+    {
+      "id": "node_28_1430",
+      "lat": 49.55431599711685,
+      "lon": 12.740709421883928,
+      "label": "Uzel 28"
+    },
+    {
+      "id": "node_29_7741",
+      "lat": 49.55429015911444,
+      "lon": 12.741019043169779,
+      "label": "Uzel 29"
+    },
+    {
+      "id": "node_30_0598",
+      "lat": 49.55434091232051,
+      "lon": 12.741060294397771,
+      "label": "Uzel 30"
+    },
+    {
+      "id": "node_31_2526",
+      "lat": 49.55401547569617,
+      "lon": 12.74115891802328,
+      "label": "Uzel 31"
+    },
+    {
+      "id": "node_32_2110",
+      "lat": 49.55390043425352,
+      "lon": 12.74114469346191,
+      "label": "Uzel 32"
+    },
+    {
+      "id": "node_33_5622",
+      "lat": 49.55528214403815,
+      "lon": 12.74317406421771,
+      "label": "Uzel 33"
+    },
+    {
+      "id": "node_34_2870",
+      "lat": 49.55534304664213,
+      "lon": 12.743179279890203,
+      "label": "Uzel 34"
+    },
+    {
+      "id": "node_35_3902",
+      "lat": 49.554257553996656,
+      "lon": 12.740306392645026,
+      "label": "Uzel 35"
+    },
+    {
+      "id": "node_36_5918",
+      "lat": 49.554240943833946,
+      "lon": 12.740207294867481,
+      "label": "Uzel 36"
+    },
+    {
+      "id": "node_37_9774",
+      "lat": 49.554228024814606,
+      "lon": 12.740109145394012,
+      "label": "Uzel 37"
+    },
+    {
+      "id": "node_38_1078",
+      "lat": 49.554104063574314,
+      "lon": 12.740205872411329,
+      "label": "Uzel 38"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edit_edge_4",
+      "from": "osm_node_5",
+      "to": "osm_node_6",
+      "name": "OSM Úsek 4",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edit_edge_5",
+      "from": "osm_node_6",
+      "to": "osm_node_7",
+      "name": "OSM Úsek 5",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edit_edge_7",
+      "from": "osm_node_8",
+      "to": "osm_node_9",
+      "name": "OSM Úsek 7",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edit_edge_18",
+      "from": "osm_node_19",
+      "to": "osm_node_20",
+      "name": "OSM Úsek 18",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_19_8262",
+      "from": "osm_node_1",
+      "to": "osm_node_3",
+      "name": "Úsek 19",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_1230_2",
+      "from": "node_20_1230",
+      "to": "osm_node_1",
+      "name": "Uzel 20 ➔ OSM Bod 1",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_9054_1",
+      "from": "osm_node_5",
+      "to": "node_21_9054",
+      "name": "OSM Bod 5 ➔ Uzel 21",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_9054_2",
+      "from": "node_21_9054",
+      "to": "node_20_1230",
+      "name": "Uzel 21 ➔ Uzel 20",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_9126_1",
+      "from": "osm_node_7",
+      "to": "node_22_9126",
+      "name": "OSM Bod 7 ➔ Uzel 22",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_4815_1",
+      "from": "osm_node_9",
+      "to": "node_23_4815",
+      "name": "OSM Bod 9 ➔ Uzel 23",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_4815_2",
+      "from": "node_23_4815",
+      "to": "osm_node_10",
+      "name": "Uzel 23 ➔ OSM Bod 10",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_3654_1",
+      "from": "osm_node_10",
+      "to": "node_20_3654",
+      "name": "OSM Bod 10 ➔ Uzel 20",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_3654_2",
+      "from": "node_20_3654",
+      "to": "osm_node_11",
+      "name": "Uzel 20 ➔ OSM Bod 11",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_0918_1",
+      "from": "osm_node_11",
+      "to": "node_21_0918",
+      "name": "OSM Bod 11 ➔ Uzel 21",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_0918_2",
+      "from": "node_21_0918",
+      "to": "osm_node_12",
+      "name": "Uzel 21 ➔ OSM Bod 12",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_1334_1",
+      "from": "osm_node_12",
+      "to": "node_23_1334",
+      "name": "OSM Bod 12 ➔ Uzel 23",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_1334_2",
+      "from": "node_23_1334",
+      "to": "node_22_9678",
+      "name": "Uzel 23 ➔ Uzel 22",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_9390_1",
+      "from": "node_22_9678",
+      "to": "node_24_9390",
+      "name": "Uzel 22 ➔ Uzel 24",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_9390_2",
+      "from": "node_24_9390",
+      "to": "osm_node_13",
+      "name": "Uzel 24 ➔ OSM Bod 13",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_4526_1",
+      "from": "osm_node_13",
+      "to": "node_25_4526",
+      "name": "OSM Bod 13 ➔ Uzel 25",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_4526_2",
+      "from": "node_25_4526",
+      "to": "osm_node_14",
+      "name": "Uzel 25 ➔ OSM Bod 14",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_8694_1",
+      "from": "node_22_9126",
+      "to": "node_26_8694",
+      "name": "Uzel 22 ➔ Uzel 26",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_8694_2",
+      "from": "node_26_8694",
+      "to": "osm_node_8",
+      "name": "Uzel 26 ➔ OSM Bod 8",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_2198_2",
+      "from": "node_27_2198",
+      "to": "osm_node_5",
+      "name": "Uzel 27 ➔ OSM Bod 5",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_1430_1",
+      "from": "osm_node_4",
+      "to": "node_28_1430",
+      "name": "OSM Bod 4 ➔ Uzel 28",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_1430_2",
+      "from": "node_28_1430",
+      "to": "osm_node_19",
+      "name": "Uzel 28 ➔ OSM Bod 19",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_7742_1",
+      "from": "osm_node_3",
+      "to": "node_29_7741",
+      "name": "OSM Bod 3 ➔ Uzel 29",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_7742_2",
+      "from": "node_29_7741",
+      "to": "osm_node_4",
+      "name": "Uzel 29 ➔ OSM Bod 4",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_0598_1",
+      "from": "osm_node_4",
+      "to": "node_30_0598",
+      "name": "OSM Bod 4 ➔ Uzel 30",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_0598_2",
+      "from": "node_30_0598",
+      "to": "node_27_2198",
+      "name": "Uzel 30 ➔ Uzel 27",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_31_6302",
+      "from": "node_29_7741",
+      "to": "node_30_0598",
+      "name": "Úsek 31",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_32_4606",
+      "from": "node_27_2198",
+      "to": "node_21_9054",
+      "name": "Úsek 32",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_33_2526",
+      "from": "osm_node_1",
+      "to": "node_31_2526",
+      "name": "Úsek 33",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_34_2110",
+      "from": "node_31_2526",
+      "to": "node_32_2110",
+      "name": "Úsek 34",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_35_5622",
+      "from": "osm_node_14",
+      "to": "node_33_5622",
+      "name": "Úsek 35",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_36_2870",
+      "from": "node_33_5622",
+      "to": "node_34_2870",
+      "name": "Úsek 36",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_37_3902",
+      "from": "osm_node_20",
+      "to": "node_35_3902",
+      "name": "Úsek 37",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_38_5918",
+      "from": "node_35_3902",
+      "to": "node_36_5918",
+      "name": "Úsek 38",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_39_9774",
+      "from": "node_36_5918",
+      "to": "node_37_9774",
+      "name": "Úsek 39",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_40_1078",
+      "from": "node_36_5918",
+      "to": "node_38_1078",
+      "name": "Úsek 40",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    }
+  ]
+}

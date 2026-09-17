@@ -31,6 +31,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import com.unidroids.robot_hmi.network.MessageConfig
 import com.unidroids.robot_hmi.viewmodel.MainViewModel
 
@@ -147,8 +149,10 @@ fun MessageOverlay(config: MessageConfig, onButtonClick: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.9f))
-            .padding(32.dp),
+            .background(Color.Black.copy(alpha = 0.95f))
+            .displayCutoutPadding()
+            .systemBarsPadding()
+            .padding(horizontal = 32.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -160,20 +164,27 @@ fun MessageOverlay(config: MessageConfig, onButtonClick: (String) -> Unit) {
             modifier = Modifier.padding(bottom = 24.dp)
         )
         
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
+        ) {
             Text(
                 text = config.text,
                 color = Color.White,
                 fontSize = 20.sp,
                 fontFamily = FontFamily.Monospace,
-                modifier = Modifier.verticalScroll(rememberScrollState())
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
             )
         }
         
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
+                .padding(top = 24.dp, start = 16.dp, end = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             config.buttons.forEach { button ->

@@ -6,7 +6,8 @@ služba běží na HMI clinet app, tento adresář je jen pro referenci.
 PING vrací PONG TERMINAL (pro ověření správné služby)
 BLINK <color #rgb> <frekvence Hz> <duration ms> - spuštění vizuální upozornění
 SOUND <name> - přehraje zvuk (barking, notification, game-over) list je v /opt/projects/robotour/hmi-bridge/sounds
-MESSAGE <json>
+MESSAGE <json> - zobrazení zprávy s tlačítky
+MESSAGE CLEAR (nebo CLEAR) - skrytí aktivní zprávy na displeji telefonu
 sample_msg_A = '{"header":"Varování","text":"Překážka","buttons":[{"id":"btn_1","text":"OK"}]}'
 
 sample_msg_B = '{"header":"Robotour","text":"Jdeme na to!","buttons":[{"id":"scan_qrcode","text":"Scan QR Code"}]}'

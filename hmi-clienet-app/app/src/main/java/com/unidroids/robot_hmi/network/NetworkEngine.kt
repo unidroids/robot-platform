@@ -131,38 +131,48 @@ class NetworkEngine(private val context: Context) {
                     "ERROR: Invalid SOUND format. Use: SOUND <name>"
                 }
             }
+            "CLEAR", "HIDE", "CLEAR_MESSAGE", "HIDE_MESSAGE" -> {
+                _state.update { it.copy(messageEvent = null) }
+                "OK"
+            }
             "MESSAGE" -> {
-                if (parts.size >= 2) {
-                    val jsonString = command.substringAfter("MESSAGE").trim()
+                val jsonString = command.substringAfter("MESSAGE").trim()
+                if (jsonString.isEmpty() || jsonString.uppercase() in listOf("CLEAR", "HIDE", "NONE", "NULL", "{}")) {
+                    _state.update { it.copy(messageEvent = null) }
+                    "OK MESSAGE"
+                } else {
                     try {
                         val jsonObject = org.json.JSONObject(jsonString)
                         val header = jsonObject.optString("header", "")
                         val text = jsonObject.optString("text", "")
                         
-                        val buttonsList = mutableListOf<MessageButton>()
-                        val buttonsArray = jsonObject.optJSONArray("buttons")
-                        if (buttonsArray != null) {
-                            for (i in 0 until buttonsArray.length()) {
-                                val btnObj = buttonsArray.optJSONObject(i)
-                                if (btnObj != null) {
-                                    val id = btnObj.optString("id", "")
-                                    val btnText = btnObj.optString("text", "")
-                                    if (id.isNotEmpty() && btnText.isNotEmpty()) {
-                                        buttonsList.add(MessageButton(id, btnText))
+                        if (header.isEmpty() && text.isEmpty()) {
+                            _state.update { it.copy(messageEvent = null) }
+                            "OK MESSAGE"
+                        } else {
+                            val buttonsList = mutableListOf<MessageButton>()
+                            val buttonsArray = jsonObject.optJSONArray("buttons")
+                            if (buttonsArray != null) {
+                                for (i in 0 until buttonsArray.length()) {
+                                    val btnObj = buttonsArray.optJSONObject(i)
+                                    if (btnObj != null) {
+                                        val id = btnObj.optString("id", "")
+                                        val btnText = btnObj.optString("text", "")
+                                        if (id.isNotEmpty() && btnText.isNotEmpty()) {
+                                            buttonsList.add(MessageButton(id, btnText))
+                                        }
                                     }
                                 }
                             }
+                            
+                            _state.update {
+                                it.copy(messageEvent = MessageConfig(header, text, buttonsList))
+                            }
+                            "OK MESSAGE"
                         }
-                        
-                        _state.update {
-                            it.copy(messageEvent = MessageConfig(header, text, buttonsList))
-                        }
-                        "OK MESSAGE"
                     } catch (e: Exception) {
                         "ERROR: Invalid JSON"
                     }
-                } else {
-                    "ERROR: Empty MESSAGE"
                 }
             }
             else -> "ERROR: Unknown command $cmd"

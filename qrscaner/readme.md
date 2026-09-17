@@ -1,5 +1,5 @@
 
-QRScaner port 9022
+QRScaner port 9021
 
 služba běží na HMI clinet app, tento adresář je jen pro referenci.
 

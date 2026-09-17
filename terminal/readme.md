@@ -1,5 +1,5 @@
 
-Terminal port 9021
+Terminal port 9022
 
 služba běží na HMI clinet app, tento adresář je jen pro referenci.
 

@@ -139,10 +139,12 @@ class TestTerminalClient(unittest.TestCase):
             self.assertTrue(client.show_message("Header", "Text", [{"id": "btn", "text": "OK"}]))
             self.assertTrue(client.sound("barking"))
             self.assertTrue(client.blink("#FFA500", 2.0, 3000))
-            self.assertEqual(len(mock.received_cmds), 3)
-            self.assertTrue(mock.received_cmds[0].startswith("MESSAGE"))
+            self.assertTrue(client.hide_message())
+            self.assertEqual(len(mock.received_cmds), 4)
+            self.assertTrue(mock.received_cmds[0].startswith("MESSAGE {"))
             self.assertTrue(mock.received_cmds[1].startswith("SOUND barking"))
             self.assertTrue(mock.received_cmds[2].startswith("BLINK #FFA500 2.0 3000"))
+            self.assertEqual(mock.received_cmds[3], "MESSAGE CLEAR")
         finally:
             mock.stop()
 

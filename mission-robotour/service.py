@@ -107,6 +107,9 @@ class MissionRobotourService:
 
     def stop_mission(self) -> Tuple[bool, str]:
         """Příkaz STOP: ukončí probíhající misi a zastaví spuštěné mikroslužby."""
+        if hasattr(self, "terminal") and self.terminal:
+            self.terminal.hide_message()
+
         if not self.running:
             return False, "WAS_NOT_RUNNING"
         self._stop_requested = True
@@ -123,6 +126,8 @@ class MissionRobotourService:
 
     def shutdown(self):
         """Ukončení celého procesu."""
+        if hasattr(self, "terminal") and self.terminal:
+            self.terminal.hide_message()
         self.stop_mission()
 
     # =========================================================================
@@ -304,6 +309,9 @@ class MissionRobotourService:
         except Exception as e:
             print(f"[MissionService] Chyba ve workflow: {e}")
             self.logger.log("WORKFLOW_EXCEPTION", {"error": str(e)})
+        finally:
+            if hasattr(self, "terminal") and self.terminal and (not self.running or self._stop_requested):
+                self.terminal.hide_message()
 
     async def _run_mission_cycle(self):
         """Jednotlivý cyklus mise od kroku 2 (úvodní obrazovka) po cíl / zastavení."""
@@ -520,68 +528,82 @@ class MissionRobotourService:
         maps_port = MICROSERVICES_CONFIG["MAPS"]["port"]
         fusion_port = MICROSERVICES_CONFIG["FUSION"]["port"]
 
-        while self.running and not self._stop_requested:
+        # Úvodní zobrazení hlášky o vyhledávání trasy
+        self.terminal.show_message(
+            header="Robotour",
+            text="Hledáme cestu k cíli...",
+            buttons=[{"id": "cancel_mission", "text": "Zrušit misi"}]
+        )
+
+        find_cmd = f"FIND_ROUTE {self.start_lat} {self.start_lon} {self.target_lat} {self.target_lon}"
+        self.logger.log("STEP_17_1_FIND_ROUTE", {"cmd": find_cmd})
+        ok, route_resp = send_tcp_command(self.host, maps_port, find_cmd, timeout=5.0)
+
+        route_data = {}
+        if ok and route_resp.startswith("{"):
+            try:
+                route_data = json.loads(route_resp)
+            except Exception:
+                pass
+
+        meta = route_data.get("metadata", {})
+        search_res = meta.get("search_result", "cesta nenalezena")
+
+        if search_res == "found":
+            # Krok 17.3: Cesta nalezena na první pokus
+            self.route_json_str = route_resp
+            route_len = meta.get("route_length_m", 0.0)
+            self.logger.log("STEP_17_3_ROUTE_FOUND", {"length_m": route_len})
+            self.terminal.sound("notification")
+
             self.terminal.show_message(
-                header="Robotour",
-                text="Hledáme cestu k cíli...",
-                buttons=[{"id": "cancel_mission", "text": "Zrušit misi"}]
+                header="Robotour - Cesta nalezena",
+                text=f"Vzdálenost k cíli po cestě: {round(route_len, 1)} m.",
+                buttons=[
+                    {"id": "mission_go", "text": "Vydat se na cestu"},
+                    {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
+                    {"id": "cancel_mission", "text": "Zrušit misi"}
+                ]
             )
 
-            find_cmd = f"FIND_ROUTE {self.start_lat} {self.start_lon} {self.target_lat} {self.target_lon}"
-            self.logger.log("STEP_17_1_FIND_ROUTE", {"cmd": find_cmd})
-            ok, route_resp = send_tcp_command(self.host, maps_port, find_cmd, timeout=5.0)
-
-            route_data = {}
-            if ok and route_resp.startswith("{"):
-                try:
-                    route_data = json.loads(route_resp)
-                except Exception:
-                    pass
-
-            meta = route_data.get("metadata", {})
-            search_res = meta.get("search_result", "cesta nenalezena")
-
-            if search_res == "found":
-                # Krok 17.3: Cesta nalezena
-                self.route_json_str = route_resp
-                route_len = meta.get("route_length_m", 0.0)
-                self.logger.log("STEP_17_3_ROUTE_FOUND", {"length_m": route_len})
-                self.terminal.sound("notification")
-
-                self.terminal.show_message(
-                    header="Robotour - Cesta nalezena",
-                    text=f"Vzdálenost k cíli po cestě: {round(route_len, 1)} m.",
-                    buttons=[
-                        {"id": "mission_go", "text": "Vydat se na cestu"},
-                        {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
-                        {"id": "cancel_mission", "text": "Zrušit misi"}
-                    ]
-                )
-
-                btn = await self._wait_for_button(["mission_go", "rescan_qrcode", "cancel_mission"])
-                if btn != "mission_go":
-                    return
-                break  # Nalezena a schválena trasa -> přechod na Krok 18
-
+            btn = await self._wait_for_button(["mission_go", "rescan_qrcode", "cancel_mission"])
+            if btn != "mission_go":
+                return
+        else:
             # Cesta nenalezena
             reason = meta.get("reason", "Cesta k cíli nebyla v mapovém podkladu nalezena.")
             start_dist = meta.get("start_distance_to_map_m", 0.0)
             goal_dist = meta.get("goal_distance_to_map_m", 0.0)
             self.logger.log("STEP_17_2_ROUTE_NOT_FOUND", {"reason": reason, "start_dist": start_dist, "goal_dist": goal_dist})
 
-            # Pokud je start příliš daleko od mapy, umožníme obsluze robota přisunout blíže
-            # Nabídneme tlačítko [check_again] "Už tam jsem?" a automaticky ověřujeme polohu na pozadí
             is_start_far = start_dist > 5.0 or "Start je dále" in reason
-
-            if is_start_far:
+            if not is_start_far:
+                # Cíl je mimo mapu nebo neexistuje propojení v grafu
                 self.terminal.show_message(
-                    header="Robotour - Vzdálen od mapy",
-                    text=f"{reason}\n\nPřesuňte robota blíže k cestě.",
+                    header="Robotour - Cesta nebyla nalezena",
+                    text=reason,
                     buttons=[
-                        {"id": "check_again", "text": "Už tam jsem?"},
                         {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
                         {"id": "cancel_mission", "text": "Zrušit misi"}
                     ]
+                )
+                btn = await self._wait_for_button(["rescan_qrcode", "cancel_mission"])
+                return
+
+            # Pokud je start příliš daleko od mapy, nabídneme tlačítko [check_again] "Už tam jsem?"
+            # a automaticky ověřujeme polohu na pozadí.
+            # Zůstáváme na stejné obrazovce a mění se POUZE text (žádné problikávání černé obrazovky).
+            far_buttons = [
+                {"id": "check_again", "text": "Už tam jsem?"},
+                {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
+                {"id": "cancel_mission", "text": "Zrušit misi"}
+            ]
+
+            while self.running and not self._stop_requested:
+                self.terminal.show_message(
+                    header="Robotour - Vzdálen od mapy",
+                    text=f"{reason}\n\nPřesuňte robota blíže k cestě.",
+                    buttons=far_buttons
                 )
 
                 # Čekáme na stisk tlačítka nebo timeout 2.5s pro automatické periodické zjištění
@@ -601,19 +623,63 @@ class MissionRobotourService:
                             self.start_lon = f_lon
                     except Exception:
                         pass
-                continue
-            else:
-                # Cíl je mimo mapu nebo neexistuje propojení v grafu
-                self.terminal.show_message(
-                    header="Robotour - Cesta nebyla nalezena",
-                    text=reason,
-                    buttons=[
-                        {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
-                        {"id": "cancel_mission", "text": "Zrušit misi"}
-                    ]
-                )
-                btn = await self._wait_for_button(["rescan_qrcode", "cancel_mission"])
-                return
+
+                # Hledáme trasu na pozadí BEZ probliknutí meziobrazovky
+                find_cmd = f"FIND_ROUTE {self.start_lat} {self.start_lon} {self.target_lat} {self.target_lon}"
+                self.logger.log("STEP_17_RETRY_FIND_ROUTE", {"cmd": find_cmd})
+                ok, route_resp = send_tcp_command(self.host, maps_port, find_cmd, timeout=5.0)
+
+                route_data = {}
+                if ok and route_resp.startswith("{"):
+                    try:
+                        route_data = json.loads(route_resp)
+                    except Exception:
+                        pass
+
+                meta = route_data.get("metadata", {})
+                search_res = meta.get("search_result", "cesta nenalezena")
+
+                if search_res == "found":
+                    # Trasa nalezena!
+                    self.route_json_str = route_resp
+                    route_len = meta.get("route_length_m", 0.0)
+                    self.logger.log("STEP_17_3_ROUTE_FOUND", {"length_m": route_len})
+                    self.terminal.sound("notification")
+
+                    self.terminal.show_message(
+                        header="Robotour - Cesta nalezena",
+                        text=f"Vzdálenost k cíli po cestě: {round(route_len, 1)} m.",
+                        buttons=[
+                            {"id": "mission_go", "text": "Vydat se na cestu"},
+                            {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
+                            {"id": "cancel_mission", "text": "Zrušit misi"}
+                        ]
+                    )
+
+                    btn = await self._wait_for_button(["mission_go", "rescan_qrcode", "cancel_mission"])
+                    if btn != "mission_go":
+                        return
+                    break  # Trasa nalezena a schválena -> Krok 18
+
+                # Stále nenalezena - aktualizujeme reason a vzdálenost
+                reason = meta.get("reason", "Cesta k cíli nebyla v mapovém podkladu nalezena.")
+                start_dist = meta.get("start_distance_to_map_m", 0.0)
+                goal_dist = meta.get("goal_distance_to_map_m", 0.0)
+                self.logger.log("STEP_17_RETRY_NOT_FOUND", {"reason": reason, "start_dist": start_dist, "goal_dist": goal_dist})
+
+                is_start_far = start_dist > 5.0 or "Start je dále" in reason
+                if not is_start_far:
+                    # Start je již blízko, ale nastala jiná chyba cesty
+                    self.terminal.show_message(
+                        header="Robotour - Cesta nebyla nalezena",
+                        text=reason,
+                        buttons=[
+                            {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
+                            {"id": "cancel_mission", "text": "Zrušit misi"}
+                        ]
+                    )
+                    btn = await self._wait_for_button(["rescan_qrcode", "cancel_mission"])
+                    return
 
         # -------------------------------------------------------------
         # Krok 18: Spuštění jízdy (LIDAR, DRIVE, PILOT)
@@ -767,6 +833,8 @@ class MissionRobotourService:
         Zastaví VŠECHNY spuštěné služby při ukončení celé služby MISSION-ROBOTOUR (STOP / SHUTDOWN).
         """
         print("[MissionService] Zastavuji VŠECHNY spuštěné služby (celkový shutdown)...")
+        if hasattr(self, "terminal") and self.terminal:
+            self.terminal.hide_message()
         all_stoppable = [
             "PILOT-ROBOTOUR",
             "MAPS",

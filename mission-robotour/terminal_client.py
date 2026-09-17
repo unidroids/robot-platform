@@ -38,6 +38,21 @@ class TerminalClient:
             print(f"[TerminalClient] Chyba odeslání MESSAGE: {resp}")
         return ok
 
+    def hide_message(self, timeout: Optional[float] = 1.0) -> bool:
+        """
+        Skryje aktivní dialog/zprávu na HMI telefonu (odešle MESSAGE CLEAR).
+        """
+        cmd = "MESSAGE CLEAR"
+        to = timeout if timeout is not None else self.timeout
+        ok, resp = send_tcp_command(self.host, self.port, cmd, timeout=to)
+        if not ok:
+            print(f"[TerminalClient] Chyba odeslání MESSAGE CLEAR: {resp}")
+        return ok
+
+    def clear_message(self, timeout: Optional[float] = 1.0) -> bool:
+        """Alias pro hide_message."""
+        return self.hide_message(timeout=timeout)
+
     def sound(self, name: str) -> bool:
         """
         Přehraje zvuk na HMI telefonu (např. notification, barking, game-over, meow).

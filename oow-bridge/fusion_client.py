@@ -4,14 +4,18 @@ import json
 class FusionClient:
     def __init__(self, host="127.0.0.1"):
         self.host = host
-        # Služby a jejich očekávané PONG odpovědi
+        # Služby a jejich očekávané PONG odpovědi (v pořadí spouštění)
+        # Služba COMPASS byla nahrazena službou GNSS-IMU (port 9016)
+        # Služba FUSION je nyní plnohodnotně součástí seznamu se START/STOP
         self.services = {
             "GNSS-GPS": {"port": 9004, "pong": "PONG GNSS-GPS"},
             "GNSS-DUAL": {"port": 9006, "pong": "PONG GNSS-DUAL"},
             "DRIVE": {"port": 9003, "pong": "PONG DRIVE"},
-            "COMPASS": {"port": 9014, "pong": "PONG COMPASS"}
+            "GNSS-IMU": {"port": 9016, "pong": "PONG GNSS-IMU"},
+            "FUSION": {"port": 9009, "pong": "PONG FUSION"}
         }
-        self.fusion_service = {"port": 9009, "pong": "PONG FUSION"}
+        # Reference pro zpětnou kompatibilitu
+        self.fusion_service = self.services["FUSION"]
 
     async def _send_command(self, port: int, expected_pong: str, cmd: str, timeout: float = 3.0) -> str:
         """Odešle PING a po ověření pošle samotný příkaz."""
@@ -48,7 +52,7 @@ class FusionClient:
             return f"ERR: {e}"
 
     async def _control_services(self, cmd: str, reverse_order: bool = False, timeout: float = 3.0) -> str:
-        """Postupně zavolá příkaz na všech službách krmících fusion."""
+        """Postupně zavolá příkaz na všech službách krmících fusion i na samotné službě fusion."""
         results = {}
         items = list(self.services.items())
         if reverse_order:
@@ -61,16 +65,24 @@ class FusionClient:
         return json.dumps(results, ensure_ascii=False)
 
     async def fusion_on(self, timeout: float = 3.0) -> str:
+        """Spustí všechny polohové služby i samotnou fúzi (START)."""
         return await self._control_services("START", reverse_order=False, timeout=timeout)
 
     async def fusion_off(self, timeout: float = 3.0) -> str:
+        """Zastaví fúzi a navazující polohové služby v obráceném pořadí (STOP)."""
         return await self._control_services("STOP", reverse_order=True, timeout=timeout)
 
     async def fusion_status(self, timeout: float = 5.0) -> str:
-        return await self._send_command(self.fusion_service["port"], self.fusion_service["pong"], "STATUS", timeout)
+        """Vrátí stav samotné služby FUSION."""
+        return await self._send_command(self.services["FUSION"]["port"], self.services["FUSION"]["pong"], "STATUS", timeout)
 
     async def handle_command(self, cmd: str) -> str | None:
-        if cmd == "FUSION_ON": return await self.fusion_on()
-        if cmd == "FUSION_OFF": return await self.fusion_off()
-        if cmd == "FUSION_STATUS": return await self.fusion_status()
+        """Zpracuje BLE příkazy FUSION_ON, FUSION_OFF, FUSION_STATUS z Android aplikace."""
+        if cmd == "FUSION_ON":
+            return await self.fusion_on()
+        if cmd == "FUSION_OFF":
+            return await self.fusion_off()
+        if cmd == "FUSION_STATUS":
+            return await self.fusion_status()
         return None
+

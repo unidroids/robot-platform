@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var btnWaypointsStatus: Button
     private lateinit var switchPilotManual: SwitchCompat
     private lateinit var btnPilotManualStatus: Button
+    private lateinit var switchMissionRobotour: SwitchCompat
+    private lateinit var btnMissionRobotourStatus: Button
     private lateinit var btnTelemetry: Button
 
     private lateinit var bleManager: BleManager
@@ -101,6 +103,8 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnWaypointsStatus = findViewById(R.id.btnWaypointsStatus)
         switchPilotManual = findViewById(R.id.switchPilotManual)
         btnPilotManualStatus = findViewById(R.id.btnPilotManualStatus)
+        switchMissionRobotour = findViewById(R.id.switchMissionRobotour)
+        btnMissionRobotourStatus = findViewById(R.id.btnMissionRobotourStatus)
         btnTelemetry = findViewById(R.id.btnTelemetry)
     }
 
@@ -187,6 +191,11 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             bleManager.sendCommand(getClientId(), if (isChecked) "PILOT_MANUAL_START" else "PILOT_MANUAL_STOP")
         }
         btnPilotManualStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "PILOT_MANUAL_STATUS") }
+
+        switchMissionRobotour.setOnCheckedChangeListener { _, isChecked ->
+            bleManager.sendCommand(getClientId(), if (isChecked) "MISSION_ROBOTOUR_ON" else "MISSION_ROBOTOUR_OFF")
+        }
+        btnMissionRobotourStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "MISSION_ROBOTOUR_STATUS") }
 
         btnTelemetry.setOnClickListener {
             tvTelemetry.setText(R.string.telemetry_loading)
@@ -307,6 +316,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             updateSwitchQuietly(switchDrive, telemetry.driveOn, "DRIVE_ON", "DRIVE_OFF")
             updateSwitchQuietly(switchFusion, telemetry.fusionOn, "FUSION_ON", "FUSION_OFF")
             updateSwitchQuietly(switchPilotManual, telemetry.pilotManualOn, "PILOT_MANUAL_START", "PILOT_MANUAL_STOP")
+            updateSwitchQuietly(switchMissionRobotour, telemetry.missionRobotourOn, "MISSION_ROBOTOUR_ON", "MISSION_ROBOTOUR_OFF")
         }
     }
 

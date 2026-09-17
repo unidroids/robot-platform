@@ -11,6 +11,7 @@ from drive_client import DriveClient
 from rtk_client import RtkClient
 from gamepad_client import GamepadClient
 from logger_client import LoggerClient
+from mission_robotour_client import MissionRobotourClient
 
 class OfficerWatchdog:
     def __init__(self, logger, zmq_address="ipc:///tmp/robot-oow", fallback_address="tcp://127.0.0.1:5555"):
@@ -27,6 +28,7 @@ class OfficerWatchdog:
         self.pilot_manual_client = PilotManualClient()
         self.drive_client = DriveClient()
         self.rtk_client = RtkClient()
+        self.mission_robotour_client = MissionRobotourClient()
         
         self.zmq_address = zmq_address
         self.fallback_address = fallback_address
@@ -83,7 +85,8 @@ class OfficerWatchdog:
             self.pilot_waypoints_client,
             self.pilot_manual_client,
             self.drive_client,
-            self.rtk_client
+            self.rtk_client,
+            self.mission_robotour_client
         ]
         for client in clients:
             asyncio.create_task(self._try_client_command(client, command, client_id))

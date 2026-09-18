@@ -80,6 +80,45 @@ class TestPilotRobotourLogic(unittest.TestCase):
         v_res = (l + r) / 2.0
         self.assertLessEqual(v_res, self.service.max_fwd_accel_step + 1.0)
 
+    def test_status_fields_and_rounding(self):
+        # Bez dat z lidaru a fúze
+        st_json = self.service.get_status()
+        import json
+        st = json.loads(st_json)
+        self.assertIn("obstacle_distance_cm", st)
+        self.assertEqual(st["obstacle_distance_cm"], -1.0)
+        self.assertIn("h_acc_mm", st)
+        self.assertIsInstance(st["h_acc_mm"], int)
+        self.assertEqual(st["h_acc_mm"], 9999)
+
+        # S daty lidaru a fúze s plovoucí desetinnou čárkou
+        self.service.update_lidar({"distance": 85.38})
+        self.service.update_fusion({"hAcc": 124.6, "lat": 49.5, "lon": 12.5, "heading": 90.0, "gpsSol": "FIX"})
+        st = json.loads(self.service.get_status())
+        self.assertEqual(st["obstacle_distance_cm"], 85.4)
+        self.assertEqual(st["h_acc_mm"], 125)
+        self.assertIsInstance(st["h_acc_mm"], int)
+
+    def test_oow_messages(self):
+        self.service.state = "RUNNING"
+        # OOW ZMQ OFF
+        self.service.update_oow_zmq("STATUS OFF")
+        self.assertEqual(self.service.state, "PAUSED")
+        self.assertEqual(self.service.source, "OOW_ZMQ")
+        self.assertEqual(self.service.status_info, "OOW dohled odpojen (timeout/ztráta BLE)")
+
+        # OOW ZMQ ON
+        self.service.oow_tcp_ok = True
+        self.service.update_oow_zmq("STATUS ON")
+        self.assertEqual(self.service.state, "RUNNING")
+        self.assertEqual(self.service.status_info, "OOW dohled obnoven")
+
+        # OOW TCP výpadek
+        self.service.set_oow_tcp_ok(False)
+        self.assertEqual(self.service.state, "PAUSED")
+        self.assertEqual(self.service.source, "OOW_TCP")
+        self.assertEqual(self.service.status_info, "OOW spojení přerušeno")
+
 
 class TestPilotRobotourTCP(unittest.TestCase):
     """Integrační test TCP protokolu služby PILOT-ROBOTOUR."""
@@ -142,6 +181,11 @@ class TestPilotRobotourTCP(unittest.TestCase):
         self.assertIn("distance_to_goal_m", data)
         self.assertIn("speed_actual", data)
         self.assertIn("speed_target", data)
+        self.assertIn("obstacle_distance_cm", data)
+        self.assertIn("h_acc_mm", data)
+        self.assertIsInstance(data["h_acc_mm"], int)
+        self.assertIn("source", data)
+        self.assertIn("info", data)
 
     def test_start_with_maps_json(self):
         import json

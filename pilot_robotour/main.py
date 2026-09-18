@@ -93,10 +93,10 @@ async def handle_client(reader, writer, service):
                     service.stop_service()
                     writer.write(b"OK\n")
                 elif cmd == "PAUSE":
-                    service.pause_service(source="USER", info="TCP Command")
+                    service.pause_service(source="USER", info="Pozastaveno uživatelem (PAUSE)")
                     writer.write(b"OK\n")
                 elif cmd == "RESUME":
-                    service.resume_service(source="USER", info="TCP Command")
+                    service.resume_service(source="USER", info="Obnoveno uživatelem (RESUME)")
                     writer.write(b"OK\n")
                 elif cmd == "STATUS":
                     st = service.get_status()

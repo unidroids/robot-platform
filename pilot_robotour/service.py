@@ -95,7 +95,7 @@ class RobotourPilotService:
         
         # Init logger
         self.logger = DataLogger(base_dir="/data/robot/pilot_robotour")
-        self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,target_left,target_right,actual_left,actual_right,lidar_dist,state")
+        self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,wp_index,target_left,target_right,actual_left,actual_right,obstacle_distance_cm,h_acc_mm,state,source,reason")
         
         # Uložení do /data/robot/pilot_robotour/<yyyy-mm-dd>/<HH-MM-SS>/route.json
         now = datetime.now()
@@ -140,11 +140,13 @@ class RobotourPilotService:
         if self.state != "STOPPED":
             self.state = "STOPPED"
             self.source = "USER"
-            self.status_info = "Stopped by command"
+            self.status_info = "Zastaveno příkazem (STOP)"
         return "OK"
 
     def pause_service(self, source="USER", info=""):
         if self.state != "PAUSED" and self.state != "STOPPED":
+            if not info:
+                info = "Pozastaveno uživatelem (PAUSE)"
             print(f"[PilotRobotour] PAUSE od {source}: {info}")
             self.state = "PAUSED"
             self.source = source
@@ -153,6 +155,8 @@ class RobotourPilotService:
         
     def resume_service(self, source="USER", info=""):
         if self.state == "PAUSED":
+            if not info:
+                info = "Obnoveno uživatelem (RESUME)"
             print(f"[PilotRobotour] RESUME od {source}: {info}")
             self.state = "RUNNING"
             self.source = source
@@ -182,6 +186,10 @@ class RobotourPilotService:
             else:
                 actual_speed_ms = round(raw_fusion_spd, 2)
 
+        # LiDAR obstacle distance
+        lidar_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+        obstacle_distance_cm = round(float(self.lidar_distance), 1) if lidar_active else -1.0
+
         status_dict = {
             "state": self.state,
             "source": self.source,
@@ -189,6 +197,7 @@ class RobotourPilotService:
             "wp_index": wp_index,
             "wp_total": wp_total,
             "distance_to_goal_m": dist,
+            "obstacle_distance_cm": obstacle_distance_cm,
             "lat": 0.0,
             "lon": 0.0,
             "heading": 0.0,
@@ -204,9 +213,12 @@ class RobotourPilotService:
             status_dict["lon"] = self.fusion_data.get('lon', 0.0)
             status_dict["heading"] = self.fusion_data.get('heading', 0.0)
             status_dict["gps_sol"] = self.fusion_data.get('gpsSol', 'NONE')
-            status_dict["h_acc_mm"] = self.fusion_data.get('hAcc', 9999)
+            try:
+                status_dict["h_acc_mm"] = int(round(float(self.fusion_data.get('hAcc', 9999))))
+            except (ValueError, TypeError):
+                status_dict["h_acc_mm"] = 9999
             if self.source == "GPS" and self.state == "PAUSED":
-                status_dict["info"] = f"Current hAcc: {status_dict['h_acc_mm']} mm"
+                status_dict["info"] = f"Nízká přesnost GPS (hAcc: {status_dict['h_acc_mm']} mm, sol: {status_dict['gps_sol']})"
 
         return json.dumps(status_dict, ensure_ascii=False)
 
@@ -230,11 +242,11 @@ class RobotourPilotService:
         msg_upper = msg.strip().upper()
         if "OFF" in msg_upper or "PAUSE" in msg_upper:
             self.oow_zmq_ok = False
-            self.pause_service(source="OOW_ZMQ", info=msg)
+            self.pause_service(source="OOW_ZMQ", info="OOW dohled odpojen (timeout/ztráta BLE)")
         elif "ON" in msg_upper or "RESUME" in msg_upper:
             self.oow_zmq_ok = True
             if self.oow_tcp_ok and self.state == "PAUSED" and self.source == "OOW_ZMQ":
-                self.resume_service(source="OOW_ZMQ", info=msg)
+                self.resume_service(source="OOW_ZMQ", info="OOW dohled obnoven")
         elif "STOP" in msg_upper:
             self.oow_zmq_ok = False
             self.stop_service()
@@ -244,10 +256,10 @@ class RobotourPilotService:
             print(f"[PilotRobotour] OOW TCP stav se změnil na: {'OK' if is_ok else 'FAIL'}")
         self.oow_tcp_ok = is_ok
         if not is_ok and self.state == "RUNNING":
-            self.pause_service(source="OOW_TCP", info="Lost OOW connection")
+            self.pause_service(source="OOW_TCP", info="OOW spojení přerušeno")
         elif is_ok and self.state == "PAUSED" and self.source == "OOW_TCP":
             if self.oow_zmq_ok:
-                self.resume_service(source="OOW_TCP", info="OOW connection restored")
+                self.resume_service(source="OOW_TCP", info="OOW spojení obnoveno")
 
     def _zmq_loop(self):
         context = zmq.Context()
@@ -372,46 +384,65 @@ class RobotourPilotService:
             distance_to_goal = 0
             d_perp = 0
             
+            if self.fusion_data:
+                lat = self.fusion_data.get("lat", 0.0)
+                lon = self.fusion_data.get("lon", 0.0)
+                heading = self.fusion_data.get("heading", 0.0)
+
+            lidar_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+            current_lidar = round(float(self.lidar_distance), 1) if lidar_active else -1.0
+
             if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
                 target_v = self.max_speed if self.state == "RUNNING" else 0.0
 
-                # Sledování trasy a logika GPS
-                if not self.fusion_data:
-                    pass
+                # 1. Kontrola LiDARu - bez platných dat robot nesmí jet
+                if not lidar_active:
+                    target_v = 0.0
+                    target_left, target_right = 0, 0
+                    if self.state == "RUNNING":
+                        self.source = "LIDAR"
+                        if self.last_lidar_time == 0.0:
+                            self.status_info = "Čekání na data z LiDARu"
+                        else:
+                            self.status_info = "Výpadek dat z LiDARu (timeout > 2s)"
+                # 2. Kontrola fúzních dat (GPS)
+                elif not self.fusion_data:
+                    target_v = 0.0
+                    target_left, target_right = 0, 0
+                    if self.state == "RUNNING":
+                        self.source = "GPS"
+                        self.status_info = "Čekání na data z fúze (GPS)"
                 else:
-                    hAcc = self.fusion_data.get("hAcc", 9999) # v mm
+                    hAcc = int(round(float(self.fusion_data.get("hAcc", 9999)))) # v mm
                     heading_sol = self.fusion_data.get("headingSol", "NONE")
-                    heading_acc = self.fusion_data.get("headingAcc", 9999.0)
+                    heading_acc = float(self.fusion_data.get("headingAcc", 9999.0))
                     
                     if hAcc > 700 or heading_sol == "NONE" or heading_acc > 6.0:
-                        heading_val = self.fusion_data.get("heading", 0.0)
-                        info_msg = f"Bad GPS/Hdg. hAcc:{hAcc}mm hdg:{heading_val:.1f} hdgAcc:{heading_acc} hdgSol:{heading_sol}"
+                        info_msg = f"Nízká přesnost GPS (hAcc: {hAcc} mm, sol: {heading_sol})"
                         if self.state == "RUNNING":
                             self.pause_service(source="GPS", info=info_msg)
                         target_left, target_right = 0, 0
                     else:
                         # Pokud byla chyba GPS odstraněna, obnovíme běh
                         if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 6.0:
-                            self.resume_service(source="GPS", info=f"Accuracy improved: hAcc={hAcc} mm, hdgSol={heading_sol}, hdgAcc={heading_acc}")
+                            self.resume_service(source="GPS", info=f"Přesnost GPS obnovena (hAcc: {hAcc} mm, sol: {heading_sol})")
                             
-                        lat = self.fusion_data.get("lat")
-                        lon = self.fusion_data.get("lon")
-                        heading = self.fusion_data.get("heading")
-                        
                         near_state = self.path_tracker.update(lat, lon)
                         
                         if near_state is None:
                             if self.state != "FINISHED":
                                 print("[PilotRobotour] Path not found. Přepínám na stav FINISHED (zpomaluji na 0).")
                                 self.state = "FINISHED"
-                                self.status_info = "Path not found"
+                                self.source = "PILOT"
+                                self.status_info = "Trasa nenalezena"
                             target_left, target_right = 0, 0
                         else:
                             if near_state.distance_to_goal_m is not None and near_state.distance_to_goal_m < 0 and self.path_tracker.current_wp_index >= len(self.path_tracker.waypoints)-2:
                                 if self.state != "FINISHED":
                                     print("[PilotRobotour] Konec trasy dosažen. Přepínám na stav FINISHED (zpomaluji na 0).")
                                     self.state = "FINISHED"
-                                    self.status_info = "Goal reached"
+                                    self.source = "PILOT"
+                                    self.status_info = "Cíl dosažen"
                                 
                             if near_state.heading_to_near_gnss_deg is not None:
                                 target_heading = near_state.heading_to_near_gnss_deg
@@ -429,36 +460,35 @@ class RobotourPilotService:
                                 if dist < slowdown_dist:
                                     target_v = v_waypoint + (self.max_speed - v_waypoint) * (dist / slowdown_dist)
 
-                            # Řízení požadované rychlosti (current_speed)
-                            if self.current_speed < target_v:
-                                self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
-                            elif self.current_speed > target_v:
-                                self.current_speed = max(target_v, self.current_speed - self.max_brk_accel_step)
-                            
-                            # Validace aktuálnosti lidaru (timeout 2s)
-                            lidar_active = (time.time() - self.last_lidar_time) < 2.0
-                            current_lidar = self.lidar_distance if lidar_active else -1.0
-                            
+                            # Kontrola antikolize LiDARu (< 70 cm)
                             if 0 < current_lidar < 70.0:
-                                print(f"[PilotRobotour] Lidar antikolize ({current_lidar}cm) - zastavuji.")
+                                target_v = 0.0
                                 target_left, target_right = 0, 0
+                                if self.state == "RUNNING":
+                                    self.source = "LIDAR"
+                                    self.status_info = f"Překážka před robotem ({current_lidar:.0f} cm)"
                             else:
+                                if self.state == "RUNNING" and self.source in ["LIDAR", "GPS", "USER"]:
+                                    self.source = "NAV"
+                                    self.status_info = "Jízda podle trasy"
                                 target_left, target_right, heading_error = self._calculate_steering(heading, target_heading, current_lidar, self.current_speed)
 
-                # Fallback aktualizace rychlosti
-                if not self.fusion_data or (self.fusion_data and (self.fusion_data.get("hAcc", 9999) > 700 or self.fusion_data.get("headingSol", "NONE") == "NONE")):
-                    if self.current_speed < target_v:
-                        self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
-                    elif self.current_speed > target_v:
-                        self.current_speed = max(target_v, self.current_speed - self.max_brk_accel_step)
+                # Řízení požadované rychlosti (current_speed)
+                if self.current_speed < target_v:
+                    self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
+                elif self.current_speed > target_v:
+                    self.current_speed = max(target_v, self.current_speed - self.max_brk_accel_step)
 
                 # Fyzické limity zrychlení a odeslání do motorů
                 actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)
                 self.drive.send_drive(self.max_pwm, actual_left, actual_right)
                 
             if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
+                wp_idx = self.path_tracker.current_wp_index if self.path_tracker else 0
+                h_acc_val = int(round(float(self.fusion_data.get("hAcc", 9999)))) if self.fusion_data else 9999
+                reason_escaped = f'"{self.status_info}"'
                 if self.logger:
-                    self.logger.print(f"{time.time()},{lat},{lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{target_left},{target_right},{actual_left},{actual_right},{self.lidar_distance},{self.state}")
+                    self.logger.print(f"{time.time()},{lat},{lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped}")
                 
                 if self.state in ["STOPPED", "FINISHED"] and actual_left == 0 and actual_right == 0:
                     print(f"[PilotRobotour] Robot plynule zastavil ({self.state}). Ukončuji řídicí smyčku.")

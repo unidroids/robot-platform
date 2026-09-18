@@ -212,6 +212,8 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
                     "wp_total": 2,
                     "distance_to_goal_m": 150.0,
                     "speed": 0.8,
+                    "speed_actual": 0.8,
+                    "speed_target": 1.2,
                     "gps_sol": "FIX"
                 })
 
@@ -471,6 +473,8 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
             "wp_total": 2,
             "distance_to_goal_m": 131.3,
             "speed": 0.0,
+            "speed_actual": 0.0,
+            "speed_target": 0.0,
             "gps_sol": "FIX"
         })
 

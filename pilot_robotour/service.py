@@ -164,6 +164,24 @@ class RobotourPilotService:
         wp_total = len(self.path_tracker.waypoints) if self.path_tracker else 0
         dist = round(float(self.last_distance_to_goal), 2) if self.last_distance_to_goal is not None else 0.0
 
+        # Cílová / požadovaná rychlost pilota v m/s:
+        # self.current_speed je interně v cm/s (např. 100 cm/s = 1.0 m/s nebo 120 cm/s = 1.2 m/s)
+        raw_cmd_speed = float(self.current_speed) if hasattr(self, 'current_speed') and self.current_speed is not None else 0.0
+        if raw_cmd_speed > 10.0:
+            target_speed_ms = round(raw_cmd_speed / 100.0, 2)
+        else:
+            target_speed_ms = round(raw_cmd_speed, 2)
+
+        # Aktuální reálná naměřená rychlost z fúze (odometrie podvozku / GNSS) v m/s:
+        # fusion_data['speed'] je v mm/s (např. 850 mm/s = 0.85 m/s)
+        actual_speed_ms = 0.0
+        if self.fusion_data:
+            raw_fusion_spd = float(self.fusion_data.get('speed', 0.0))
+            if abs(raw_fusion_spd) > 20.0:
+                actual_speed_ms = round(raw_fusion_spd / 1000.0, 2)
+            else:
+                actual_speed_ms = round(raw_fusion_spd, 2)
+
         status_dict = {
             "state": self.state,
             "source": self.source,
@@ -174,7 +192,9 @@ class RobotourPilotService:
             "lat": 0.0,
             "lon": 0.0,
             "heading": 0.0,
-            "speed": round(float(self.current_speed), 2) if hasattr(self, 'current_speed') else 0.0,
+            "speed": actual_speed_ms,              # Zpětná kompatibilita (skutečná rychlost v m/s)
+            "speed_actual": actual_speed_ms,       # Aktuální naměřená rychlost v m/s
+            "speed_target": target_speed_ms,       # Cílová požadovaná rychlost v m/s
             "gps_sol": "NONE",
             "h_acc_mm": 9999
         }

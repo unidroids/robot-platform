@@ -140,6 +140,8 @@ class TestPilotRobotourTCP(unittest.TestCase):
         self.assertIn("wp_index", data)
         self.assertIn("wp_total", data)
         self.assertIn("distance_to_goal_m", data)
+        self.assertIn("speed_actual", data)
+        self.assertIn("speed_target", data)
 
     def test_start_with_maps_json(self):
         import json

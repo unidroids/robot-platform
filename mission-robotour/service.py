@@ -808,7 +808,10 @@ class MissionRobotourService:
             wp_idx = status_data.get("wp_index", 0)
             wp_tot = status_data.get("wp_total", 0)
             dist_left = status_data.get("distance_to_goal_m", 0.0)
-            speed = status_data.get("speed", 0.0)
+            speed_act = float(status_data.get("speed_actual", status_data.get("speed", 0.0)))
+            speed_tgt = float(status_data.get("speed_target", 0.0))
+            if speed_tgt == 0.0 and speed_act > 0.0:
+                speed_tgt = speed_act
             gps_sol = status_data.get("gps_sol", "NONE")
 
             # Krok 20: PILOT STOPPED
@@ -841,10 +844,13 @@ class MissionRobotourService:
 
             # Krok 21: Jízda běží
             elif p_state == "RUNNING":
-                self._set_state(21, "STEP_21_DRIVING", f"WP {wp_idx}/{wp_tot}, zbývá {dist_left} m, rychlost {speed} m/s")
+                self._set_state(21, "STEP_21_DRIVING", f"WP {wp_idx}/{wp_tot}, zbývá {dist_left} m, akt {speed_act:.1f} m/s, cíl {speed_tgt:.1f} m/s")
                 self.terminal.show_message(
                     header="Robotour - Jízda",
-                    text=f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\nRychlost {speed} m/s | GPS: {gps_sol}",
+                    text=(
+                        f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\n"
+                        f"Aktuální: {speed_act:.1f} m/s | Cílová: {speed_tgt:.1f} m/s | GPS: {gps_sol}"
+                    ),
                     buttons=[
                         {"id": "pause_mission", "text": "Pause"},
                         {"id": "stop_mission", "text": "Stop"}
@@ -871,7 +877,11 @@ class MissionRobotourService:
                 self._set_state(22, "STEP_22_PAUSED", f"Pilot pozastaven{info_str}")
                 self.terminal.show_message(
                     header="Robotour - Pozastaveno",
-                    text=f"Pozastaveno{info_str}\nWaypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\nRychlost {speed} m/s | GPS: {gps_sol}",
+                    text=(
+                        f"Pozastaveno{info_str}\n"
+                        f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\n"
+                        f"Aktuální: {speed_act:.1f} m/s | Cílová: {speed_tgt:.1f} m/s | GPS: {gps_sol}"
+                    ),
                     buttons=[
                         {"id": "resume_mission", "text": "Pokračovat"},
                         {"id": "stop_mission", "text": "Stop"}
@@ -894,7 +904,7 @@ class MissionRobotourService:
                 self._set_state(19, "STEP_19_CHECK_PILOT", f"Stav pilota: {p_state} ({p_info or p_source})")
                 self.terminal.show_message(
                     header="Robotour - Čekání na pilota",
-                    text=f"Stav: {p_state}\n{p_info or p_source}\nGPS: {gps_sol}",
+                    text=f"Stav: {p_state}\n{p_info or p_source}\nAktuální: {speed_act:.1f} m/s | Cílová: {speed_tgt:.1f} m/s | GPS: {gps_sol}",
                     buttons=[{"id": "stop_mission", "text": "Stop"}]
                 )
                 btn = await self._wait_for_button(["stop_mission"], timeout=2.0)

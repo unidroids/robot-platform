@@ -8,6 +8,7 @@ __all__ = [
     "ecef_to_enu", "enu_to_ecef",
     "heading_gnss_to_enu", "heading_enu_to_gnss",
     "yawrate_cw_to_ccw", "yawrate_ccw_to_cw",
+    "displace_wgs84", "rrp_to_nose",
 ]
 
 _WGS84_A = 6378137.0                  
@@ -107,3 +108,21 @@ def yawrate_cw_to_ccw(r_cw_deg_s: float) -> float:
 
 def yawrate_ccw_to_cw(r_ccw_deg_s: float) -> float:
     return -r_ccw_deg_s
+
+def displace_wgs84(lat_deg: float, lon_deg: float, d_north_m: float, d_east_m: float) -> Tuple[float, float]:
+    """Posune WGS84 souřadnice o metry na sever (d_north_m) a východ (d_east_m)."""
+    d_lat = d_north_m / 111132.95
+    lat_rad = deg2rad(lat_deg)
+    d_lon = d_east_m / (111412.84 * math.cos(lat_rad))
+    return lat_deg + d_lat, lon_deg + d_lon
+
+def rrp_to_nose(lat_rrp: float, lon_rrp: float, heading_deg: float, offset_fwd_m: float) -> Tuple[float, float]:
+    """
+    Přepočte polohu ze středu otáčení robota (RRP) na čumák robota podél azimutu.
+    heading_deg: Azimut robota ve stupních (0=Sever, 90=Východ)
+    offset_fwd_m: Vzdálenost čumáku od středu otáčení v metrech (např. 0.40 m)
+    """
+    hdg_rad = deg2rad(heading_deg)
+    d_north = offset_fwd_m * math.cos(hdg_rad)
+    d_east = offset_fwd_m * math.sin(hdg_rad)
+    return displace_wgs84(lat_rrp, lon_rrp, d_north, d_east)

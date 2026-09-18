@@ -12,10 +12,15 @@ try:
     from .path_tracker import PathTracker
     from .drive_client import DriveClient
     from .data_logger import DataLogger
+    from .geo_utils import rrp_to_nose
 except (ImportError, ValueError):
     from path_tracker import PathTracker
     from drive_client import DriveClient
     from data_logger import DataLogger
+    from geo_utils import rrp_to_nose
+
+
+FRONT_OFFSET_M = 0.40  # Předsazení čumáku robota před středem otáčení (RRP) v metrech
 
 
 class RobotourPilotService:
@@ -95,7 +100,7 @@ class RobotourPilotService:
         
         # Init logger
         self.logger = DataLogger(base_dir="/data/robot/pilot_robotour")
-        self.logger.print("time,lat,lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,wp_index,target_left,target_right,actual_left,actual_right,obstacle_distance_cm,h_acc_mm,state,source,reason")
+        self.logger.print("time,lat,lon,nose_lat,nose_lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,wp_index,target_left,target_right,actual_left,actual_right,obstacle_distance_cm,h_acc_mm,state,source,reason")
         
         # Uložení do /data/robot/pilot_robotour/<yyyy-mm-dd>/<HH-MM-SS>/route.json
         now = datetime.now()
@@ -376,18 +381,21 @@ class RobotourPilotService:
             actual_right = 0
             
             # Variables for logging
-            lat = 0
-            lon = 0
-            heading = 0
-            target_heading = 0
-            heading_error = 0
-            distance_to_goal = 0
-            d_perp = 0
+            lat = 0.0
+            lon = 0.0
+            nose_lat = 0.0
+            nose_lon = 0.0
+            heading = 0.0
+            target_heading = 0.0
+            heading_error = 0.0
+            distance_to_goal = 0.0
+            d_perp = 0.0
             
             if self.fusion_data:
-                lat = self.fusion_data.get("lat", 0.0)
-                lon = self.fusion_data.get("lon", 0.0)
-                heading = self.fusion_data.get("heading", 0.0)
+                lat = float(self.fusion_data.get("lat", 0.0))
+                lon = float(self.fusion_data.get("lon", 0.0))
+                heading = float(self.fusion_data.get("heading", 0.0))
+                nose_lat, nose_lon = rrp_to_nose(lat, lon, heading, FRONT_OFFSET_M)
 
             lidar_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
             current_lidar = round(float(self.lidar_distance), 1) if lidar_active else -1.0
@@ -427,7 +435,7 @@ class RobotourPilotService:
                         if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 6.0:
                             self.resume_service(source="GPS", info=f"Přesnost GPS obnovena (hAcc: {hAcc} mm, sol: {heading_sol})")
                             
-                        near_state = self.path_tracker.update(lat, lon)
+                        near_state = self.path_tracker.update(nose_lat, nose_lon)
                         
                         if near_state is None:
                             if self.state != "FINISHED":
@@ -488,7 +496,7 @@ class RobotourPilotService:
                 h_acc_val = int(round(float(self.fusion_data.get("hAcc", 9999)))) if self.fusion_data else 9999
                 reason_escaped = f'"{self.status_info}"'
                 if self.logger:
-                    self.logger.print(f"{time.time()},{lat},{lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped}")
+                    self.logger.print(f"{time.time()},{lat},{lon},{nose_lat},{nose_lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped}")
                 
                 if self.state in ["STOPPED", "FINISHED"] and actual_left == 0 and actual_right == 0:
                     print(f"[PilotRobotour] Robot plynule zastavil ({self.state}). Ukončuji řídicí smyčku.")

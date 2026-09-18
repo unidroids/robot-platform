@@ -1,5 +1,6 @@
 # pilot_robotour/test_pilot_robotour.py
 import asyncio
+import math
 import os
 import socket
 import sys
@@ -11,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from pilot_robotour.geo_utils import deg2rad, rad2deg, lla_to_ecef, ecef_to_lla
+from pilot_robotour.geo_utils import deg2rad, rad2deg, lla_to_ecef, ecef_to_lla, rrp_to_nose
 from pilot_robotour.near_waypoint import NearWaypoint
 from pilot_robotour.path_tracker import PathTracker
 from pilot_robotour.service import RobotourPilotService
@@ -118,6 +119,35 @@ class TestPilotRobotourLogic(unittest.TestCase):
         self.assertEqual(self.service.state, "PAUSED")
         self.assertEqual(self.service.source, "OOW_TCP")
         self.assertEqual(self.service.status_info, "OOW spojení přerušeno")
+
+    def test_rrp_to_nose_projection(self):
+        """Test přepočtu RRP -> čumák pro různé azimuty."""
+        lat0, lon0 = 50.0, 14.0
+        offset_m = 0.40
+
+        # Sever (heading 0°): posun pouze na sever
+        n_lat, n_lon = rrp_to_nose(lat0, lon0, heading_deg=0.0, offset_fwd_m=offset_m)
+        self.assertGreater(n_lat, lat0)
+        self.assertAlmostEqual(n_lon, lon0, places=9)
+        dist_n = (n_lat - lat0) * 111132.95
+        self.assertAlmostEqual(dist_n, offset_m, places=3)
+
+        # Východ (heading 90°): posun pouze na východ
+        e_lat, e_lon = rrp_to_nose(lat0, lon0, heading_deg=90.0, offset_fwd_m=offset_m)
+        self.assertAlmostEqual(e_lat, lat0, places=9)
+        self.assertGreater(e_lon, lon0)
+        dist_e = (e_lon - lon0) * (111412.84 * math.cos(math.radians(lat0)))
+        self.assertAlmostEqual(dist_e, offset_m, places=3)
+
+        # Jih (heading 180°): posun pouze na jih
+        s_lat, s_lon = rrp_to_nose(lat0, lon0, heading_deg=180.0, offset_fwd_m=offset_m)
+        self.assertLess(s_lat, lat0)
+        self.assertAlmostEqual(s_lon, lon0, places=9)
+
+        # Západ (heading 270°): posun pouze na západ
+        w_lat, w_lon = rrp_to_nose(lat0, lon0, heading_deg=270.0, offset_fwd_m=offset_m)
+        self.assertAlmostEqual(w_lat, lat0, places=9)
+        self.assertLess(w_lon, lon0)
 
 
 class TestPilotRobotourTCP(unittest.TestCase):

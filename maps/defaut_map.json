@@ -2,7 +2,7 @@
   "metadata": {
     "area_name": "Kramolín 2026-07-29",
     "type": "manual_edit_road_model",
-    "saved_at": "2026-09-17T04:02:33.822Z"
+    "saved_at": "2026-09-18T01:11:11.099Z"
   },
   "nodes": [
     {
@@ -232,6 +232,36 @@
       "lat": 49.554104063574314,
       "lon": 12.740205872411329,
       "label": "Uzel 38"
+    },
+    {
+      "id": "node_39_9571",
+      "lat": 49.554289283884515,
+      "lon": 12.742162495851518,
+      "label": "Uzel 39"
+    },
+    {
+      "id": "node_40_0466",
+      "lat": 49.55419706262703,
+      "lon": 12.742135003209114,
+      "label": "Uzel 40"
+    },
+    {
+      "id": "node_41_4186",
+      "lat": 49.554122241478865,
+      "lon": 12.742122262716295,
+      "label": "Uzel 41"
+    },
+    {
+      "id": "node_42_6395",
+      "lat": 49.55406047044459,
+      "lon": 12.74213030934334,
+      "label": "Uzel 42"
+    },
+    {
+      "id": "node_43_2258",
+      "lat": 49.553977383930196,
+      "lon": 12.74220608174801,
+      "label": "Uzel 43"
     }
   ],
   "edges": [
@@ -591,6 +621,51 @@
       "from": "node_36_5918",
       "to": "node_38_1078",
       "name": "Úsek 40",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_41_9571",
+      "from": "node_26_8694",
+      "to": "node_39_9571",
+      "name": "Úsek 41",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_42_0466",
+      "from": "node_39_9571",
+      "to": "node_40_0466",
+      "name": "Úsek 42",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_43_4186",
+      "from": "node_40_0466",
+      "to": "node_41_4186",
+      "name": "Úsek 43",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_44_6395",
+      "from": "node_41_4186",
+      "to": "node_42_6395",
+      "name": "Úsek 44",
+      "width_m": 4.5,
+      "controlPoint": null,
+      "coords": []
+    },
+    {
+      "id": "edge_45_2258",
+      "from": "node_42_6395",
+      "to": "node_43_2258",
+      "name": "Úsek 45",
       "width_m": 4.5,
       "controlPoint": null,
       "coords": []

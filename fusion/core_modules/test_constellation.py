@@ -21,17 +21,17 @@ class TestConstellationManager(unittest.TestCase):
         m_deg_lon = 111139.0 * math.cos(math.radians(50.0))
 
         # Antény v nominálních offsetech vzhledem k [lat0, lon0]:
-        # GPS: [+0.32, 0.0] m
-        gps_lat = lat0 + 0.32 / m_deg_lat
+        # GPS: [+0.320, 0.000] m
+        gps_lat = lat0 + 0.320 / m_deg_lat
         gps_lon = lon0
 
-        # Master: [+0.25, +0.24] m
-        master_lat = lat0 + 0.25 / m_deg_lat
-        master_lon = lon0 + 0.24 / m_deg_lon
+        # Master: [+0.261, +0.213] m
+        master_lat = lat0 + 0.261 / m_deg_lat
+        master_lon = lon0 + 0.213 / m_deg_lon
 
-        # Slave: [+0.25, -0.24] m
-        slave_lat = lat0 + 0.25 / m_deg_lat
-        slave_lon = lon0 - 0.24 / m_deg_lon
+        # Slave: [+0.254, -0.249] m
+        slave_lat = lat0 + 0.254 / m_deg_lat
+        slave_lon = lon0 - 0.249 / m_deg_lon
 
         self.mgr.update_gps(gps_lat, gps_lon, 0.02, "NARROW_INT")
         self.mgr.update_master(master_lat, master_lon, 0.02, "NARROW_INT")
@@ -42,9 +42,9 @@ class TestConstellationManager(unittest.TestCase):
 
         self.assertEqual(self.mgr.triangle_status, "TRIANGLE_OK")
         self.assertEqual(self.mgr.active_antenna_name, "gnss-gps")
-        self.assertAlmostEqual(self.mgr.dist_dual, 0.48, delta=0.02)
-        self.assertAlmostEqual(self.mgr.dist_gps_master, 0.25, delta=0.02)
-        self.assertAlmostEqual(self.mgr.dist_gps_slave, 0.25, delta=0.02)
+        self.assertAlmostEqual(self.mgr.dist_dual, 0.462, delta=0.02)
+        self.assertAlmostEqual(self.mgr.dist_gps_master, 0.221, delta=0.02)
+        self.assertAlmostEqual(self.mgr.dist_gps_slave, 0.258, delta=0.02)
 
         # Střed otáčení musí odpovídat [lat0, lon0]
         self.assertAlmostEqual(self.mgr.center_lat, lat0, places=6)
@@ -57,10 +57,10 @@ class TestConstellationManager(unittest.TestCase):
         m_deg_lat = 111139.0
         m_deg_lon = 111139.0 * math.cos(math.radians(50.0))
 
-        master_lat = lat0 + 0.25 / m_deg_lat
-        master_lon = lon0 + 0.24 / m_deg_lon
-        slave_lat = lat0 + 0.25 / m_deg_lat
-        slave_lon = lon0 - 0.24 / m_deg_lon
+        master_lat = lat0 + 0.261 / m_deg_lat
+        master_lon = lon0 + 0.213 / m_deg_lon
+        slave_lat = lat0 + 0.254 / m_deg_lat
+        slave_lon = lon0 - 0.249 / m_deg_lon
 
         # GPS má chybu 3 metry
         bad_gps_lat = lat0 + 3.32 / m_deg_lat

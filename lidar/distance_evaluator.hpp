@@ -14,8 +14,8 @@ public:
     float distance(const LidarPointBuffer &buffer,
                    float z_min =  50.0f,
                    float z_max =  150.0f,
-                   float y_min = -80.0f,
-                   float y_max =  80.0f,
+                   float y_min = -60.0f,
+                   float y_max =  60.0f,
                    float min_intensity = 30.0f,
                    size_t min_points = 25) const
     {

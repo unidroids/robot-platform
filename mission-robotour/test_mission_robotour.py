@@ -295,6 +295,11 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.service.current_step, 20)
 
+        # Ověříme, že ihned po FINISHED (krok 20) byl zastaven LIDAR a PILOT, ale motory ještě čekají na acknowledge
+        self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
+        self.assertIn("STOP", self.mocks["PILOT-ROBOTOUR"].received_cmds)
+        self.assertNotIn("OFF", self.mocks["DRIVE"].received_cmds)
+
         # 7. Simulace potvrzení 'acknowledge' v cíli
         self.service.on_button_pressed("acknowledge")
         for _ in range(40):

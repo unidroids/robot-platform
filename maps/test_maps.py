@@ -132,8 +132,8 @@ class TestMapGraph(unittest.TestCase):
 
     def test_map_loaded(self):
         self.assertTrue(self.mg.is_loaded)
-        self.assertEqual(len(self.mg.nodes), 38)
-        self.assertEqual(len(self.mg.edges), 40)
+        self.assertEqual(len(self.mg.nodes), 43)
+        self.assertEqual(len(self.mg.edges), 45)
         self.assertIn("Kramolín", self.mg.metadata.get("area_name", ""))
 
     def test_nearest_point_on_node(self):
@@ -185,14 +185,65 @@ class TestRoutePlanner(unittest.TestCase):
         self.assertAlmostEqual(res["nodes"][0]["lat"], s_lat, places=6)
         self.assertAlmostEqual(res["nodes"][0]["lon"], s_lon, places=6)
 
-        # Poslední bod trasy musí odpovídat cíli
-        self.assertAlmostEqual(res["nodes"][-1]["lat"], g_lat, places=6)
-        self.assertAlmostEqual(res["nodes"][-1]["lon"], g_lon, places=6)
+        # Poslední bod trasy musí odpovídat cíli na komunikaci (žádná koncová odbočka)
+        self.assertEqual(res["nodes"][-1]["label"], "Cíl trasy")
+        last_node = res["nodes"][-1]
+        last_dist = self.mg.find_nearest_point_on_map(last_node["lat"], last_node["lon"]).distance_m
+        self.assertLessEqual(last_dist, 1.5)
+
+        # Žádná hrana nesmí být odbočka "Příjezd do cíle"
+        for e in res["edges"]:
+            self.assertNotEqual(e["name"], "Příjezd do cíle")
 
         # Všechny hrany mají specifikovaný offset
         for e in res["edges"]:
             self.assertIn("offset_m", e)
             self.assertGreaterEqual(e["offset_m"], 0.0)
+
+    def test_no_offroad_goal_branch(self):
+        # Start u uzlu 1, cíl 3 metry vedle uzlu 14 v trávě
+        n1 = self.mg.nodes["osm_node_1"]
+        n14 = self.mg.nodes["osm_node_14"]
+
+        g_lat = n14.lat
+        g_lon = n14.lon + 0.00004  # cca 2.88 metru kolmo od komunikace
+
+        res = self.planner.plan_route(n1.lat, n1.lon, g_lat, g_lon)
+        meta = res["metadata"]
+
+        self.assertEqual(meta["search_result"], "found")
+        self.assertGreater(meta["goal_distance_to_map_m"], 2.5)
+        self.assertLessEqual(meta["goal_distance_to_map_m"], 5.0)
+
+        # Cílový bod trasy nesmí odpovídat zadaným GPS souřadnicím cíle v trávě
+        last_node = res["nodes"][-1]
+        self.assertNotAlmostEqual(last_node["lon"], g_lon, places=5)
+        self.assertEqual(last_node["label"], "Cíl trasy")
+
+        # Cílový bod musí ležet na komunikaci
+        last_pt_dist = self.mg.find_nearest_point_on_map(last_node["lat"], last_node["lon"]).distance_m
+        self.assertLessEqual(last_pt_dist, 1.5)
+
+    def test_route_start_and_goal_on_same_edge(self):
+        # Start i cíl leží podél stejné hrany (osm_node_5 -> osm_node_6)
+        n5 = self.mg.nodes["osm_node_5"]
+        n6 = self.mg.nodes["osm_node_6"]
+
+        # Start v cca 20% úseku, cíl v cca 70% úseku
+        s_lat = n5.lat * 0.8 + n6.lat * 0.2 + 0.00001
+        s_lon = n5.lon * 0.8 + n6.lon * 0.2 + 0.00001
+        g_lat = n5.lat * 0.3 + n6.lat * 0.7
+        g_lon = n5.lon * 0.3 + n6.lon * 0.7
+
+        res = self.planner.plan_route(s_lat, s_lon, g_lat, g_lon)
+        self.assertEqual(res["metadata"]["search_result"], "found")
+        self.assertEqual(len(res["nodes"]), 3)
+        self.assertEqual(res["nodes"][0]["label"], "Start trasy")
+        self.assertEqual(res["nodes"][1]["label"], "Bod na komunikaci")
+        self.assertEqual(res["nodes"][2]["label"], "Cíl trasy")
+        self.assertEqual(res["edges"][0]["name"], "Přístup na trasu")
+        self.assertEqual(res["edges"][1]["name"], "OSM Úsek 4")
+        self.assertGreater(res["metadata"]["route_length_m"], 5.0)
 
     def test_rejection_start_too_far(self):
         n1 = self.mg.nodes["osm_node_1"]
@@ -287,8 +338,8 @@ class TestMapServiceAndTCP(unittest.TestCase):
         data = json.loads(parts[1])
         self.assertEqual(data["service"], "MAPS")
         self.assertEqual(data["mode"], "READY")
-        self.assertEqual(data["nodes_count"], 38)
-        self.assertEqual(data["edges_count"], 40)
+        self.assertEqual(data["nodes_count"], 43)
+        self.assertEqual(data["edges_count"], 45)
 
     def test_tcp_find_route_comma_and_spaces(self):
         n1 = self.service.map_graph.nodes["osm_node_1"]

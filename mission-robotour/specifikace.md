@@ -19,19 +19,19 @@ Služba ošetří systémové signály a řádné zastavení spuštěných micro
 
 
 Microslužby: 
-QRSCANER 9021
-TERMINAL 9022
-DRIVE 9003
-GNSS-DUAL 9006
-GNSS-GPS 9004
-RTK 9015
-GNSS-IMU 9016
-LOGGER 9012
-FUSION 9009
-MAPS 9040
-LIDAR 9002
+QRSCANER 9021 - on request
+TERMINAL 9022 - all time
+DRIVE 9003 - START/STOP all time, ON/OFF - ON po mission_go, OFF - after acknowledge 
+GNSS-DUAL 9006 - all time
+GNSS-GPS 9004 - all time
+RTK 9015 - all time 
+GNSS-IMU 9016 - all time
+LOGGER 9012 - START - úvodní obrazovka, STOP - úvodní obrazovka
+FUSION 9009 - all time 
+MAPS 9040 - START - úvodní obrazovka, STOP - jizda ukončena (STOPPED/FINISHED)
+LIDAR 9002 - START - po mission_go,  STOP - jizda ukončena (STOPPED/FINISHED)
 OOW-BRIDGE 9030
-PILOT-ROBOTOUR 9104
+PILOT-ROBOTOUR 9104 - po mission_go,  STOP - jizda ukončena (STOPPED/FINISHED)
 
 
 

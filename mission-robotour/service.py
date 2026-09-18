@@ -645,7 +645,7 @@ class MissionRobotourService:
                 header="Robotour - Cesta nalezena",
                 text=f"Vzdálenost k cíli po cestě: {round(route_len, 1)} m.",
                 buttons=[
-                    {"id": "mission_go", "text": "Vydat se na cestu"},
+                    {"id": "mission_go", "text": "Jedeme!"},
                     {"id": "rescan_qrcode", "text": "Re-Scan QR Code"},
                     {"id": "cancel_mission", "text": "Zrušit misi"}
                 ]
@@ -817,6 +817,7 @@ class MissionRobotourService:
             # Krok 20: PILOT STOPPED
             if p_state == "STOPPED":
                 self._set_state(20, "STEP_20_PILOT_STOPPED", f"Pilot zastaven: {p_info}")
+                self._stop_active_run_services()
                 self.terminal.sound("game-over")
                 self.terminal.blink("#FF0000", 2.0, 3000)
                 self.terminal.show_message(
@@ -831,6 +832,7 @@ class MissionRobotourService:
             # Krok 20.1: PILOT FINISHED
             elif p_state == "FINISHED":
                 self._set_state(20, "STEP_20_1_PILOT_FINISHED", f"Cíl dosažen: {p_info}")
+                self._stop_active_run_services()
                 self.terminal.sound("meow")
                 self.terminal.blink("#00FF00", 2.0, 2000)
                 self.terminal.show_message(
@@ -920,6 +922,17 @@ class MissionRobotourService:
     # =========================================================================
     # Ukončování služeb
     # =========================================================================
+
+    def _stop_active_run_services(self):
+        """
+        Zastaví služby aktivního běhu trasy ihned při ukončení jízdy (STOPPED / FINISHED):
+        LIDAR STOP, PILOT-ROBOTOUR STOP, MAPS STOP.
+        Motory (DRIVE OFF) se vypínají až následně po potvrzení obsluhou (acknowledge).
+        """
+        print("[MissionService] Jízda ukončena (STOPPED/FINISHED) - okamžitě zastavuji LIDAR, PILOT a MAPS...")
+        self._send_cmd("LIDAR", "STOP", timeout=1.5)
+        self._send_cmd("PILOT-ROBOTOUR", "STOP", timeout=1.5)
+        self._send_cmd("MAPS", "STOP", timeout=1.5)
 
     def _stop_driving_services(self):
         """

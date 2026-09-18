@@ -96,25 +96,22 @@ class RoutePlanner:
                 goal_dist=goal_near.distance_m
             )
 
-        # 3. Sestavení dočasného grafu s napojením startu a cíle
+        # 3. Sestavení dočasného grafu s napojením startu a cíle na komunikaci
         g = self.map_graph.graph.copy()
         start_node_id = "route_start"
-        goal_node_id = "route_goal"
 
         sx, sy = wgs84_to_enu(start_lat, start_lon, ref_lat, ref_lon)
-        gx, gy = wgs84_to_enu(goal_lat, goal_lon, ref_lat, ref_lon)
+        g.add_node(start_node_id, lat=start_lat, lon=start_lon, x=sx, y=sy, label="Start trasy")
 
-        g.add_node(start_node_id, lat=start_lat, lon=start_lon, x=sx, y=sy, label="Start")
-        g.add_node(goal_node_id, lat=goal_lat, lon=goal_lon, x=gx, y=gy, label="Cíl")
-
-        # Připojení startu do grafu
-        start_conn_node_id = self._attach_point_to_graph(
-            g, start_node_id, start_near, ref_lat, ref_lon, "start_conn"
-        )
-
-        # Připojení cíle do grafu
-        goal_conn_node_id = self._attach_point_to_graph(
-            g, goal_node_id, goal_near, ref_lat, ref_lon, "goal_conn"
+        # Napojení startu robota na mapovou síť a nalezení cílového bodu na komunikaci
+        # Pozn.: Cílový uzel končí přímo na komunikaci (nevytváří se odbočka k off-road souřadnicím)
+        start_conn_node_id, goal_target_node_id = self._attach_start_and_find_goal(
+            g,
+            start_node_id,
+            start_near,
+            goal_near,
+            ref_lat,
+            ref_lon
         )
 
         # 4. Výpočet nejkratší cesty (Dijkstra)
@@ -122,7 +119,7 @@ class RoutePlanner:
             path_node_ids = nx.shortest_path(
                 g,
                 source=start_node_id,
-                target=goal_node_id,
+                target=goal_target_node_id,
                 weight="length_m"
             )
         except nx.NetworkXNoPath:
@@ -154,8 +151,7 @@ class RoutePlanner:
         # 6. Přepočet na pravý jízdní pruh (Right-Side Offset)
         # Body trasy:
         # P0 = přesná pozice startu (robot tam stojí, nepřesouvá se)
-        # P_end = přesná pozice cíle (robot tam končí)
-        # Vnitřní body komunikace se posunou vpravo od středové čáry.
+        # Všechny body podél cesty a cíl na cestě se posunou vpravo podle šířky komunikace.
         shifted_points_enu = self._apply_right_offset(raw_points_enu, raw_widths)
 
         # 7. Sestavení výsledné mapové struktury (metadata, nodes, edges)
@@ -193,8 +189,6 @@ class RoutePlanner:
             name = edge_names[i]
             if i == 0 and path_node_ids[0] == start_node_id:
                 name = "Přístup na trasu"
-            elif i == len(res_nodes) - 2 and path_node_ids[-1] == goal_node_id:
-                name = "Příjezd do cíle"
 
             res_edges.append({
                 "id": f"route_edge_{i+1}",
@@ -227,88 +221,172 @@ class RoutePlanner:
             "edges": res_edges
         }
 
-    def _attach_point_to_graph(
+    def _attach_start_and_find_goal(
         self,
         g: nx.Graph,
-        query_node_id: str,
+        start_node_id: str,
+        start_near: NearestMapPoint,
+        goal_near: NearestMapPoint,
+        ref_lat: float,
+        ref_lon: float
+    ) -> Tuple[str, str]:
+        """
+        Napojí startovní pozici robota na mapovou síť (s vytvořením přístupové hrany)
+        a připraví cílový uzel na komunikaci (bez vytváření koncové odbočky do cílových GPS).
+        Robot tak zůstane stát na definované cestě v místě nejbližším cíli.
+        """
+        # Kontrola, zda start i cíl leží na téže hraně komunikace
+        same_edge = (
+            start_near.point_type == "edge" and
+            goal_near.point_type == "edge" and
+            start_near.edge_id is not None and
+            start_near.edge_id == goal_near.edge_id and
+            start_near.edge_from is not None and
+            start_near.edge_to is not None and
+            g.has_edge(start_near.edge_from, start_near.edge_to)
+        )
+
+        if same_edge:
+            u = start_near.edge_from
+            v = start_near.edge_to
+            edge_data = g.get_edge_data(u, v)
+            orig_len = edge_data.get("length_m", 10.0)
+            orig_width = edge_data.get("width_m", start_near.road_width_m)
+            orig_name = edge_data.get("name", "Komunikace")
+            orig_id = edge_data.get("id", "e")
+
+            ts = start_near.t_param
+            tg = goal_near.t_param
+
+            if abs(ts - tg) < 1e-4:
+                split_id = f"conn_split_{uuid.uuid4().hex[:6]}"
+                sx, sy = wgs84_to_enu(start_near.lat, start_near.lon, ref_lat, ref_lon)
+                g.add_node(split_id, lat=start_near.lat, lon=start_near.lon, x=sx, y=sy, label="Bod napojení na komunikaci")
+                g.remove_edge(u, v)
+                t_clamped = max(0.005, min(0.995, ts))
+                g.add_edge(u, split_id, id=f"{orig_id}_a", name=orig_name, width_m=orig_width, length_m=orig_len * t_clamped)
+                g.add_edge(split_id, v, id=f"{orig_id}_b", name=orig_name, width_m=orig_width, length_m=orig_len * (1.0 - t_clamped))
+                start_conn_node_id = split_id
+                goal_target_node_id = split_id
+            else:
+                t1 = min(ts, tg)
+                t2 = max(ts, tg)
+                t1 = max(0.005, min(0.99, t1))
+                t2 = max(t1 + 0.005, min(0.995, t2))
+
+                lat1, lon1 = (start_near.lat, start_near.lon) if ts < tg else (goal_near.lat, goal_near.lon)
+                lat2, lon2 = (goal_near.lat, goal_near.lon) if ts < tg else (start_near.lat, start_near.lon)
+
+                split1_id = f"conn_split1_{uuid.uuid4().hex[:6]}"
+                split2_id = f"conn_split2_{uuid.uuid4().hex[:6]}"
+                x1, y1 = wgs84_to_enu(lat1, lon1, ref_lat, ref_lon)
+                x2, y2 = wgs84_to_enu(lat2, lon2, ref_lat, ref_lon)
+
+                g.add_node(split1_id, lat=lat1, lon=lon1, x=x1, y=y1, label="Bod na komunikaci")
+                g.add_node(split2_id, lat=lat2, lon=lon2, x=x2, y=y2, label="Bod na komunikaci")
+
+                g.remove_edge(u, v)
+                g.add_edge(u, split1_id, id=f"{orig_id}_a", name=orig_name, width_m=orig_width, length_m=orig_len * t1)
+                g.add_edge(split1_id, split2_id, id=f"{orig_id}_mid", name=orig_name, width_m=orig_width, length_m=orig_len * (t2 - t1))
+                g.add_edge(split2_id, v, id=f"{orig_id}_b", name=orig_name, width_m=orig_width, length_m=orig_len * (1.0 - t2))
+
+                if ts < tg:
+                    start_conn_node_id = split1_id
+                    goal_target_node_id = split2_id
+                else:
+                    start_conn_node_id = split2_id
+                    goal_target_node_id = split1_id
+
+            g.add_edge(
+                start_node_id,
+                start_conn_node_id,
+                name="Přístup na trasu",
+                width_m=start_near.road_width_m,
+                length_m=start_near.distance_m
+            )
+            return start_conn_node_id, goal_target_node_id
+
+        # Pokud neleží na téže hraně:
+        # 1. Cílový bod na komunikaci (bez odbočky do off-road GPS)
+        if goal_near.point_type == "node" and goal_near.node_id:
+            goal_target_node_id = goal_near.node_id
+        else:
+            goal_target_node_id = self._split_edge_at_point(
+                g, goal_near, ref_lat, ref_lon, prefix="goal_conn"
+            )
+
+        # 2. Napojení startu robota na komunikaci
+        if start_near.point_type == "node" and start_near.node_id:
+            start_conn_node_id = start_near.node_id
+        else:
+            start_conn_node_id = self._split_edge_at_point(
+                g, start_near, ref_lat, ref_lon, prefix="start_conn"
+            )
+
+        g.add_edge(
+            start_node_id,
+            start_conn_node_id,
+            name="Přístup na trasu",
+            width_m=start_near.road_width_m,
+            length_m=start_near.distance_m
+        )
+
+        return start_conn_node_id, goal_target_node_id
+
+    def _split_edge_at_point(
+        self,
+        g: nx.Graph,
         near_info: NearestMapPoint,
         ref_lat: float,
         ref_lon: float,
         prefix: str
     ) -> str:
         """
-        Připojí dotazovaný uzel (start/cíl) do grafu k nejbližšímu místu.
-        Pokud je nejbližší místo na úsečce, rozdělí ji novým vloženým uzlem.
+        Vloží do grafu nový uzel na úsečku komunikace a rozdělí původní hranu na dvě.
+        Vrátí ID nově vloženého uzlu na komunikaci.
         """
-        if near_info.point_type == "node" and near_info.node_id:
-            conn_node_id = near_info.node_id
-            g.add_edge(
-                query_node_id,
-                conn_node_id,
-                name="Napojení na komunikaci",
-                width_m=near_info.road_width_m,
-                length_m=near_info.distance_m
-            )
-            return conn_node_id
-
-        # Bod leží na úsečce mezi edge_from a edge_to
         u = near_info.edge_from
         v = near_info.edge_to
         if not u or not v or not g.has_edge(u, v):
-            # Záložní napojení na nejbližší uzel
             target = u if u and g.has_node(u) else list(g.nodes())[0]
-            g.add_edge(
-                query_node_id, target,
-                name="Napojení na komunikaci",
-                width_m=near_info.road_width_m,
-                length_m=near_info.distance_m
-            )
             return target
 
         edge_data = g.get_edge_data(u, v)
         orig_len = edge_data.get("length_m", 10.0)
         orig_width = edge_data.get("width_m", near_info.road_width_m)
         orig_name = edge_data.get("name", "Komunikace")
+        orig_id = edge_data.get("id", "e")
 
-        t = max(0.01, min(0.99, near_info.t_param))
+        t = max(0.005, min(0.995, near_info.t_param))
 
-        # Vytvoření dočasného bodu rozdělení
-        conn_node_id = f"{prefix}_split_{uuid.uuid4().hex[:6]}"
+        split_node_id = f"{prefix}_split_{uuid.uuid4().hex[:6]}"
         split_x, split_y = wgs84_to_enu(near_info.lat, near_info.lon, ref_lat, ref_lon)
         g.add_node(
-            conn_node_id,
+            split_node_id,
             lat=near_info.lat,
             lon=near_info.lon,
             x=split_x,
             y=split_y,
-            label="Bod napojení na komunikaci"
+            label="Bod na komunikaci"
         )
 
-        # Odstraníme původní hranu a nahradíme dvěma úseky
         g.remove_edge(u, v)
-
         g.add_edge(
-            u, conn_node_id,
+            u, split_node_id,
+            id=f"{orig_id}_a",
             name=orig_name,
             width_m=orig_width,
             length_m=orig_len * t
         )
         g.add_edge(
-            conn_node_id, v,
+            split_node_id, v,
+            id=f"{orig_id}_b",
             name=orig_name,
             width_m=orig_width,
             length_m=orig_len * (1.0 - t)
         )
 
-        # Propojení query bodu s bodem napojení
-        g.add_edge(
-            query_node_id, conn_node_id,
-            name="Napojení na komunikaci",
-            width_m=orig_width,
-            length_m=near_info.distance_m
-        )
-
-        return conn_node_id
+        return split_node_id
 
     def _apply_right_offset(
         self,
@@ -317,15 +395,15 @@ class RoutePlanner:
     ) -> List[Tuple[float, float]]:
         """
         Aplikuje pravostranný offset na trasu tak, aby:
-        - První bod P0 zůstal přesně v místě startu robota.
-        - Poslední bod P_end zůstal přesně v místě cíle.
-        - Všechny body podél cesty byly posunuty vpravo o odpovídající offset.
+        - První bod P0 zůstal přesně v místě startu robota (aktuální poloha robota).
+        - Všechny body podél cesty i cílový bod na cestě se posunuly vpravo podle šířky komunikace.
         """
         n = len(points)
-        if n <= 2:
+        if n <= 1:
+            return list(points)
+        if n == 2:
             return list(points)
 
-        # Spočteme normálové vektory a offsety pro každý úsek
         seg_normals: List[Tuple[float, float]] = []
         seg_offsets: List[float] = []
 
@@ -339,7 +417,7 @@ class RoutePlanner:
 
         shifted: List[Tuple[float, float]] = []
 
-        # Bod 0: Start zůstává beze změny
+        # Bod 0: Start zůstává beze změny (skutečná poloha robota)
         shifted.append(points[0])
 
         # Vnitřní body komunikace (1 až n-2):
@@ -368,8 +446,10 @@ class RoutePlanner:
             py = points[i][1] + ny_m * off_avg * scale
             shifted.append((px, py))
 
-        # Poslední bod: Cíl zůstává beze změny
-        shifted.append(points[-1])
+        # Poslední bod: Cíl na komunikaci - posunut vpravo podle posledního úseku komunikace
+        p_last_x = points[-1][0] + seg_normals[-1][0] * seg_offsets[-1]
+        p_last_y = points[-1][1] + seg_normals[-1][1] * seg_offsets[-1]
+        shifted.append((p_last_x, p_last_y))
 
         return shifted
 

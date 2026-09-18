@@ -43,14 +43,15 @@ FIND_ROUTE <start_lat>, <start_lon>, <cil_lat>, <cil_lon>
 
 #### 2. Úspěšné nalezení trasy:
 Pokud jsou oba body $\le 5\,\text{m}$ od komunikace:
-- Vytvoří se spojovací úseky k nejbližším bodům mapy.
-- Dijkstra nalezne optimální posloupnost uzlů a hran.
+- **Napojení na startu:** Z aktuální pozice robota se vytvoří spojovací úsek (`"Přístup na trasu"`) k nejbližšímu místu na komunikaci.
+- **Cíl na komunikaci:** Robot zůstává stát na definované cestě v místě nejbližším cílovým souřadnicím. Nevytváří se koncová odbočka do cílových GPS souřadnic mimo cestu.
+- Dijkstra nalezne optimální posloupnost uzlů a hran na komunikaci.
 - **Pravostranný offset:** Úseky a body se přepočítají pro jízdu vpravo od středu cesty podle její šířky $W$:
   - $W < 2.0\,\text{m} \implies \text{offset} = 0.0\,\text{m}$ (střed cesty)
   - $2.0 \le W < 3.0\,\text{m} \implies \text{offset} = 0.5\,\text{m}$
   - $3.0 \le W < 4.0\,\text{m} \implies \text{offset} = 0.75\,\text{m}$
   - $W \ge 4.0\,\text{m} \implies \text{offset} = 1.0\,\text{m}$
-- Spojovací úsek od startu a do cíle plynule navazuje na tento posunutý pravý pruh.
+- Robot zastaví v cílovém bodě v pravém jízdním pruhu komunikace.
 
 Odpověď je jednořádkový JSON zakončený `\n`:
 ```json

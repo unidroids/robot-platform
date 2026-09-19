@@ -662,7 +662,7 @@ class MissionRobotourService:
             self.logger.log("STEP_17_2_ROUTE_NOT_FOUND", {"reason": reason, "start_dist": start_dist, "goal_dist": goal_dist})
             print(f"[MissionService] Krok 17.2: Trasa nenalezena: {reason}")
 
-            is_start_far = start_dist > 5.0 or "Start je dále" in reason
+            is_start_far = start_dist > 3.0 or "Start je dále" in reason
             if not is_start_far:
                 # Cíl je mimo mapu nebo neexistuje propojení v grafu
                 self.terminal.show_message(
@@ -754,7 +754,7 @@ class MissionRobotourService:
                 self.logger.log("STEP_17_RETRY_NOT_FOUND", {"reason": reason, "start_dist": start_dist, "goal_dist": goal_dist})
                 print(f"[MissionService] Krok 17 opakování: trasa nenalezena ({reason}, start_dist={start_dist}m)")
 
-                is_start_far = start_dist > 5.0 or "Start je dále" in reason
+                is_start_far = start_dist > 3.0 or "Start je dále" in reason
                 if not is_start_far:
                     # Start je již blízko, ale nastala jiná chyba cesty
                     self.terminal.show_message(

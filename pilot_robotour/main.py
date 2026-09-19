@@ -52,7 +52,7 @@ async def handle_client(reader, writer, service):
                 if cmd == "PING":
                     writer.write(b"PONG PILOT_ROBOTOUR\n")
                 elif cmd == "START":
-                    speed = 120
+                    speed = 80
                     pwm = 150
                     route_input = None
                     rest = line[len(parts[0]):].strip()

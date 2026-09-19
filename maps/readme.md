@@ -34,15 +34,17 @@ FIND_ROUTE <start_lat>, <start_lon>, <cil_lat>, <cil_lon>
 ```
 *(Oddělovačem parametrů mohou být čárky i mezery).*
 
-#### 1. Kontrola napojení (5m pravidlo):
+#### 1. Kontrola napojení (limity vzdálenosti od mapy):
 - Algoritmus spočte nejbližší bod na celé mapě (prohledá všechny uzly i úsečky hran).
-- Pokud je start nebo cíl dále než **5 metrů** od mapy, trasa se nevypočte a služba vrátí:
+- **Startovní souřadnice:** povolená vzdálenost je maximálně **3 metry** od mapy (`MAX_START_DISTANCE_M = 3.0`).
+- **Cílové souřadnice:** povolená vzdálenost je maximálně **10 metrů** od mapy (`MAX_GOAL_DISTANCE_M = 10.0`).
+- Pokud je start nebo cíl dále než stanovený limit od mapy, trasa se nevypočte a služba vrátí:
   - `metadata.search_result`: `"cesta nenalezena"`
-  - `metadata.reason`: detailní popis vzdálenosti a azimutu k nejbližšímu místu (např. `"Start je dále než 5m od nejbližšího místa na mapě. Nejbližší místo je 8.32 metrů s azimutem 142.5° daleko."`)
+  - `metadata.reason`: detailní popis vzdálenosti a azimutu k nejbližšímu místu (např. `"Start je dále než 3m od nejbližšího místa na mapě..."` nebo `"Cílové souřadnice jsou dále než 10m od nejbližšího místa na mapě..."`)
   - `nodes`: `[]`, `edges`: `[]`
 
 #### 2. Úspěšné nalezení trasy:
-Pokud jsou oba body $\le 5\,\text{m}$ od komunikace:
+Pokud jsou oba body v limitu od komunikace (start $\le 3\,\text{m}$, cíl $\le 10\,\text{m}$):
 - **Napojení na startu:** Z aktuální pozice robota se vytvoří spojovací úsek (`"Přístup na trasu"`) k nejbližšímu místu na komunikaci.
 - **Cíl na komunikaci:** Robot zůstává stát na definované cestě v místě nejbližším cílovým souřadnicím. Nevytváří se koncová odbočka do cílových GPS souřadnic mimo cestu.
 - Dijkstra nalezne optimální posloupnost uzlů a hran na komunikaci.
@@ -103,4 +105,4 @@ python3 maps/main.py [--port 9040] [--map maps/defaut_map.json]
 ```bash
 python3 -m unittest maps.test_maps
 ```
-*(Zahrnuje 16 jednotkových a integračních testů geometrie, grafu, 5m limitu, offsetu i TCP soketové komunikace).*
+*(Zahrnuje 16 jednotkových a integračních testů geometrie, grafu, limitů vzdálenosti (3m/10m), offsetu i TCP soketové komunikace).*

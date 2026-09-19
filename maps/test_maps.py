@@ -125,10 +125,10 @@ class TestMapGraph(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.map_file = os.path.join(os.path.dirname(__file__), "defaut_map.json")
+        cls.map_file = os.path.join(os.path.dirname(__file__), "testovaci_mapove_podklady.json")
         cls.mg = MapGraph()
         loaded = cls.mg.load_from_file(cls.map_file)
-        assert loaded, "Nepodařilo se načíst výchozí mapu defaut_map.json"
+        assert loaded, "Nepodařilo se načíst testovací mapu testovaci_mapove_podklady.json"
 
     def test_map_loaded(self):
         self.assertTrue(self.mg.is_loaded)
@@ -156,7 +156,7 @@ class TestRoutePlanner(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.map_file = os.path.join(os.path.dirname(__file__), "defaut_map.json")
+        cls.map_file = os.path.join(os.path.dirname(__file__), "testovaci_mapove_podklady.json")
         cls.mg = MapGraph()
         cls.mg.load_from_file(cls.map_file)
         cls.planner = RoutePlanner(cls.mg)
@@ -245,6 +245,38 @@ class TestRoutePlanner(unittest.TestCase):
         self.assertEqual(res["edges"][1]["name"], "OSM Úsek 4")
         self.assertGreater(res["metadata"]["route_length_m"], 5.0)
 
+    def test_asymmetric_boundary_limits(self):
+        """Ověření asymetrických limitů: start max 3m, cíl max 10m."""
+        n1 = self.mg.nodes["osm_node_1"]
+        n14 = self.mg.nodes["osm_node_14"]
+
+        # 1. Cíl 7.2m daleko od mapy (posun v lon) -> dříve by selhal na 5m, nyní v limitu 10m projde
+        g_lon_7m = n14.lon + 0.00010
+        res = self.planner.plan_route(n1.lat, n1.lon, n14.lat, g_lon_7m)
+        self.assertEqual(res["metadata"]["search_result"], "found")
+        self.assertGreater(res["metadata"]["goal_distance_to_map_m"], 5.0)
+        self.assertLessEqual(res["metadata"]["goal_distance_to_map_m"], 10.0)
+
+        # 2. Start 2.5m daleko od mapy -> projde (limit je 3m)
+        s_lon_2_5m = n1.lon - 0.00004
+        res_ok_start = self.planner.plan_route(n1.lat, s_lon_2_5m, n14.lat, n14.lon)
+        self.assertEqual(res_ok_start["metadata"]["search_result"], "found")
+        self.assertLessEqual(res_ok_start["metadata"]["start_distance_to_map_m"], 3.0)
+
+        # 3. Start 3.15m daleko od mapy -> překročen start limit 3m
+        s_lon_3_15m = n1.lon - 0.00005
+        res_fail_start = self.planner.plan_route(n1.lat, s_lon_3_15m, n14.lat, n14.lon)
+        self.assertEqual(res_fail_start["metadata"]["search_result"], "cesta nenalezena")
+        self.assertIn("Start je dále než 3m", res_fail_start["metadata"]["reason"])
+        self.assertGreater(res_fail_start["metadata"]["start_distance_to_map_m"], 3.0)
+
+        # 4. Cíl 10.8m daleko od mapy -> překročen cíl limit 10m
+        g_lon_10_8m = n14.lon + 0.00015
+        res_fail_goal = self.planner.plan_route(n1.lat, n1.lon, n14.lat, g_lon_10_8m)
+        self.assertEqual(res_fail_goal["metadata"]["search_result"], "cesta nenalezena")
+        self.assertIn("Cílové souřadnice jsou dále než 10m", res_fail_goal["metadata"]["reason"])
+        self.assertGreater(res_fail_goal["metadata"]["goal_distance_to_map_m"], 10.0)
+
     def test_rejection_start_too_far(self):
         n1 = self.mg.nodes["osm_node_1"]
         n14 = self.mg.nodes["osm_node_14"]
@@ -257,8 +289,8 @@ class TestRoutePlanner(unittest.TestCase):
         meta = res["metadata"]
 
         self.assertEqual(meta["search_result"], "cesta nenalezena")
-        self.assertIn("Start je dále než 5m od nejbližšího místa na mapě", meta["reason"])
-        self.assertGreater(meta["start_distance_to_map_m"], 5.0)
+        self.assertIn("Start je dále než 3m od nejbližšího místa na mapě", meta["reason"])
+        self.assertGreater(meta["start_distance_to_map_m"], 3.0)
         self.assertEqual(len(res["nodes"]), 0)
         self.assertEqual(len(res["edges"]), 0)
 
@@ -274,8 +306,8 @@ class TestRoutePlanner(unittest.TestCase):
         meta = res["metadata"]
 
         self.assertEqual(meta["search_result"], "cesta nenalezena")
-        self.assertIn("Cílové souřadnice jsou dále než 5m od nejbližšího místa na mapě", meta["reason"])
-        self.assertGreater(meta["goal_distance_to_map_m"], 5.0)
+        self.assertIn("Cílové souřadnice jsou dále než 10m od nejbližšího místa na mapě", meta["reason"])
+        self.assertGreater(meta["goal_distance_to_map_m"], 10.0)
 
 
 class TestMapServiceAndTCP(unittest.TestCase):
@@ -283,7 +315,8 @@ class TestMapServiceAndTCP(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.service = MapService()
+        test_map = os.path.join(os.path.dirname(__file__), "testovaci_mapove_podklady.json")
+        cls.service = MapService(map_file_path=test_map)
         cls.test_port = 19040
 
         # Spuštění testovacího TCP serveru
@@ -364,7 +397,7 @@ class TestMapServiceAndTCP(unittest.TestCase):
         resp_line = self._send_cmd(cmd)
         data = json.loads(resp_line)
         self.assertEqual(data["metadata"]["search_result"], "cesta nenalezena")
-        self.assertIn("Start je dále než 5m", data["metadata"]["reason"])
+        self.assertIn("Start je dále než 3m", data["metadata"]["reason"])
 
     def test_parse_args_helper(self):
         self.assertEqual(

@@ -43,7 +43,8 @@ class RoutePlanner:
     Plánovač trasy po mapovém grafu s napojením z libovolných souřadnic a pravostranným offsetem.
     """
 
-    MAX_CONNECT_DISTANCE_M = 5.0  # Maximální povolená vzdálenost pro napojení
+    MAX_START_DISTANCE_M = 3.0  # Maximální povolená vzdálenost pro napojení startu
+    MAX_GOAL_DISTANCE_M = 10.0  # Maximální povolená vzdálenost pro napojení cíle
 
     def __init__(self, map_graph: MapGraph):
         self.map_graph = map_graph
@@ -74,16 +75,16 @@ class RoutePlanner:
         start_near = self.map_graph.find_nearest_point_on_map(start_lat, start_lon)
         goal_near = self.map_graph.find_nearest_point_on_map(goal_lat, goal_lon)
 
-        # 2. Kontrola 5m limitu
+        # 2. Kontrola limitů vzdálenosti od mapy (start max 3m, cíl max 10m)
         reasons: List[str] = []
-        if start_near.distance_m > self.MAX_CONNECT_DISTANCE_M:
+        if start_near.distance_m > self.MAX_START_DISTANCE_M:
             reasons.append(
-                f"Start je dále než 5m od nejbližšího místa na mapě. "
+                f"Start je dále než 3m od nejbližšího místa na mapě. "
                 f"Nejbližší místo je {start_near.distance_m:.2f} metrů s azimutem {start_near.azimuth_deg:.1f}° daleko."
             )
-        if goal_near.distance_m > self.MAX_CONNECT_DISTANCE_M:
+        if goal_near.distance_m > self.MAX_GOAL_DISTANCE_M:
             reasons.append(
-                f"Cílové souřadnice jsou dále než 5m od nejbližšího místa na mapě. "
+                f"Cílové souřadnice jsou dále než 10m od nejbližšího místa na mapě. "
                 f"Nejbližší místo je {goal_near.distance_m:.2f} metrů s azimutem {goal_near.azimuth_deg:.1f}° daleko."
             )
 
@@ -464,7 +465,7 @@ class RoutePlanner:
         start_dist: float = 0.0,
         goal_dist: float = 0.0
     ) -> Dict[str, Any]:
-        """Sestaví chybovou odpověď při nenalezení trasy nebo překročení 5m limitu."""
+        """Sestaví chybovou odpověď při nenalezení trasy nebo překročení limitů vzdálenosti k mapě."""
         area_name = self.map_graph.metadata.get("area_name", "Robotour Map") if self.map_graph else ""
         return {
             "metadata": {

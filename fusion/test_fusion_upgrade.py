@@ -137,11 +137,11 @@ class TestFusionUpgrade(unittest.TestCase):
         gps_lat = lat0 + 0.32 / m_deg_lat
         gps_lon = lon0
 
-        master_lat = lat0 + 0.261 / m_deg_lat
-        master_lon = lon0 + 0.213 / m_deg_lon
+        master_lat = lat0 + 0.25 / m_deg_lat
+        master_lon = lon0 + 0.24 / m_deg_lon
 
-        slave_lat = lat0 + 0.254 / m_deg_lat
-        slave_lon = lon0 - 0.249 / m_deg_lon
+        slave_lat = lat0 + 0.25 / m_deg_lat
+        slave_lon = lon0 - 0.24 / m_deg_lon
 
         self.core.update_gps_antenna(gps_lat, gps_lon, 0.02, "NARROW_INT")
         self.core.update_master_antenna(master_lat, master_lon, 0.02, "NARROW_INT")
@@ -151,10 +151,10 @@ class TestFusionUpgrade(unittest.TestCase):
         self.assertEqual(self.core._triangle_status, "TRIANGLE_OK")
         self.assertEqual(self.core._active_antenna_name, "gnss-gps")
 
-        # Ověření vzdáleností: dual ~ 0.462 m, gps-master ~ 0.221 m, gps-slave ~ 0.258 m
-        self.assertAlmostEqual(self.core._dist_dual, 0.462, delta=0.02)
-        self.assertAlmostEqual(self.core._dist_gps_master, 0.221, delta=0.02)
-        self.assertAlmostEqual(self.core._dist_gps_slave, 0.258, delta=0.02)
+        # Ověření vzdáleností: dual ~ 0.48 m, gps-master ~ 0.25 m, gps-slave ~ 0.25 m
+        self.assertAlmostEqual(self.core._dist_dual, 0.48, delta=0.02)
+        self.assertAlmostEqual(self.core._dist_gps_master, 0.25, delta=0.02)
+        self.assertAlmostEqual(self.core._dist_gps_slave, 0.25, delta=0.02)
 
         # Ověření transformované polohy: střed otáčení musí být přesně lat0, lon0
         self.assertAlmostEqual(self.core._center_lat, lat0, places=6)
@@ -169,11 +169,11 @@ class TestFusionUpgrade(unittest.TestCase):
 
         self.core.update_dual_heading(heading=0.0, headingAcc=0.5, headingSol="NARROW_INT")
 
-        # Master a Slave jsou v pořádku (vzdálenost 0.462 m)
-        master_lat = lat0 + 0.261 / m_deg_lat
-        master_lon = lon0 + 0.213 / m_deg_lon
-        slave_lat = lat0 + 0.254 / m_deg_lat
-        slave_lon = lon0 - 0.249 / m_deg_lon
+        # Master a Slave jsou v pořádku (vzdálenost 0.48 m)
+        master_lat = lat0 + 0.25 / m_deg_lat
+        master_lon = lon0 - 0.24 / m_deg_lon
+        slave_lat = lat0 + 0.25 / m_deg_lat
+        slave_lon = lon0 + 0.24 / m_deg_lon
 
         # GPS anténa má chybu 3 metry (multipath)
         bad_gps_lat = lat0 + 3.32 / m_deg_lat
@@ -205,17 +205,17 @@ class TestFusionUpgrade(unittest.TestCase):
     def test_kinematic_tangent_offset_calculation(self):
         """Ověření výpočtu tečného úhlu odchylky beta pro každou anténu v zatáčce."""
         # v = 0.5 m/s, točení doprava wz = 6.0 deg/s
-        # GPS (x=0.320, y=0.0): beta = atan2(wz*x, v) = atan2(0.1047*0.32, 0.5) ~ +3.83°
-        beta_gps = self.core._compute_tangent_offset(offset_x=0.320, offset_y=0.0, v_ms=0.5, wz_deg_s=6.0)
+        # GPS (x=0.32, y=0.0): beta = atan2(wz*x, v) = atan2(0.1047*0.32, 0.5) ~ +3.83°
+        beta_gps = self.core._compute_tangent_offset(offset_x=0.32, offset_y=0.0, v_ms=0.5, wz_deg_s=6.0)
         self.assertAlmostEqual(beta_gps, 3.83, delta=0.05)
 
-        # Master (x=0.261, y=+0.213): beta = atan2(wz*x, v + wz*y) ~ +3.00°
-        beta_mst = self.core._compute_tangent_offset(offset_x=0.261, offset_y=0.213, v_ms=0.5, wz_deg_s=6.0)
-        self.assertAlmostEqual(beta_mst, 3.00, delta=0.05)
+        # Master (x=0.25, y=+0.24): beta = atan2(0.1047*0.25, 0.5 + 0.1047*0.24) ~ +2.85°
+        beta_mst = self.core._compute_tangent_offset(offset_x=0.25, offset_y=0.24, v_ms=0.5, wz_deg_s=6.0)
+        self.assertAlmostEqual(beta_mst, 2.85, delta=0.05)
 
-        # Slave (x=0.254, y=-0.249): beta = atan2(wz*x, v + wz*y) ~ +3.21°
-        beta_slv = self.core._compute_tangent_offset(offset_x=0.254, offset_y=-0.249, v_ms=0.5, wz_deg_s=6.0)
-        self.assertAlmostEqual(beta_slv, 3.21, delta=0.05)
+        # Slave (x=0.25, y=-0.24): beta = atan2(0.1047*0.25, 0.5 - 0.1047*0.24) ~ +3.16°
+        beta_slv = self.core._compute_tangent_offset(offset_x=0.25, offset_y=-0.24, v_ms=0.5, wz_deg_s=6.0)
+        self.assertAlmostEqual(beta_slv, 3.16, delta=0.05)
 
     def test_3_antenna_heading_consensus_during_gentle_turn(self):
         """Ověření, že při mírné zatáčce všechny 3 antény po kinematické kompenzaci dají shodný sever."""
@@ -224,9 +224,9 @@ class TestFusionUpgrade(unittest.TestCase):
         self.core._gyroZ = 6.0
 
         true_robot_heading = 45.0
-        beta_gps = self.core._compute_tangent_offset(0.320, 0.0, 0.5, 6.0)
-        beta_mst = self.core._compute_tangent_offset(0.261, 0.213, 0.5, 6.0)
-        beta_slv = self.core._compute_tangent_offset(0.254, -0.249, 0.5, 6.0)
+        beta_gps = self.core._compute_tangent_offset(0.32, 0.0, 0.5, 6.0)
+        beta_mst = self.core._compute_tangent_offset(0.25, 0.24, 0.5, 6.0)
+        beta_slv = self.core._compute_tangent_offset(0.25, -0.24, 0.5, 6.0)
 
         # Surové kurzy měřené jednotlivými anténami na zakřivené dráze
         trk_gps = true_robot_heading + beta_gps
@@ -248,8 +248,8 @@ class TestFusionUpgrade(unittest.TestCase):
         self.core._gyroZ = 6.0
 
         true_robot_heading = 90.0
-        beta_mst = self.core._compute_tangent_offset(0.261, 0.213, 0.5, 6.0)
-        beta_slv = self.core._compute_tangent_offset(0.254, -0.249, 0.5, 6.0)
+        beta_mst = self.core._compute_tangent_offset(0.25, 0.24, 0.5, 6.0)
+        beta_slv = self.core._compute_tangent_offset(0.25, -0.24, 0.5, 6.0)
 
         trk_mst = true_robot_heading + beta_mst
         trk_slv = true_robot_heading + beta_slv

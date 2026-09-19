@@ -34,23 +34,28 @@ class AntennaState:
 
 class ConstellationManager:
     """
-    Správa 3-anténní konstelace (kalibrovaná geometrie z RTK logů):
-    - UM980 (gnss-gps): [+0.320, 0.000] m (předsazená anténa na ose robota)
-    - UM982 Master (gnss-dual): [+0.261, +0.213] m (vlevo vzadu, předsazená o 7 mm před Slave)
-    - UM982 Slave (gnss-dual): [+0.254, -0.249] m (vpravo vzadu)
-    - Základna Master-Slave: 0.462 m (v přijímači CONFIG HEADING LENGTH 46.2)
-    - Ramena: GPS-Master: 0.221 m, GPS-Slave: 0.258 m
+    Správa 3-anténní konstelace (Pythagorejský trojúhelník 7-24-25):
+    - UM980 (gnss-gps): [+0.32, 0.0] m (předsazená anténa na ose)
+    - UM982 Master (gnss-dual): [+0.25, +0.24] m (vlevo vzadu)
+    - UM982 Slave (gnss-dual): [+0.25, -0.24] m (vpravo vzadu)
+    - Základna Master-Slave: 0.48 m
+    - Ramena GPS-Master a GPS-Slave: 0.25 m
     """
 
     def __init__(self):
         # 3 antény:
-        self.ant_gps = AntennaState("gnss-gps", offset_x=0.320, offset_y=0.000)
-        self.ant_master = AntennaState("gnss-dual-master", offset_x=0.261, offset_y=0.213)
-        self.ant_slave = AntennaState("gnss-dual-slave", offset_x=0.254, offset_y=-0.249)
+        self.ant_gps = AntennaState("gnss-gps", offset_x=0.32, offset_y=0.0)
+        self.ant_master = AntennaState("gnss-dual-master", offset_x=0.25, offset_y=0.24)
+        self.ant_slave = AntennaState("gnss-dual-slave", offset_x=0.25, offset_y=-0.24)
 
         # Stav geometrie a aktivní anténa
         self.triangle_status: str = "INIT"
         self.active_antenna_name: str = "NONE"
+        self._target_antenna_name: str = "NONE"
+        self._switch_counter: int = 0
+        self._curr_offset_x: float = 0.32
+        self._curr_offset_y: float = 0.0
+
         self.dist_dual: float = 0.0
         self.dist_gps_master: float = 0.0
         self.dist_gps_slave: float = 0.0
@@ -177,12 +182,12 @@ class ConstellationManager:
         else:
             self.dist_gps_slave = 0.0
 
-        # Kalibrované vzdálenosti antén s tolerancí +-5 cm:
-        # Základna Master-Slave: 0.462 m (rozsah 0.41 - 0.51 m)
-        # Ramena: GPS-Master 0.221 m (0.17 - 0.27 m), GPS-Slave 0.258 m (0.21 - 0.31 m)
-        d_dual_ok = 0.41 <= self.dist_dual <= 0.51
-        d_gm_ok   = 0.17 <= self.dist_gps_master <= 0.27
-        d_gs_ok   = 0.21 <= self.dist_gps_slave <= 0.31
+        # Nominální vzdálenosti s rozšířenou dynamickou tolerancí (pokrývá latenci asynchronních zpráv):
+        # Základna Master-Slave: ~0.45 - 0.48 m (rozsah 0.36 - 0.58 m)
+        # Ramena GPS-Master a GPS-Slave: ~0.24 - 0.25 m (rozsah 0.15 - 0.36 m)
+        d_dual_ok = 0.36 <= self.dist_dual <= 0.58
+        d_gm_ok = 0.15 <= self.dist_gps_master <= 0.36
+        d_gs_ok = 0.15 <= self.dist_gps_slave <= 0.36
 
         gps_usable = gps_rtk
         master_usable = master_rtk
@@ -224,25 +229,26 @@ class ConstellationManager:
         else:
             self.triangle_status = "NO_VALID_FIX"
 
-        # Výběr nejlepší aktivní antény pro výstupní polohu:
+        # Výběr nejlepší kandidátní antény pro výstupní polohu:
         # Priorita: 1. platná RTK anténa (GPS -> Master -> Slave)
         #           2. fallback na jakoukoli čerstvou anténu bez RTK (SINGLE/FLOAT)
-        chosen_ant: Optional[AntennaState] = None
+        candidate_ant: Optional[AntennaState] = None
         if gps_usable:
-            chosen_ant = self.ant_gps
+            candidate_ant = self.ant_gps
         elif master_usable:
-            chosen_ant = self.ant_master
+            candidate_ant = self.ant_master
         elif slave_usable:
-            chosen_ant = self.ant_slave
+            candidate_ant = self.ant_slave
         elif gps_fresh:
-            chosen_ant = self.ant_gps
+            candidate_ant = self.ant_gps
         elif master_fresh:
-            chosen_ant = self.ant_master
+            candidate_ant = self.ant_master
         elif slave_fresh:
-            chosen_ant = self.ant_slave
+            candidate_ant = self.ant_slave
 
-        if chosen_ant is not None:
-            self.active_antenna_name = chosen_ant.name
+        if candidate_ant is not None:
+            self.active_antenna_name = candidate_ant.name
+            chosen_ant = candidate_ant
             self.gpsSol = chosen_ant.pos_type
             self.bestnav_pos_type = chosen_ant.pos_type
             self.center_hAcc = chosen_ant.hAcc
@@ -251,9 +257,9 @@ class ConstellationManager:
             # Transformace polohy antény na střed osy otáčení [0, 0, 0]
             if heading_initialized and heading_deg is not None:
                 heading_rad = math.radians(heading_deg)
-                # Převod vektoru z tělesného systému (x dopředu, y vlevo) do NED (North, East):
-                d_north = chosen_ant.offset_x * math.cos(heading_rad) - chosen_ant.offset_y * math.sin(heading_rad)
-                d_east = chosen_ant.offset_x * math.sin(heading_rad) + chosen_ant.offset_y * math.cos(heading_rad)
+                # Správný převod vektoru z tělesného systému (x dopředu, y vlevo) do NED (North, East):
+                d_north = chosen_ant.offset_x * math.cos(heading_rad) + chosen_ant.offset_y * math.sin(heading_rad)
+                d_east  = chosen_ant.offset_x * math.sin(heading_rad) - chosen_ant.offset_y * math.cos(heading_rad)
 
                 # Odečteme předsazení antény pro získání středu otáčení
                 self.center_lat = chosen_ant.lat - (d_north / 111139.0)

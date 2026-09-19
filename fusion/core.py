@@ -322,7 +322,8 @@ class FusionCore:
             self.constellation.triangle_status in (
                 "TRIANGLE_OK", "EXCLUDED_GPS", "EXCLUDED_MASTER", "EXCLUDED_SLAVE",
                 "PAIR_DUAL_OK", "PAIR_GPS_MASTER_OK", "PAIR_GPS_SLAVE_OK",
-                "SINGLE_GPS", "SINGLE_MASTER", "SINGLE_SLAVE"
+                "SINGLE_GPS", "SINGLE_MASTER", "SINGLE_SLAVE",
+                "TRIANGLE_DEGRADED"
             )
         )
         if self.constellation.have_position:

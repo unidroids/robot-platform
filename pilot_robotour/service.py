@@ -436,7 +436,7 @@ class RobotourPilotService:
                     heading_sol = self.fusion_data.get("headingSol", "NONE")
                     heading_acc = float(self.fusion_data.get("headingAcc", 9999.0))
                     
-                    if hAcc > 700 or heading_sol == "NONE" or heading_acc > 6.0:
+                    if hAcc > 700 or heading_sol == "NONE" or heading_acc > 15.0:
                         info_msg = f"Nízká přesnost GPS (hAcc: {hAcc} mm, sol: {heading_sol})"
                         if self.state == "RUNNING":
                             self.pause_service(source="GPS", info=info_msg)

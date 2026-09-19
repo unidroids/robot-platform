@@ -149,6 +149,26 @@ class TestPilotRobotourLogic(unittest.TestCase):
         self.assertAlmostEqual(w_lat, lat0, places=9)
         self.assertLess(w_lon, lon0)
 
+    def test_drive_firmware_workaround_on_start(self):
+        """Ověření inicializačního workaroundu pro firmware (START -> DRIVE 1 1 1 -> sleep -> DRIVE 1 0 0)."""
+        from unittest.mock import MagicMock
+        if self.service.drive:
+            self.service.drive.disconnect()
+        mock_drive = MagicMock()
+        self.service.drive = mock_drive
+
+        ok, msg = self.service.start_service(max_speed=100, max_pwm=150, route_input=self.route_data)
+        self.assertTrue(ok)
+        
+        # Ověření, že send_start byl zavolán
+        mock_drive.send_start.assert_called_once()
+        
+        # Ověření, že send_drive byl zavolán právě 2x s pwm=1 a speed=1 a pak speed=0
+        drive_calls = [c for c in mock_drive.method_calls if c[0] == 'send_drive']
+        self.assertGreaterEqual(len(drive_calls), 2)
+        self.assertEqual(drive_calls[0][1], (1, 1, 1))
+        self.assertEqual(drive_calls[1][1], (1, 0, 0))
+
 
 class TestPilotRobotourTCP(unittest.TestCase):
     """Integrační test TCP protokolu služby PILOT-ROBOTOUR."""

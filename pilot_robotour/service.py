@@ -127,6 +127,17 @@ class RobotourPilotService:
         self.source = "USER"
         self.status_info = "Starting"
         
+        # WORKAROUND: Chyba ve firmware hoverboardu
+        # Firmware vyžaduje po příkazu START probuzení regulace motorů nenulovou rychlostí
+        # (speed=1) s nízkým PWM (pwm=1) a následné vynulování rychlosti (speed=0).
+        try:
+            self.drive.send_start()
+            self.drive.send_drive(1, 1, 1)
+            time.sleep(0.05)
+            self.drive.send_drive(1, 0, 0)
+        except Exception as e:
+            print(f"[PilotRobotour] Varování: Inicializace DRIVE (workaround firmware) selhala: {e}")
+        
         if not self.running:
             self.running = True
             

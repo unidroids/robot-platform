@@ -12,7 +12,7 @@ class LidarDistanceEvaluator {
 public:
     // Vrací sqrt(x^2 + y^2) [cm] v z-intervalu a y-intervalu; 2000 cm pokud nic nenalezeno; -1 pokud buffer nenaplněn.
     float distance(const LidarPointBuffer &buffer,
-                   float z_min =  50.0f,
+                   float z_min =  35.0f,
                    float z_max =  150.0f,
                    float y_min = -60.0f,
                    float y_max =  60.0f,

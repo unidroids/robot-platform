@@ -77,25 +77,10 @@ class PathTracker:
         self.current_wp_index = 0
         self.active_near_wp = None
         self.artificial_segment = False
-        self.initialized_position = False
+        self._update_active_wp(0)
+        print(f"[PathTracker] Inicializace: Start z Waypointu 0 -> 1.")
 
-    def _update_active_wp(self, index: int, S_lat=None, S_lon=None, E_lat=None, E_lon=None):
-        if S_lat is not None and E_lat is not None:
-            b1 = self._get_bearing(S_lat, S_lon, E_lat, E_lon)
-            if self.current_wp_index < len(self.waypoints) - 1:
-                tgt_S = self.waypoints[self.current_wp_index]
-                tgt_E = self.waypoints[self.current_wp_index + 1]
-                b2 = self._get_bearing(tgt_S.lat, tgt_S.lon, tgt_E.lat, tgt_E.lon)
-                diff = (b2 - b1 + 180) % 360 - 180
-            else:
-                diff = 0.0
-            self.active_near_wp = NearWaypoint(
-                S_lat, S_lon, E_lat, E_lon,
-                L_near_m=self.L_near_m,
-                end_rel_azimuth_deg=diff
-            )
-            return
-
+    def _update_active_wp(self, index: int):
         if index < len(self.waypoints) - 1:
             curr_wp = self.waypoints[index]
             next_wp = self.waypoints[index + 1]
@@ -109,63 +94,22 @@ class PathTracker:
             self.active_near_wp = None
 
     def update(self, R_lat: float, R_lon: float) -> NearState:
-        if not self.waypoints:
+        if not self.waypoints or self.active_near_wp is None:
             return None
 
-        # 1. První inicializace
-        if not self.initialized_position:
-            self.initialized_position = True
-            
-            # Najdeme nejbližší segment k aktuální pozici
-            best_idx = 0
-            min_dist = float('inf')
-            
-            for i in range(len(self.waypoints) - 1):
-                wp1 = self.waypoints[i]
-                wp2 = self.waypoints[i+1]
-                nw = NearWaypoint(wp1.lat, wp1.lon, wp2.lat, wp2.lon, L_near_m=self.L_near_m)
-                st = nw.update(R_lat, R_lon)
-                if st.d_perp_m < min_dist:
-                    min_dist = st.d_perp_m
-                    best_idx = i
-
-            print(f"[PathTracker] Inicializace: Nejbližší segment je {best_idx} (vzdálenost k čáře: {min_dist:.2f} m).")
-            
-            if min_dist > 1.0:
-                self.artificial_segment = True
-                self.current_wp_index = best_idx
-                
-                wp_target = self.waypoints[best_idx]
-                print(f"[PathTracker] Vytvářím umělý segment: [Aktuální pozice] -> Waypoint {best_idx}.")
-                self._update_active_wp(best_idx, S_lat=R_lat, S_lon=R_lon, E_lat=wp_target.lat, E_lon=wp_target.lon)
-            else:
-                self.artificial_segment = False
-                self.current_wp_index = best_idx
-                self._update_active_wp(self.current_wp_index)
-
-        # 2. Běžná aktualizace aktivního segmentu
-        if self.active_near_wp is None:
-            return None
-            
         state = self.active_near_wp.update(R_lat, R_lon)
-        
+
         # Přepnutí na další waypoint
         if state.distance_to_goal_m <= 0.0:
-            if self.artificial_segment:
-                print(f"[PathTracker] Dosažen cíl umělého segmentu. Napojuji se na standardní trasu od indexu {self.current_wp_index}.")
-                self.artificial_segment = False
+            self.current_wp_index += 1
+            if self.current_wp_index < len(self.waypoints) - 1:
+                print(f"[PathTracker] Dosažen Waypoint {self.current_wp_index}. Přepínám na další segment.")
                 self._update_active_wp(self.current_wp_index)
-                if self.active_near_wp:
-                    state = self.active_near_wp.update(R_lat, R_lon)
+                state = self.active_near_wp.update(R_lat, R_lon)
             else:
-                self.current_wp_index += 1
-                if self.current_wp_index < len(self.waypoints) - 1:
-                    print(f"[PathTracker] Dosažen Waypoint {self.current_wp_index}. Přepínám na další segment.")
-                    self._update_active_wp(self.current_wp_index)
-                    state = self.active_near_wp.update(R_lat, R_lon)
-                else:
-                    print(f"[PathTracker] Dosažen cíl celé trasy!")
-                    self.active_near_wp = None
-                    return None
-                    
+                print(f"[PathTracker] Dosažen cíl celé trasy!")
+                self.active_near_wp = None
+                return None
+
         return state
+

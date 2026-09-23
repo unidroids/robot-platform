@@ -43,6 +43,17 @@ class TestPilotRobotourLogic(unittest.TestCase):
         first_wp = tracker.waypoints[0]
         self.assertAlmostEqual(first_wp.lat, 49.5541)
         self.assertAlmostEqual(first_wp.lon, 12.7411)
+        self.assertEqual(tracker.current_wp_index, 0)
+
+    def test_path_tracker_always_starts_at_zero(self):
+        """Ověření, že PathTracker vždy začíná od segmentu 0 a nepřeskakuje na vzdálenější segmenty."""
+        tracker = PathTracker(self.route_data, L_near_m=2.0)
+        self.assertEqual(tracker.current_wp_index, 0)
+        # První update se souřadnicemi startu
+        st = tracker.update(49.5541, 12.7411)
+        self.assertIsNotNone(st)
+        self.assertEqual(tracker.current_wp_index, 0)
+
 
     def test_state_transitions(self):
         self.assertEqual(self.service.state, "IDLE")

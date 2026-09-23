@@ -100,7 +100,7 @@ class RobotourPilotService:
         
         # Init logger
         self.logger = DataLogger(base_dir="/data/robot/pilot_robotour")
-        self.logger.print("time,lat,lon,nose_lat,nose_lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,wp_index,target_left,target_right,actual_left,actual_right,obstacle_distance_cm,h_acc_mm,state,source,reason")
+        self.logger.print("time,lat,lon,nose_lat,nose_lon,heading,target_heading,heading_error,distance_to_goal_m,d_perp_m,wp_index,target_left,target_right,actual_left,actual_right,obstacle_distance_cm,h_acc_mm,state,source,reason,target_wp_index,target_wp_lat,target_wp_lon,near_lat,near_lon,closest_lat,closest_lon,lookahead_dist_m,geom_curvature,geom_radius_m,geom_turn_direction")
         
         # Uložení do /data/robot/pilot_robotour/<yyyy-mm-dd>/<HH-MM-SS>/route.json
         now = datetime.now()
@@ -401,6 +401,7 @@ class RobotourPilotService:
             heading_error = 0.0
             distance_to_goal = 0.0
             d_perp = 0.0
+            near_state = None
             
             if self.fusion_data:
                 lat = float(self.fusion_data.get("lat", 0.0))
@@ -506,8 +507,56 @@ class RobotourPilotService:
                 wp_idx = self.path_tracker.current_wp_index if self.path_tracker else 0
                 h_acc_val = int(round(float(self.fusion_data.get("hAcc", 9999)))) if self.fusion_data else 9999
                 reason_escaped = f'"{self.status_info}"'
+
+                # Navigační sloupce
+                target_wp_idx_str = ""
+                target_wp_lat_str = ""
+                target_wp_lon_str = ""
+                near_lat_str = ""
+                near_lon_str = ""
+                closest_lat_str = ""
+                closest_lon_str = ""
+                lookahead_dist_str = ""
+                geom_curv_str = ""
+                geom_radius_str = ""
+                geom_turn_dir_str = ""
+
+                if self.source == "NAV" and self.state == "RUNNING" and near_state is not None and self.path_tracker:
+                    tgt_idx = min(self.path_tracker.current_wp_index + 1, len(self.path_tracker.waypoints) - 1)
+                    tgt_wp = self.path_tracker.waypoints[tgt_idx]
+                    target_wp_idx_str = str(tgt_idx)
+                    target_wp_lat_str = f"{tgt_wp.lat:.10f}"
+                    target_wp_lon_str = f"{tgt_wp.lon:.10f}"
+                    if near_state.near_lat is not None:
+                        near_lat_str = f"{near_state.near_lat:.10f}"
+                    if near_state.near_lon is not None:
+                        near_lon_str = f"{near_state.near_lon:.10f}"
+                    if near_state.closest_lat is not None:
+                        closest_lat_str = f"{near_state.closest_lat:.10f}"
+                    if near_state.closest_lon is not None:
+                        closest_lon_str = f"{near_state.closest_lon:.10f}"
+
+                    if near_state.near_x_m is not None and near_state.near_y_m is not None:
+                        dist_to_near = math.hypot(near_state.near_x_m, near_state.near_y_m)
+                    else:
+                        dist_to_near = self.path_tracker.L_near_m
+                    lookahead_dist_str = f"{dist_to_near:.3f}"
+
+                    alpha_rad = math.radians(heading_error)
+                    sin_alpha = math.sin(alpha_rad)
+                    if abs(sin_alpha) < 1e-6 or abs(heading_error) < 0.01:
+                        geom_curv_str = "0.000000"
+                        geom_radius_str = "inf"
+                        geom_turn_dir_str = "STRAIGHT"
+                    else:
+                        curv = (2.0 * sin_alpha) / dist_to_near
+                        radius = dist_to_near / (2.0 * abs(sin_alpha))
+                        geom_curv_str = f"{curv:.6f}"
+                        geom_radius_str = f"{radius:.2f}"
+                        geom_turn_dir_str = "RIGHT" if heading_error > 0 else "LEFT"
+
                 if self.logger:
-                    self.logger.print(f"{time.time()},{lat},{lon},{nose_lat},{nose_lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped}")
+                    self.logger.print(f"{time.time()},{lat},{lon},{nose_lat},{nose_lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped},{target_wp_idx_str},{target_wp_lat_str},{target_wp_lon_str},{near_lat_str},{near_lon_str},{closest_lat_str},{closest_lon_str},{lookahead_dist_str},{geom_curv_str},{geom_radius_str},{geom_turn_dir_str}")
                 
                 if self.state in ["STOPPED", "FINISHED"] and actual_left == 0 and actual_right == 0:
                     print(f"[PilotRobotour] Robot plynule zastavil ({self.state}). Ukončuji řídicí smyčku.")

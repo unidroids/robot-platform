@@ -180,6 +180,29 @@ class TestPilotRobotourLogic(unittest.TestCase):
         self.assertEqual(drive_calls[0][1], (1, 1, 1))
         self.assertEqual(drive_calls[1][1], (1, 0, 0))
 
+    def test_csv_logging_columns(self):
+        """Ověření, že CSV log obsahuje rozšířenou hlavičku s 31 sloupci."""
+        from unittest.mock import MagicMock, patch
+        with patch("pilot_robotour.service.DataLogger") as mock_logger_cls:
+            mock_logger = MagicMock()
+            mock_logger_cls.return_value = mock_logger
+            self.service.drive = MagicMock()
+
+            ok, msg = self.service.start_service(max_speed=100, max_pwm=150, route_input=self.route_data)
+            self.assertTrue(ok)
+
+            mock_logger.print.assert_called()
+            header = mock_logger.print.call_args_list[0][0][0]
+            cols = header.split(",")
+            self.assertEqual(len(cols), 31)
+            expected_new_cols = [
+                "target_wp_index", "target_wp_lat", "target_wp_lon",
+                "near_lat", "near_lon", "closest_lat", "closest_lon",
+                "lookahead_dist_m", "geom_curvature", "geom_radius_m", "geom_turn_direction"
+            ]
+            for c in expected_new_cols:
+                self.assertIn(c, cols)
+
 
 class TestPilotRobotourTCP(unittest.TestCase):
     """Integrační test TCP protokolu služby PILOT-ROBOTOUR."""

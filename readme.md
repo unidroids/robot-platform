@@ -30,6 +30,7 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
   * HTTP se používá pouze pro externí API (FastAPI).
 * **Záznamy:** logování obrazu, lidarových dat, pohybu a GNSS do /robot/data/logs
 
+
 ## 🔌 Služby a porty
 
 | Služba           | Port | Popis                                         |
@@ -46,36 +47,30 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **COMPASS**      | 9014 | Vyčítání 10-axis IMU (kompas), kalibrace, úhly a kvaterniony |
 | **GNSS-RTK**     | 9015 | PointPerfect NTRIP klinet (RTCM data)  |
 | **GNSS-IMU**     | 9016 | Zpracování UBX-ESF-RAW (100Hz IMU ze ZED-F9R) a 20Hz úhlový přírůstek |
-
-
-
+| **— Telefon (HMI) —** | | *Služby pro telefon připojený k robotovi* |
 | **HMI-BRIDGE**   | 9020 | Automatický servis pro HMI bridge na Android telefon|
 | **QRSCANER**     | 9021 | Virtual service na skenování QR kódů přes HMI bridge|
 | **TERMINAL**     | 9022 | Virtualní Terminál přes HMI bridge|
-
+| **— Mise a dohled —** | | *Služby pro vzdálený dohled a spouštění misí* |
 | **OOW-BRIDGE** | 9030 | Office of Watch (BLE server, android client) |
 | **MISSION-ROBOTOUR** | 9031 | Robotour |
 | **MISSION-TULAK** | 9032 | Tulák po Krasu |
-
-
-
+| **— Mapy —** | | *Mapové služby* |
 | **MAPS**   | 9040 | Mapová služba - postavená nad vlastním mapovou strukturou |
-
-
-
+| **— Piloti —** | | *Navigační a rozhodovací služby* |
 | **PILOT-WAYPOINTS** | 9101 | Autonomní řízení robota podle waypointů        |
 | **PILOT-VISION** | 9102 | Vizuální navigace pro autonomní řízení        |
 | **PILOT-MANUAL** | 9103 | Manuální řízení robota gamepadem        |
 | **PILOT-ROBOTOUR** | 9104 | Řízení dle waypointů se zapojením kamery a LIDARu |
-
-
-
+| **— Vidění —** | | *Vizuální percepční služby* |
 | **VISION-QRCODE** | 9201 | Vyhledání QR Codu v kamerovém vstupu        |
 | **VISION-LINE** | 9202 | Future - Vyhledání čáry z kamerového vstupu      |
 
 
 ## obsolete
 
+| Služba           | Port | Popis                                         |
+| ---------------- | ---- | --------------------------------------------- |
 | **JOURNEY**      | *9004 | Hlavní orchestrátor workflow - (obsolete)     |
 | **PILOT**        | *9008 | Autonomní řízení podle GPS - (obsolete)       |
 | **HEADING**      | *9010 | Výpočet orientace (externí kompas/IMU)        |
@@ -90,6 +85,7 @@ Architektura je rozdělena na obecné jádro a specifické mise. Dokumentaci a z
 * [Robotour 2025](challenges/Robotour_2025/robotour_2025.md) – Původní soutěž, pro kterou byl robot postaven.
 * [Tulák po Krasu 2026](challenges/Tulak_po_Krasu_2026/tulak_po_krasu.md) – Úpravy a odladění vizuální navigace po čáře.
 * [Dívka 2026 II](challenges/Divka_2026_II/divka_2026_II_analyza.md) – Analýza ne/úspěchu.
+* [Robotour 2026](challenges/Robotour_2026/robotour_2026.md) – Jízda podél GNSS.
 
 ## 📁 Struktura projektu
 

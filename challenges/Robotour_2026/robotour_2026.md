@@ -19,18 +19,18 @@ Je středa před sobotní soutěží, neuronová síť pro detekci cesty je natr
 - Integrace uživatelského vstupu pro zadávání cíle - Vzít hlavu robota na dovolenou se vyplatilo ... služby Terminál i QR Scanner jsou připravené.
 - Vyhýbání se překážkám - ... dream on ...
 - Volba trasy - nová mapová služba ... koncept je jasný ...
-- Hledání alternativní trasy, Dead Reconning pod mostem či v tunelu - {} "(prázná množina :)"
+- Hledání alternativní trasy, Dead Reconning pod mostem či v tunelu - {}
 
 ### Pomoc panika ... a zase štěstí? ###
 Tady bych rád poděkoval své drahé polovičce, která vše zjenodušila na: "Soustřeď se na to, aby robot ujel jeden metr".
 
-Zpětně se dá říct, že jich robot nakonec ujel něco kolem 9000 :)
+Zpětně se dá říct, že jich robot nakonec ujel něco přes 9000 :)
 
 ## Nový plán ... Mission-Robotour
 - Zadání cíle QR kódem - Odladění uživatelského vstupu pro zadávání cíle
 - Nalezení cesty v offline mapě 
 - Clone služby PILOT-WAIPOINS (ladění jízdy podle GPS souřadnic, už od Robotem rovně) a úprava na PILOT-ROBOTOUR.
-- Když zbude čas, tak zkusit opravit na lidar (lepší bezpečnost) 
+- Když zbude čas, tak zkusit opravit lidar (lepší bezpečnost) 
 
 ## Pátek odpoledne
 Naprogramováno, otestováno ... Z nějakého důvodu se občas robot po zadání cíle rozjede nekotrolovaně dozadu ??? Ale je čas vyrazit do Stromovky, jsou to 3 hodiny cesty. Tak to bude oprava za jízdy. :)
@@ -51,7 +51,7 @@ Potkávám spoustu známých tváří. Martin si chce odšktrnout homologaci. V�
 Robot dojede na nakládku, pak na vykládku, vše vypadá slibně, ... ale z nakládky hned vedle vzrostlého stromu co bych s těží obejmul ... se po zadání opakované nakládky robot otočí na místě a zastaví ... čekám na GPS polohu ... (na terminálu svítí přesnost polohy 0,7m) ... zkouším robota kousek poposunout, přerušit jízdu, nakonec se robot rozjede ... pokračuje na nakládku a zpět na vykládku ... a opět po zadání cíle (tentokrát Home) se otočí a zůstane stát ... čekám na GPS polohu ... (na terminálu svítí přesnost polohy 22mm ???) ... popošťuchování nepomhlo ... přerušuji jízdu a zadavám cílovou polohu znova ... robot se chytá a jede do servisní zóny. 
 
 ### 1.Kolo 10:00-11:00
-Kam se podělo 30 minut mezi koli? ... No nic sedím na lavičce a deleguji problém na AI, tak po 10 minutách přemýšlení odpoví, že problém nebyla poloha, ale přesnost úhlu, který se na terminálu samozřejmně neukazuje :) 
+Kam se podělo 30 minut mezi koly? ... No nic sedím na lavičce a deleguji problém na AI, tak po 10 minutách přemýšlení odpoví, že problém nebyla poloha, ale přesnost úhlu, který se na terminálu samozřejmně neukazuje :) 
 
 Oprava limitu ze 6 stupňů na 15. V době kdy robot stál byla chyba natočení 6.1 stupně ... 
 
@@ -74,7 +74,7 @@ S robotem vyrážíme jen tak a zadáváme nakládku, robot jede jak má, povíd
 Robota tlačím zpět na start, přeci jen je už skoro 12 hodin. Jsme zpět na startu a zadáváme nakládku je 11:55 ... tentokrát robot nezaváhal ... jede seběvědomě středem cesty ... ostatní už dojezdili ... jsme na trase sami ... nakládka ... vykládka ... opakovaná nakládka ... vykládka ... a hajdy do servisní zóny ... robot ujel 1,4 km za 33:29s ... robot projel cílem  ve 12:27:05. Dvě minuty do limitu ... to bylo těsný ... Prvních 51 bodů 🎉
 
 
-### Pauza na oběd a mezi koli
+### Pauza na oběd a mezi koly
 
 Eufórie z 51 jedna bodů dodává energii ... koukám na jiné roboty ... povídám si s kluky z Ultimo Minuto ...
 
@@ -86,22 +86,22 @@ Všichni vyráží na start a my též ... obnovuji stránku s QR kódem ... zad
 
 No nic, zastavuji robota a vracím se na start, předkládám problém rozhodčím ... s otázkou co dál ... rozhodčí povolují opakovaný start ... jupí :)
 
-Je 14:15 a robotovi předkládám dvakrát zkontrolovaný QR kód ... ano je to 3.kolo ... (když o tom těď přemýšlím tak tam není napsaná "nakládka" u vykládky popis "vyklákda" je, ale už je to skoro měsíc ... tak kdo ví) ... robot vyráží na cestu ... po chvíli 5 minutách robot doráží do místa nakládky ... "naložit" ... a vzhůru do vykládky ...
+Je 14:15 a robotovi předkládám dvakrát zkontrolovaný QR kód ... ano je to 3.kolo ... (když o tom těď přemýšlím tak tam není napsaná "nakládka" u vykládky popis "vyklákda" je, ale už je to skoro měsíc ... tak kdo ví) ... robot vyráží na cestu ... po chvíli robot doráží do místa nakládky ... "naložit" ... a vzhůru do vykládky ...
 
-Cesta na vyknakládku měla vsuvku v podobě protijeďoucího týmu MRVK ... robot neuměl nic jiného než zastavit ... což udělal na výbornou ... jen trochu komplikoval život MRVK ... kteří zvládli naprogramovat vyhybání se překážkám a když něměl dost místa tak si couvl ... (skvělá práce) ...
+Cesta na vykládku měla vsuvku v podobě protijedoucího týmu MRVK ... robot neuměl nic jiného než zastavit ... což udělal na výbornou ... jen trochu komplikoval život MRVK ... kteří zvládli naprogramovat vyhybání se překážkám a když něměl dost místa tak si couvl ... (skvělá práce) ...
 
 Robot viděl místo před sebou a trochu popojel, tím zmenšil místo pro manévr MRVK ... ten musel couvnutí opakovat ... to se stalo celkem třikrát ... na potřetí měl MRVK robot dost místa a robota objel ...
 
 Pak už to byla klasika, vyložit, opakovaně naložit a vyložit a hajdy do servisní zóny ... robot dojel na čas, ujel 2 km za 40 minut. Dalších 51 bodů 🎉
 
 
-### Pauza mezi koli
+### Pauza mezi koly
 
 Tým MRVK vysílá zástupce, aby podal protest proti způsobu navigace robota. Kdy jsme jeli podle zřesněných mapových podkladů. Čímž se referovalo na rozhodnutí z roku 2009, kdy někdo provedl týdenní snímkování místa soutěže ...
 
 Zpětně se dá říct, že jediným pochybením bylo, že jsem naskenovanou trasu nepublikoval na Open Street maps, což pravidla umožňují ... (sice nevím kdo by aktualizovanou mapu ze soboty 01:00 hodin v den soutěže použil) ... ale v principu ...
 
-Béďa šéf Helhestu nad tím v té chvíli mávnul rukou, se slovi ... kdy šlo o nějaké price money ...
+Béďa šéf Helhestu nad tím v té chvíli mávnul rukou, se slovy ... "kdyby šlo o nějaké price money" ...
 
 ### 4.kolo 15:30-16:30
 
@@ -109,13 +109,13 @@ Nakládka a vykládka jsou daleko od sebe ... tým získal pozornost ... rozhod�
 
 Ale kousek zpět, Helhest a my máme stejně bodů ... ale nechci se jim motat do cesty ... vím, že náš robot se neumí vyhnout a jen pasivně čeká než se cesta uvolní ...
 
-Štěstí došlo? ... Helhest vyřáží první ... Když jsou na cestě zadávám místo nakládky ... a robot jede jinou cestou než Helhest ... hmmm ... Helhest zvolil delší cestu ... do místa nakládky přijíždíme dřív ... no nic ... zadáváme vykládku ... robot se otočí a jede po cestě zpět ... mezitím Helhest dojel na nakládku ... a robot k němu dojel a zastavil cca 60 cm od robota ... (všichni už věděli, že robot je pasivní co se týče překážek) ... takže jen čekal ... než Helhest objede ... 
+Štěstí došlo? ... Helhest vyřáží první ... Když jsou na cestě zadávám místo nakládky ... a robot jede jinou cestou než Helhest ... hmmm ... Helhest zvolil delší cestu ... do místa nakládky přijíždíme dřív ... no nic ... zadáváme vykládku ... robot se otočí a jede po cestě zpět ... mezitím Helhest dojel na nakládku ... a robot k němu dojel a zastavil cca 60 cm od robota ... (všichni už věděli, že robot je pasivní co se týče překážek) ... takže jen čekal ... než Helhest odjede ... 
 
-Béďa (šéf Helhestu) měl obavu, že si není jist, tím, jestli jejich robot náhodou nesmete při otáčení jiného robota ... (používal trochji jiná slova, ale snad jsem pochopil správně co myslel tím, když se ptal jestli si chi stavět nového robota) ...
+Béďa (šéf Helhestu) měl obavu, že si není jist, tím, jestli jejich robot náhodou nesmete při otáčení jiného robota ... (používal trochu jiná slova, ale snad jsem pochopil správně co myslel tím, když se ptal ... chceš si stavět nového robota? ...)
 
-Slovo dalo slovo a tým Helhest zadává místo vykládky ... výsledek ... jejich robot má snahu se pomalu otočit ... nejspíš protože má překážku moc blízko ... ale konstrukce robota týmu Helhest neumoňuje hladké otočení ... otáčí se smykem ... v místě kde se chtěl otočit je drsný asfalt a robot se nehnul ...
+Slovo dalo slovo a tým Helhest zadává místo vykládky ... výsledek ... jejich robot má snahu se pomalu otočit ... nejspíš protože má překážku moc blízko ... ale konstrukce robota týmu Helhest neumožňuje hladké otočení ... otáčí se smykem ... v místě kde se chtěl otočit je drsný asfalt a robot se nehnul ...
 
-Následovala slovní snaha podle nějakého pravidla, tým nás blokuje, odstraňtě robota, ... náš robot jel zatím co váš stál ... no prostě pointless ...
+Následovala slovní snaha podle nějakého pravidla, tým nás blokuje, odstraňte robota, ... náš robot jel zatím co váš stál ... no prostě pointless ...
 
 Výsledek ... po několika minutách přijíždí další tými ... ISTROBOTICTS a COGITO ... ISTROBOTICS se vyhybá skrumáži, provádí nakládku a odjíždí ... ale COGITO s přesnou GPS neomilně míří do skumáže ...
 
@@ -125,13 +125,11 @@ Drama až do konce ... robot jede svým tempem ... následuje virtuální GPS č
 
 No nic zpět na trať ... robot se blíží k místu vykládky, kde Helhest zrovna vyložil ... a co čert nechtěl ... přístupová cesta k místu vykládky je široká tak na jednoho robota ... metr dvacet ... 
 
-Načasování jak z učebnice dopravního inspektorátu ... robot zablokoval výjezd z cesty ... a protože vidí překážku zastavuje ... Helhest už byl v pohybu a tak se robotovi vyhne, ale ...
-
-Sjíždí z cesty na travnatý povrch ... všichni bez mrknutí oka vědí ... to se nikdy nestalo :)
+Načasování jak z učebnice dopravního inspektorátu ... robot zablokoval výjezd z cesty ... a protože vidí překážku zastavuje ... Helhest už byl v pohybu a tak se robotovi vyhne, ale ...  sjíždí z cesty na travnatý povrch ... všichni bez mrknutí oka vědí ... to se nikdy nestalo :)
 
 Robot se rozjel ... na straně v místě nakladky je zaparkovaný robot týmu ISTROBOTICTS ... a vypadá to na nějaké problémy ... robot se jim rozjel tak prudce, že mu podjela kola a padl na záda ... upadla kamerka a GPS anténa ... opravdu škoda ...
 
-No nic jsme v místě vykládky, tentokrát vyndáváme soudek, neb jsme byli upozorněni, že je třeba jezdit i bez něj ... tady bych rád poděkoval šéfovi slovenského týmu MRVK za to, že soudek vzal ... asi bych nevědel co dřív, kdy robot zpanikařil a já měl v ruce 5l soudek piva ...
+No nic jsme v místě vykládky, tentokrát vyndáváme soudek, neb jsme byli upozorněni, že je třeba jezdit i bez něj ... tady bych rád poděkoval šéfovi slovenského týmu MRVK za to, že soudek vzal ... asi bych nevědel co dřív, kdyby robot zpanikařil a já měl v ruce 5 litrový soudek piva ...
 
 Je 16:06 ... už jsme více jak půlhodiny na cestě ... no nic zkusíme to ... Vyrážíme na opakovanou nakládku ... přijíždíme k nakládce a Helhest nikde, čekal jsem, že nás budou míjet ... ale nebyli tam ... asi se rozhodli, že opakovanou nakládku nebudou dělat a jeli rovnou do servisní oblasti ...
 
@@ -151,7 +149,7 @@ Když zvážím, že robot neměl všechny plánované vylepšení ... Detekce c
 
 Tak se zdá, že největším problémem delivery robota je jeho lokalizace v mapě, což pro Stromovku dokázali moderní GNSS moduly a antény ... 
 
-A díky všem 131 satelitům (50 čínských, 28 Evropských, 25 Ruských, 28 Amerických) se robotovy podařilo lokalizovat s přesností cca 3 cm a jet opakovaně podél virtuální trasy. 
+A díky všem 131 satelitům (50 čínských, 28 Evropských, 25 Ruských, 28 Amerických) se robotovi podařilo lokalizovat s přesností cca 3 cm a jet opakovaně podél virtuální trasy. 
 
 Skvělá práce všichni 🎉 
 

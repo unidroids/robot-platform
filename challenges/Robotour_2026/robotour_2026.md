@@ -23,7 +23,7 @@ Je středa před sobotní soutěží, neuronová síť pro detekci cesty je natr
 - Integrace uživatelského vstupu pro zadávání cíle – vzít hlavu robota na dovolenou se vyplatilo... služby Terminál i QR Scanner jsou připravené.
 - Vyhýbání se překážkám – ... dream on ...
 - Volba trasy – nová mapová služba... koncept je jasný...
-- Hledání alternativní trasy, Dead Reckoning pod mostem či v tunelu – {}
+- Hledání alternativní trasy, Dead Reckoning pod mostem či v tunelu – { prázdná množina }
 
 ### Pomoc, panika ... a zase štěstí? ###
 Tady bych rád poděkoval své drahé polovičce, která vše zjednodušila na: "Soustřeď se na to, aby robot ujel jeden metr".
@@ -48,7 +48,7 @@ V datech je vidět přeskakování robota zleva doprava a zase zpátky. Díky AI
 
 ## Sobota 
 
-Někteří zkušení účastníci říkají: „Pořádně se vyspi.“ Tak jsem si dal 3 hodiny spánku :) Na start přicházíme o něco později, než jsme plánovali, je 9 hodin.
+Někteří zkušení účastníci říkají: „Pořádně se před soutěží vyspi.“ Tak jsem si dal 1,5 hodiny spánku :) Na start přicházíme o něco později, než jsme plánovali, je 9 hodin.
 
 ### Předkolo 9:00–10:00
 Potkávám spoustu známých tváří. Martin si chce odškrtnout homologaci. Vše cajk. Na webu jsou QR kódy pro Home, Předkolo nakládka a vykládka. Je čas na zkušební jízdu.  

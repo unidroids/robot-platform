@@ -4,7 +4,7 @@
 **Hlavní výzvy:** Detekce cesty, Lokalizace na mapě, Zpracování dat z lidaru (traverzibilita a kolizní kurzy), Integrace uživatelského vstupu pro zadávání cíle, Vyhýbání se překážkám, Volba trasy, Hledání alternativní trasy, Dead Reckoning pod mostem či v tunelu.
 
 * [Když se štěstí unaví ...](#když-se-štěstí-unaví-)
-* [Detailní analýza soboního dne 📄](robotour_2026_analysis.md) 
+* [Detailní analýza sobotního dne 📄](robotour_2026_analysis.md) 
 * [Prezentace pro webinář Robotour 2026 📄](Robotour2026.pdf)
 
 ## Když se štěstí unaví ...
@@ -161,5 +161,5 @@ Skvělá práce všichni 🎉
 
 ## Co dál? Analýza a prezentace :)
 
-* [Detailní analýza soboního dne 📄](robotour_2026_analysis.md) 
+* [Detailní analýza sobotního dne 📄](robotour_2026_analysis.md) 
 * [Prezentace pro webinář Robotour 2026 📄](Robotour2026.pdf)

@@ -13,34 +13,34 @@ GNSS řešení robota:
 1. **Hlavní anténa** připojená k UNICORE UM980 
 2. **Primární a sekundární anténa** připojené k duálnímu přijímači UNICORE UM982 
 
-Primární a sekundární anténa tvořili s hlavním přijímačem konstelaci pro měření vzdáleností mezi anténami jako mechanizmus pro identifikaci false fixů RTK řešení jednotlivých antén.
+Primární a sekundární anténa tvořily s hlavním přijímačem konstelaci pro měření vzdáleností mezi anténami jako mechanismus pro identifikaci false fixů RTK řešení jednotlivých antén.
 
 <img src="img/konstelace.png" alt="Konstelace antén" width="70%">
 
 
-Díky této konstelaci bylo možné identifikovat **chybná měření polohy způsobená odrazy** signálu (tzv. multipath). Když robot najel do blízkosti stěny nebo jiného objektu, mohla se stát chyba fixu, kterou algoritmus díky měření vzdáleností mezi anténami detekoval.
+Díky této konstelaci bylo možné identifikovat **chybná měření polohy způsobená odrazy** signálu (tzv. multipath). Když robot jel pod stromy či v blízkosti jiného objektu, mohl nastat chybný fix, který algoritmus měřením vzdáleností mezi anténami detekoval.
 
 
 ## Vyhodnocení stavu konstelace
 
-Během sobotního dne nasbíral robot cca 130 tisíc měření běhěm cca 3,5 hodin jízdy, během které ujec cca 8,5km.
-Za celou dobu se jízd měli všechny platný RTK fix (s vyjímkou jednoho měření na hlavní anténě). 
+Během sobotního dne nasbíral robot cca 130 tisíc měření za zhruba 3,5 hodiny jízdy, během nichž ujel cca 8,5 km.
+Za celou dobu jízd měly všechny antény platný RTK fix (s výjimkou jednoho měření na hlavní anténě). 
 
 ### Grafické znázornění stavu konstelace
-**Konstelace OK** - Všechna měření vzdáleností mezi anténami odpovídají geometrii robota.
+**Konstelace OK** – Všechna měření vzdáleností mezi anténami odpovídají geometrii robota.
 <img src="img/triangle_ok.png" alt="Stav konstelace antén - TRIANGLE_OK" width="70%">
 
-**Konstelace - 2 antény OK** - Dvě antény mají správnou vzdálenost a u třetí došlo k vyřazení.
+**Konstelace – 2 antény OK** – Dvě antény mají správnou vzdálenost a u třetí došlo k vyřazení.
 <img src="img/triangle_2anteny.png" alt="Stav konstelace antén - TRIANGLE_EXCLUDE" width="70%">
 
-**Konstelace - Degradace** - Žádná vzdálenost neodpovídala konstelaci. 
+**Konstelace – Degradace** – Žádná vzdálenost neodpovídala konstelaci. 
 <img src="img/triangle_degraded.png" alt="Stav konstelace antén - TRIANGLE_DEGRADED" width="70%">
 
 ### Modely validace konstelace
 
-V rámci analýzi logů se ukázali dva zásadní nedostatky implementovaného řešení. 
-- Model kontroloval jen vzdálenost mezi anténami (není zohledněn vliv natočení antén vůči tělu robota)
-- Nebyla aplikovaná synchronizace epoch mezi dvěmi moduly (některé validace porovnávali novou polohu Hlavní antény a o 100 ms starých dat Duálních antén)
+V rámci analýzy logů se ukázaly dva zásadní nedostatky implementovaného řešení:
+- Model kontroloval jen vzdálenost mezi anténami (nebyl zohledněn vliv natočení antén vůči tělu robota).
+- Nebyla aplikována synchronizace epoch mezi dvěma moduly (některé validace porovnávaly novou polohu Hlavní antény s daty duálních antén starými 100 ms).
 
 ### Model 1: Původní fúze (reálný běh v ostré jízdě)
 Reálný stav zaznamenaný během jízdy (pouze porovnávání vzdáleností mezi anténami).
@@ -56,7 +56,7 @@ Reálný stav zaznamenaný během jízdy (pouze porovnávání vzdáleností mez
 | **Celkem aktivní jízda** | **13 195.9 s (100.0 %)** | **8 491.5 m (100.0 %)** | **131 299** |
 
 ### Model 2: Rozšířená teoretická fúze (geometrická validace)
-Robustnější geometrická validace konstelace. Tyto validace zahrnovaly validaci úhlu natočení antén vůči tělu robota, ale byli testovány pouze off-line na zaznamených datech.
+Robustnější geometrická validace konstelace. Tyto validace zahrnovaly kontrolu úhlu natočení antén vůči tělu robota, ale byly testovány pouze offline na zaznamenaných datech.
 
 | Stav konstelace | Čas [s] (Podíl) | Ujetá dráha [m] (Podíl) | Počet vzorků (10 Hz) |
 | :--- | :---: | :---: | :---: |
@@ -71,16 +71,16 @@ Robustnější geometrická validace konstelace. Tyto validace zahrnovaly valida
 
 ### Porovnání obou modelů
 
-Srovnámím je vidět:
-- Častější vyloučení Sekundární antény UM982 25% času - to koreluje s jejím omezením na zpracovávané frekvence (Pouze L1/L2) - L5 chybí, která má lepší chování pod stromy.
-- Snížení počtu vyloučení Hlavní antény z 5% času na 1% - oprava sychnronizace epoch, kdy v některých případech docházelo k porovnávání nových poloh Hlavní antény a 0,1 s starých dat Duálních antén.
-- Celkově větší rozpad konstelace cca 7% (cca 0,6 z 8.5km) - což odpovídá, kontrole natočení antén vůči tělu robota. 
+Srovnáním je vidět:
+- Častější vyloučení Sekundární antény UM982 (25 % času) – to koreluje s jejím omezením na zpracovávané frekvence (pouze L1/L2); chybí frekvence L5, která se chová lépe pod stromy.
+- Snížení počtu vyloučení Hlavní antény z 5 % času na 1 % – oprava synchronizace epoch, kdy v některých případech docházelo k porovnávání nových poloh Hlavní antény s daty duálních antén starými 0,1 s.
+- Celkově větší rozpad konstelace o cca 7 % (cca 0,6 z 8,5 km) – což odpovídá kontrole natočení antén vůči tělu robota. 
 
-Četnost vyloučení Primární duální antény v porovnání s Hlavní anténou (6x) by se dalo přičíst rozdílným anténám, kdy Hlavní anténa je geodetická a Primární duální anténa je šroubovicová. S ohledem na minimální rozdíly ve výpočetním zpracování UM980 a UM982 na primární anténě. (detalní porovnání frekvencí modulů je níže [Moduly](#moduly)).
+Četnost vyloučení Primární duální antény v porovnání s Hlavní anténou (6×) by se dala přičíst rozdílným anténám, kdy Hlavní anténa je geodetická a Primární duální anténa je šroubovicová, a to i s ohledem na minimální rozdíly ve výpočetním zpracování UM980 a UM982 na primární anténě (detailní porovnání frekvencí modulů je níže v sekci [Moduly](#moduly)).
 
 
 ## Skoky
-Přehledové analýza skoků poloh mezi dvěmi měřeními 0,1 s. Ananlýza řešila skoky delší jak 25 cm (2,5x větší vzdálenost než max rychlost robota 1 m/s).
+Přehledová analýza skoků poloh mezi dvěma měřeními s odstupem 0,1 s. Analýza řešila skoky delší než 25 cm (2,5× větší vzdálenost než maximální rychlost robota 1 m/s).
 
 ### Histogram četnosti skoků nad 25 cm (v ostré jízdě)
 
@@ -102,32 +102,32 @@ Přehledové analýza skoků poloh mezi dvěmi měřeními 0,1 s. Ananlýza ře�
 ### Absolutní maxima skoků mezi sousedními snímky ($dt = 0.1\text{ s}$)
 
 * **UM980 Hlavní anténa**:
-  * Maximum v ostré jízdě: **$34.7\text{ cm}$** *(Předkolo - vykládka)*
+  * Maximum v ostré jízdě: **$34.7\text{ cm}$** *(Předkolo – vykládka)*
   * Nad $35\text{ cm}$ v ostré jízdě: **0 případů (žádný)**
 * **UM982 Dual Prim (Master)**:
-  * Maximum v ostré jízdě: **$566.5\text{ cm}$ (5.66 m)** *(2. kolo - vykládka)*
+  * Maximum v ostré jízdě: **$566.5\text{ cm}$ (5.66 m)** *(2. kolo – vykládka)*
   * Nad $1\text{ metr}$: **9 případů**
 * **UM982 Dual Sek (Slave)**:
-  * Maximum v ostré jízdě: **$310.0\text{ cm}$ (3.10 m)** *(Předkolo - nakládka)*
+  * Maximum v ostré jízdě: **$310.0\text{ cm}$ (3.10 m)** *(Předkolo – nakládka)*
   * Nad $1\text{ metr}$: **15 případů**
 
 ### Grafické znázornění skoků v mapě
-**Hlavní anténa - UM980** 
+**Hlavní anténa – UM980** 
 
-<img src="img/skoky_hlavni.png" alt="Skoky polohy hlavni antény - UM980" width="70%">
+<img src="img/skoky_hlavni.png" alt="Skoky polohy hlavní antény - UM980" width="70%">
 
-**Primární duální anténa - UM982**
+**Primární duální anténa – UM982**
 
 <img src="img/skoky_primarni.png" alt="Skoky polohy primární duální antény - UM982" width="70%">
 
-**Sekundární duální anténa - UM982**
+**Sekundární duální anténa – UM982**
 
 <img src="img/skoky_sekundarni.png" alt="Skoky polohy sekundární duální antény - UM982" width="70%">
 
 ## Antény
 Robot používá dvě různá GNSS řešení.
 
-### Hlavní anténa - parametry
+### Hlavní anténa – parametry
 
 | Parametr / Vlastnost | Hodnota |
 | :--- | :--- |
@@ -155,7 +155,7 @@ Robot používá dvě různá GNSS řešení.
 <img src="img/hlavni_antena.png" alt="Hlavní anténa – rozměry a schéma" width="50%">
 
 
-### Primární a sekundární antény - parametry
+### Primární a sekundární antény – parametry
 
 | Parametr / Vlastnost | Hodnota |
 | :--- | :--- |
@@ -182,15 +182,15 @@ Robot používá dvě různá GNSS řešení.
 | **Krytí (Waterproof)** | IP67 |
 
 **Rozměry a schéma**  
-<img src="img/dual_antena.png" alt="Hlavní anténa – rozměry a schéma" width="50%">
+<img src="img/dual_antena.png" alt="Primární a sekundární anténa – rozměry a schéma" width="50%">
 
 ## Moduly
 
 GNSS moduly:
 - Hlavní anténa UNICORE UM980
-- Duální řešení pro Primární a Skundární anténu UNICORE UM982
-- X20D - U-blox duální GNSS 
-- G5P3H - Septentrio duální GNSS
+- Duální řešení pro Primární a Sekundární anténu UNICORE UM982
+- X20D – U-blox duální GNSS 
+- G5P3H – Septentrio duální GNSS
 
 ### Srovnávací tabulka modulů
 
@@ -246,11 +246,11 @@ GNSS moduly:
 
 ## Budoucí výzkum a možnosti vylepšení
 
-Přehledová tabulka modulů ukazuje, že budoucí řešení by mohlo být postaveno nad modulem G5P3H. Zdůvodů minimálního omezení přijímaných signálů, ale RTK poloha sekundární antény není modulem počítána a bylo by ji třeba pro účely Loose Coupling dopočítávat na robotovi.
+Přehledová tabulka modulů ukazuje, že budoucí řešení by mohlo být postaveno na modulu G5P3H, a to z důvodů minimálního omezení přijímaných signálů. RTK poloha sekundární antény však není modulem počítána a bylo by ji třeba pro účely Loose Coupling dopočítávat na robotovi.
 
-Alternativně se dal použít 3x/4x G5P3 (single anténa) či UM980 (single anténa) a dopočítávat azimut na robotovi.
+Alternativně by se dalo použít 3×/4× G5P3 (single anténa) či UM980 (single anténa) a dopočítávat azimut na robotovi.
 
-Pro účely Tight Coupling se zdá být použití dvou G5P3H (duál anténa) nejpřijatelnější variantou, kde by výpočet GNSS řešení byl kompletně implementován na robotovi z Raw Observalable zpráv za použití MC-LAMBDA (Multiconstrain LAMBDA), kde rozměry robota jsou součástí řešení a vylučují se jednotlivé frekvnece nikoliv celá anténa. Takové to řešení by mohlo udržet RTK fix i v lese v hluboké rokli.
+Pro účely Tight Coupling se zdá být použití dvou modulů G5P3H (duální anténa) nejpřijatelnější variantou, kde by výpočet GNSS řešení byl kompletně implementován na robotovi z Raw Observable zpráv za použití MC-LAMBDA (Multi-Constrained LAMBDA), kdy rozměry robota jsou součástí řešení a vylučují se jednotlivé frekvence, nikoliv celá anténa. Takovéto řešení by mohlo udržet RTK fix i v lese v hluboké rokli.
 
 Což je předmětem budoucího výzkumu a spolupráce :)
 

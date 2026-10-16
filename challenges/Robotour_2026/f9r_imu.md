@@ -1,16 +1,25 @@
 # Technická analýza IMU u-blox ZED-F9R a alternativ pro mobilního robota
 
-Tento dokument obsahuje technickou analýzu stability, driftu a šumu gyroskopu jednotky **u-blox ZED-F9R** (kanál `ipc:///tmp/robot-gnss-imu`) v porovnání s přesným RTK azimutem duální anténní báze **UNIHEADING** ve stavu `NARROW_INT`. Analýza vychází z kompletních datových záznamů všech 5 soutěžních kol sobotního maratonu Robotour 2026.
 
-Součástí dokumentu je přehled technických parametrů alternativních 6-osých MEMS IMU čipů na trhu jakožto podklad pro alternativní IMU jednotku. 
-
-Faktické srovnání IMU ze ZED-F9R s původní rozbitou 10-osou IMU jednotkou Gongling AI paradoxně posunulo kvalitu úhlového měření o celou technologickou třídu výše :)
+* [Datová základna & Hardware kontext](#datová-základna--hardware-kontext)
+* [Metodika segmentové analýzy (Windowed Analysis) a definice parametrů](#metodika-segmentové-analýzy-windowed-analysis-a-definice-parametrů)
+* [Analyzovaná data](#analyzovaná-data)
+* [Výsledky měření](#výsledky-měření)
+* [Technické srovnání alternativních 6-osých IMU čipů](#technické-srovnání-alternativních-6-osých-imu-čipů)
+* [Srovnání: Nouzový headless ZED-F9R vs. původní 10-osá IMU (Gongling AI)](#srovnání-nouzový-headless-zed-f9r-vs-původní-10-osá-imu-gongling-ai)
 
 > `Disclaimer`: Dokument je AI generovaný s revizí autorem textu a slouží primárně k vizualizaci a sumarizaci naměřených dat a logů z Robotour 2026 a jako podklad pro alternativní IMU jednotku.
 
+Tento dokument obsahuje technickou analýzu stability, driftu a šumu gyroskopu jednotky **u-blox ZED-F9R** (kanál `ipc:///tmp/robot-gnss-imu`) v porovnání s přesným RTK azimutem duální anténní báze **UNIHEADING** ve stavu `NARROW_INT`. Analýza vychází z kompletních datových záznamů všech 5 soutěžních kol sobotního Robotour 2026.
+
+Součástí dokumentu je přehled technických parametrů alternativních 6-osých MEMS IMU čipů na trhu jakožto podklad pro alternativní IMU jednotku. 
+
+Faktické srovnání IMU ze ZED-F9R s původní rozbitou 10-osou IMU jednotkou Gongling AI paradoxně posunulo kvalitu úhlového měření o celou technologickou třídu výše.
+
+
 ---
 
-## 1. Datová základna & Hardware kontext
+## Datová základna & Hardware kontext
 
 ### Hardwarová konfigurace na robotu:
 * **Jednotka u-blox ZED-F9R neměla připojenou GNSS anténu.** Byla provozována výhradně jako samostatný 6-osý IMU senzor poskytující surové zprávy protokolu UBX-ESF (`UBX-ESF-MEAS` / `GYRO`).
@@ -31,7 +40,7 @@ Faktické srovnání IMU ze ZED-F9R s původní rozbitou 10-osou IMU jednotkou G
 
 ---
 
-## 2. Metodika segmentové analýzy (Windowed Analysis) a definice parametrů
+## Metodika segmentové analýzy (Windowed Analysis) a definice parametrů
 
 ### A. Význam porovnávaných technických parametrů
 Při analýze a výběru MEMS inerciálních senzorů jsou sledovány následující klíčové parametry:
@@ -61,7 +70,7 @@ Pro eliminaci vlivu počátečních náhodných chyb byla aplikována segmentov�
 
 ---
 
-## 3. Analyzovaná data
+## Analyzovaná data
 
 Analýza pokrývá všech 5 soutěžních kol sobotního maratonu specifikovaných v souboru `bloky.dat`:
 
@@ -76,9 +85,9 @@ Analýza pokrývá všech 5 soutěžních kol sobotního maratonu specifikovaný
 
 ---
 
-## 4. Výsledky měření
+## Výsledky měření
 
-### 4.1 Akumulace v čase (Časová okna za jízdy, ZUPT neaktivní)
+### Akumulace v čase (Časová okna za jízdy, ZUPT neaktivní)
 Testovací okna vyhodnocená v nepřetržitém pohybu (kola se točí, nulový rychlostní limit, vyloučena zastavení, $\sigma_{\text{hdg}} \le 1.5^\circ$):
 
 | Časové okno $\Delta t$ | Počet oken $N$ | Model | Medián chyby | Průměrná chyba | 90% Percentil | 95% Percentil | Max chyba | Systematický Bias | Rychlost driftu |
@@ -94,7 +103,7 @@ Testovací okna vyhodnocená v nepřetržitém pohybu (kola se točí, nulový r
 
 ---
 
-### 4.2 Akumulace na ujeté vzdálenosti (Vzdálenostní okna za jízdy, ZUPT neaktivní)
+### Akumulace na ujeté vzdálenosti (Vzdálenostní okna za jízdy, ZUPT neaktivní)
 Odometrická vzdálenost ujetá robotem při typické rychlosti $0.8 - 1.2\text{ m/s}$:
 
 | Vzdálenostní okno $\Delta s$ | Počet oken $N$ | Model | Medián chyby | Průměrná chyba | 90% Percentil | 95% Percentil | Max chyba | Systematický Bias | Normalizovaný drift na 100 m |
@@ -110,7 +119,7 @@ Odometrická vzdálenost ujetá robotem při typické rychlosti $0.8 - 1.2\text{
 
 ---
 
-### 4.3 Vliv 3D kompenzace náklonů (Pitch & Roll)
+### Vliv 3D kompenzace náklonů (Pitch & Roll)
 Cesty v parku Stromovka vykazují sklon terénu a nerovnosti (podélný náklon šasi typicky $\text{pitch} \approx \pm 2^\circ \text{ až } 5^\circ$, příčný $\text{roll} \approx \pm 1^\circ \text{ až } 4^\circ$).
 
 Z naměřených dat vyplývají následující charakteristiky:
@@ -124,7 +133,7 @@ Z naměřených dat vyplývají následující charakteristiky:
 
 ---
 
-### 4.4 Klidový šum a drift při stání (Static Bias & ZUPT)
+### Klidový šum a drift při stání (Static Bias & ZUPT)
 Vyhodnocení úseků, kdy robot stál na místě (odometrie $\Delta\text{steps} = 0$ po dobu $\ge 10\text{ s}$), napříč jednotlivými etapami dne:
 
 | Kolo / Měření | Čas měření | Počet vzorků $N$ (20 Hz) | Doba stání | Statický bias $w_z$ | Drift rate za hodinu | Šum úhlové rychlosti ($\sigma$) | Prahová mez $3\sigma$ |
@@ -142,7 +151,7 @@ Vyhodnocení úseků, kdy robot stál na místě (odometrie $\Delta\text{steps} 
 
 ---
 
-## 5. Technické srovnání alternativních 6-osých IMU čipů
+## Technické srovnání alternativních 6-osých IMU čipů
 
 Modul u-blox ZED-F9R je primárně GNSS přijímač s integrovaným inerciálním senzorem určeným pro automobilový dead reckoning. Použití tohoto modulu výhradně jako IMU senzoru (bez GNSS antény) je ekonomicky neefektivní. 
 
@@ -164,7 +173,7 @@ Níže je uveden přehled technických parametrů alternativních 6-osých MEMS 
 
 ---
 
-## 6. Srovnání: Nouzový headless ZED-F9R vs. původní 10-osá IMU (Gongling AI)
+## Srovnání: Nouzový headless ZED-F9R vs. původní 10-osá IMU (Gongling AI)
 
 V rámci přípravy robota na soutěž došlo k mechanickému poškození původní 10-osé jednotky Gongling AI při pádu. Jako operativní náhrada byl využit dostupný modul u-blox ZED-F9R bez připojené antény.
 

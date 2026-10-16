@@ -3,6 +3,10 @@
 **Mise:** Stromovka Praha (omezená část v okolí Planetária) – dojet na místo zadané QR kódem.  
 **Hlavní výzvy:** Detekce cesty, Lokalizace na mapě, Zpracování dat z lidaru (traverzibilita a kolizní kurzy), Integrace uživatelského vstupu pro zadávání cíle, Vyhýbání se překážkám, Volba trasy, Hledání alternativní trasy, Dead Reckoning pod mostem či v tunelu.
 
+* [Když se štěstí unaví ...](#když-se-štěstí-unaví-)
+* [Detailní analýza soboního dne 📄](robotour_2026_analysis.md) 
+* [Prezentace pro webinář Robotour 2026 📄](Robotour2026.pdf)
+
 ## Když se štěstí unaví ...
 
 Během sběru dat pro trénování neuronové sítě pro detekci cest ve Stromovce došlo k pádu robota na IMU senzor, který odešel do věčných lovišť. 
@@ -24,7 +28,7 @@ Je středa před sobotní soutěží, neuronová síť pro detekci cesty je natr
 ### Pomoc, panika ... a zase štěstí? ###
 Tady bych rád poděkoval své drahé polovičce, která vše zjednodušila na: "Soustřeď se na to, aby robot ujel jeden metr".
 
-Zpětně se dá říct, že jich robot nakonec ujel něco přes 9000 :)
+Zpětně se dá říct, že jich robot nakonec ujel něco přes 8000 :)
 
 ## Nový plán ... Mission-Robotour
 - Zadání cíle QR kódem – odladění uživatelského vstupu pro zadávání cíle
@@ -37,7 +41,7 @@ Naprogramováno, otestováno... Z nějakého důvodu se občas robot po zadání
 
 Odpoledne ve Stromovce u Planetária je plno ... MRVK sedí na lavičce a ladí robota, o kousek dál nějaká rodinka s robotem. No nic, je čas na lepší mapu. 
 
-V noci analyzuji GPS trace a vytvářím offline mapu pro robota. (... doplnit odkaz na https://unidroids.com/robot-platform/gnss-trace/gps-data-robotour-2026.zip ... ) Link obsahuje GPS trace z pátku, offline mapu i gnss data ze sobotní jízdy.
+V noci analyzuji GPS trace a vytvářím offline mapu pro robota.
 
 V datech je vidět přeskakování robota zleva doprava a zase zpátky. Díky AI (v tomto případě Gemini Antigravity IDE), která zkontrolovala GPS trace a doporučila úpravu fúze dat. 
 
@@ -48,6 +52,7 @@ Někteří zkušení účastníci říkají: „Pořádně se vyspi.“ Tak jsem
 
 ### Předkolo 9:00–10:00
 Potkávám spoustu známých tváří. Martin si chce odškrtnout homologaci. Vše cajk. Na webu jsou QR kódy pro Home, Předkolo nakládka a vykládka. Je čas na zkušební jízdu.  
+
 Robot dojede na nakládku, pak na vykládku, vše vypadá slibně ... ale z nakládky hned vedle vzrostlého stromu, který bych stěží obejmul ... se po zadání opakované nakládky robot otočí na místě a zastaví ... čekám na GPS polohu ... (na terminálu svítí přesnost polohy 0,7 m) ... zkouším robota kousek poposunout, přerušit jízdu, nakonec se robot rozjede ... pokračuje na nakládku a zpět na vykládku ... a opět po zadání cíle (tentokrát Home) se otočí a zůstane stát ... čekám na GPS polohu ... (na terminálu svítí přesnost polohy 22 mm ???) ... popošťuchování nepomohlo ... přerušuji jízdu a zadávám cílovou polohu znova ... robot se chytá a jede do servisní zóny. 
 
 ### 1. Kolo 10:00–11:00
@@ -99,7 +104,7 @@ Pak už to byla klasika: vyložit, opakovaně naložit a vyložit a hajdy do ser
 
 Tým MRVK vysílá zástupce, aby podal protest proti způsobu navigace robota, kdy jsme jeli podle zpřesněných mapových podkladů. Čímž se referovalo na rozhodnutí z roku 2009, kdy někdo provedl týdenní snímkování místa soutěže ...
 
-Zpětně se dá říct, že jediným pochybením bylo, že jsem naskenovanou trasu nepublikoval na OpenStreetMap, což pravidla umožňují ... (sice nevím, kdo by aktualizovanou mapu ze soboty 01:00 v den soutěže použil) ... ale v principu ...
+Zpětně se dá říct, že jediným pochybením bylo, že jsem naskenovanou trasu nepublikoval na OpenStreetMap, což pravidla umožňují ... (sice nevím, kdo by aktualizovanou mapu ze soboty 01:00 od týmu co se loni jen točil na startu v den soutěže použil) ... ale v principu ...
 
 Béďa, šéf Helhestu, nad tím v té chvíli mávnul rukou se slovy ... "kdyby šlo o nějaké prize money" ...
 
@@ -129,7 +134,7 @@ Načasování jak z učebnice dopravního inspektorátu ... robot zablokoval vý
 
 Robot se rozjel ... na straně v místě nakládky je zaparkovaný robot týmu ISTROBOTICS ... a vypadá to na nějaké problémy ... robot se jim rozjel tak prudce, že mu podjela kola a padl na záda ... upadla kamerka a GPS anténa ... opravdu škoda ...
 
-No nic, jsme v místě vykládky, tentokrát vyndáváme soudek, neb jsme byli upozorněni, že je třeba jezdit i bez něj ... tady bych rád poděkoval šéfovi slovenského týmu MRVK za to, že soudek vzal ... asi bych nevěděl, co dřív, kdyby robot zpanikařil a já měl v ruce 5litrový soudek piva ...
+No nic, jsme v místě vykládky, tentokrát vyndáváme soudek, neb jsme byli upozorněni, že je třeba jezdit i bez něj ... tady bych rád poděkoval Martinovi (šéfovi slovenského týmu MRVK) za to, že soudek vzal ... asi bych nevěděl, co dřív, kdyby robot zpanikařil a já měl v ruce 5 litrový soudek piva ...
 
 Je 16:06 ... už jsme více než půl hodiny na cestě ... no nic, zkusíme to ... Vyrážíme na opakovanou nakládku ... přijíždíme k nakládce a Helhest nikde, čekal jsem, že nás budou míjet ... ale nebyli tam ... asi se rozhodli, že opakovanou nakládku nebudou dělat a jeli rovnou do servisní oblasti ...
 
@@ -153,9 +158,8 @@ A díky všem 131 satelitům (50 čínských, 28 evropských, 25 ruských, 28 am
 
 Skvělá práce všichni 🎉 
 
-## Technická analýza logů a hledání chyb
 
+## Co dál? Analýza a prezentace :)
 
-## Prezentace 
-
-
+* [Detailní analýza soboního dne 📄](robotour_2026_analysis.md) 
+* [Prezentace pro webinář Robotour 2026 📄](Robotour2026.pdf)

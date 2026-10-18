@@ -235,3 +235,5 @@ nano /data/logs/rtk/rtk.log
 tail -f /data/logs/rtk/rtk.log
 
 tail -f /data/logs/oow/service.log
+
+tail -f /data/logs/fusion/fusion.log

@@ -35,7 +35,7 @@ V rámci analýzy logů byla provedena detekce úseků, kde robot vyjel mimo def
 
 ### Vyjetí mimo cestu – 1. kolo (opakovaná nakládka) a 2. kolo (vyjetí v semi-zóně)
 
-<img src="img/vyjeti_prvni_kolo.png" alt="Vyjetí mimo cestu – 1. kolo" width="50%"><img src="img/vyjeti_druhe_kolo.png" alt="Vyjetí mimo cestu – 2. kolo" width="50%">
+<img src="img/vyjeti_prvni_kolo.png" alt="Vyjetí mimo cestu – 1. kolo" width="48%"><img src="img/vyjeti_druhe_kolo.png" alt="Vyjetí mimo cestu – 2. kolo" width="48%">
 
 
 ## Časová osa
@@ -55,9 +55,9 @@ https://unidroids.com/robot-platform/gnss-trace/rozborka
 
 V rámci analýzy vyhodnocování polohy antén bylo identifikováno, že čistá vzdálenost mezi anténami pro určení antény s False RTK Fix není dostatečná. Prostřední obrázek ukazuje příklad, kdy vzdálenost mezi duálními anténami byla v rámci tolerance, ale natočení antén vůči tělu robota se značně lišilo. Pro lepší detekci je nutné kontrolovat i úhel natočení antén vůči tělu robota. (Detaily alternativního modelu jsou součástí dokumentu [Konstelace antén 📄](konstelace.md))
 
-<img src="img/rozpad.png" alt="Rozpad trojúhelníka antén" width="33%">
-<img src="img/chybna_detekce.png" alt="Chybná detekce" width="33%">
-<img src="img/oprava_po_skoku.png" alt="Oprava polohy po skoku" width="33%">
+<img src="img/rozpad.png" alt="Rozpad trojúhelníka antén" width="30%">
+<img src="img/chybna_detekce.png" alt="Chybná detekce" width="30%">
+<img src="img/oprava_po_skoku.png" alt="Oprava polohy po skoku" width="30%">
 
 
 
@@ -74,8 +74,8 @@ V rámci testování byl vytvořen 3D point cloud ze sobotního ježdění ve St
 * Vlevo: Ořez na cesty (0,5 cm voxelizace)
 * Vpravo: Celá oblast skenování (3,0 cm voxelizace)
 
-<img src="img/sken_cesta.png" alt="Sken cesty" width="51.5%">
-<img src="img/sken_stromovka.png" alt="Sken Stromovky" width="48%">
+<img src="img/sken_cesta.png" alt="Sken cesty" width="49.5%">
+<img src="img/sken_stromovka.png" alt="Sken Stromovky" width="46%">
 
 
 

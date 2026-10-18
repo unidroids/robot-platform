@@ -134,14 +134,18 @@ class TestFusionUpgrade(unittest.TestCase):
         # Heading 0.0° (Sever)
         self.core.update_dual_heading(heading=0.0, headingAcc=0.5, headingSol="NARROW_INT")
 
-        gps_lat = lat0 + 0.32 / m_deg_lat
-        gps_lon = lon0
+        # Přesné kalibrované offsety antén:
+        # GPS: x = +0.3200, y = -0.0059 (vpravo/východ o 5.9 mm)
+        gps_lat = lat0 + 0.3200 / m_deg_lat
+        gps_lon = lon0 - (-0.0059) / m_deg_lon
 
-        master_lat = lat0 + 0.25 / m_deg_lat
-        master_lon = lon0 + 0.24 / m_deg_lon
+        # Master: x = +0.2617, y = +0.2341 (vlevo/západ o 23.41 cm)
+        master_lat = lat0 + 0.2617 / m_deg_lat
+        master_lon = lon0 - 0.2341 / m_deg_lon
 
-        slave_lat = lat0 + 0.25 / m_deg_lat
-        slave_lon = lon0 - 0.24 / m_deg_lon
+        # Slave: x = +0.2617, y = -0.2341 (vpravo/východ o 23.41 cm)
+        slave_lat = lat0 + 0.2617 / m_deg_lat
+        slave_lon = lon0 + 0.2341 / m_deg_lon
 
         self.core.update_gps_antenna(gps_lat, gps_lon, 0.02, "NARROW_INT")
         self.core.update_master_antenna(master_lat, master_lon, 0.02, "NARROW_INT")
@@ -151,10 +155,10 @@ class TestFusionUpgrade(unittest.TestCase):
         self.assertEqual(self.core._triangle_status, "TRIANGLE_OK")
         self.assertEqual(self.core._active_antenna_name, "gnss-gps")
 
-        # Ověření vzdáleností: dual ~ 0.48 m, gps-master ~ 0.25 m, gps-slave ~ 0.25 m
-        self.assertAlmostEqual(self.core._dist_dual, 0.48, delta=0.02)
-        self.assertAlmostEqual(self.core._dist_gps_master, 0.25, delta=0.02)
-        self.assertAlmostEqual(self.core._dist_gps_slave, 0.25, delta=0.02)
+        # Ověření vzdáleností: dual ~ 0.468 m, gps-master ~ 0.247 m, gps-slave ~ 0.236 m
+        self.assertAlmostEqual(self.core._dist_dual, 0.468, delta=0.02)
+        self.assertAlmostEqual(self.core._dist_gps_master, 0.247, delta=0.02)
+        self.assertAlmostEqual(self.core._dist_gps_slave, 0.236, delta=0.02)
 
         # Ověření transformované polohy: střed otáčení musí být přesně lat0, lon0
         self.assertAlmostEqual(self.core._center_lat, lat0, places=6)
@@ -169,11 +173,11 @@ class TestFusionUpgrade(unittest.TestCase):
 
         self.core.update_dual_heading(heading=0.0, headingAcc=0.5, headingSol="NARROW_INT")
 
-        # Master a Slave jsou v pořádku (vzdálenost 0.48 m)
-        master_lat = lat0 + 0.25 / m_deg_lat
-        master_lon = lon0 - 0.24 / m_deg_lon
-        slave_lat = lat0 + 0.25 / m_deg_lat
-        slave_lon = lon0 + 0.24 / m_deg_lon
+        # Master a Slave jsou v pořádku (kalibrovaná základna 0.468 m)
+        master_lat = lat0 + 0.2617 / m_deg_lat
+        master_lon = lon0 - 0.2341 / m_deg_lon
+        slave_lat = lat0 + 0.2617 / m_deg_lat
+        slave_lon = lon0 + 0.2341 / m_deg_lon
 
         # GPS anténa má chybu 3 metry (multipath)
         bad_gps_lat = lat0 + 3.32 / m_deg_lat
@@ -224,9 +228,9 @@ class TestFusionUpgrade(unittest.TestCase):
         self.core._gyroZ = 6.0
 
         true_robot_heading = 45.0
-        beta_gps = self.core._compute_tangent_offset(0.32, 0.0, 0.5, 6.0)
-        beta_mst = self.core._compute_tangent_offset(0.25, 0.24, 0.5, 6.0)
-        beta_slv = self.core._compute_tangent_offset(0.25, -0.24, 0.5, 6.0)
+        beta_gps = self.core._compute_tangent_offset(self.core.constellation.ant_gps.offset_x, self.core.constellation.ant_gps.offset_y, 0.5, 6.0)
+        beta_mst = self.core._compute_tangent_offset(self.core.constellation.ant_master.offset_x, self.core.constellation.ant_master.offset_y, 0.5, 6.0)
+        beta_slv = self.core._compute_tangent_offset(self.core.constellation.ant_slave.offset_x, self.core.constellation.ant_slave.offset_y, 0.5, 6.0)
 
         # Surové kurzy měřené jednotlivými anténami na zakřivené dráze
         trk_gps = true_robot_heading + beta_gps
@@ -248,8 +252,8 @@ class TestFusionUpgrade(unittest.TestCase):
         self.core._gyroZ = 6.0
 
         true_robot_heading = 90.0
-        beta_mst = self.core._compute_tangent_offset(0.25, 0.24, 0.5, 6.0)
-        beta_slv = self.core._compute_tangent_offset(0.25, -0.24, 0.5, 6.0)
+        beta_mst = self.core._compute_tangent_offset(self.core.constellation.ant_master.offset_x, self.core.constellation.ant_master.offset_y, 0.5, 6.0)
+        beta_slv = self.core._compute_tangent_offset(self.core.constellation.ant_slave.offset_x, self.core.constellation.ant_slave.offset_y, 0.5, 6.0)
 
         trk_mst = true_robot_heading + beta_mst
         trk_slv = true_robot_heading + beta_slv
@@ -337,14 +341,120 @@ class TestFusionUpgrade(unittest.TestCase):
         # 4. Výjezd zpod mostu: obnova RTK signálu na nové pozici (posunuto o 5.2 m)
         exit_lat = lat0 + (5.2 / m_deg_lat)
         self.core.update_dual_heading(heading=0.0, headingAcc=0.5, headingSol="NARROW_INT")
-        self.core.update_gps_antenna(exit_lat + 0.32 / m_deg_lat, lon0, 0.02, "NARROW_INT")
-        self.core.update_master_antenna(exit_lat + 0.25 / m_deg_lat, lon0 + 0.24 / (m_deg_lat * 0.6427876), 0.02, "NARROW_INT")
-        self.core.update_slave_antenna(exit_lat + 0.25 / m_deg_lat, lon0 - 0.24 / (m_deg_lat * 0.6427876), 0.02, "NARROW_INT")
+        self.core.update_gps_antenna(exit_lat + 0.3200 / m_deg_lat, lon0 - (-0.0059) / (m_deg_lat * 0.6427876), 0.02, "NARROW_INT")
+        self.core.update_master_antenna(exit_lat + 0.2617 / m_deg_lat, lon0 - 0.2341 / (m_deg_lat * 0.6427876), 0.02, "NARROW_INT")
+        self.core.update_slave_antenna(exit_lat + 0.2617 / m_deg_lat, lon0 + 0.2341 / (m_deg_lat * 0.6427876), 0.02, "NARROW_INT")
 
         sol3 = self.core.get_solution()
         self.assertFalse(self.core._dr_active)
         self.assertEqual(sol3.fusionSol, "UNIHEADING")
         self.assertAlmostEqual(sol3.lat, exit_lat, delta=0.15)
+
+    def test_epoch_synchronizer_complete_dispatch(self):
+        """Ověření, že EpochSynchronizer odešle data ihned jakmile dorazí všechny 3 antény stejné epochy."""
+        from core_modules.epoch_sync import EpochSynchronizer
+        dispatched = []
+        sync = EpochSynchronizer(dispatch_fn=lambda msgs: dispatched.append(msgs), timeout_s=0.025)
+
+        # Příchod 1. zprávy (GPS)
+        sync.add_msg("gps", {"lat": 50.0, "lon": 14.0, "wn": 2387, "ms": 100000})
+        self.assertEqual(len(dispatched), 0)
+        self.assertTrue(sync.has_pending())
+
+        # Příchod 2. zprávy (Master)
+        sync.add_msg("master", {"lat": 50.0, "lon": 14.0, "wn": 2387, "ms": 100000})
+        self.assertEqual(len(dispatched), 0)
+
+        # Příchod 3. zprávy (Slave) -> okamžité odeslání bez čekání na timeout!
+        sync.add_msg("slave", {"lat": 50.0, "lon": 14.0, "wn": 2387, "ms": 100000})
+        self.assertEqual(len(dispatched), 1)
+        self.assertFalse(sync.has_pending())
+        self.assertIn("gps", dispatched[0])
+        self.assertIn("master", dispatched[0])
+        self.assertIn("slave", dispatched[0])
+
+    def test_epoch_synchronizer_timeout_dispatches_partial(self):
+        """Ověření, že při výpadku Slave antény se po 25 ms timeoutu odešlou přítomné antény (GPS + Master)."""
+        from core_modules.epoch_sync import EpochSynchronizer
+        dispatched = []
+        sync = EpochSynchronizer(dispatch_fn=lambda msgs: dispatched.append(msgs), timeout_s=0.025)
+
+        t0 = 1000.0
+        sync.add_msg("gps", {"lat": 50.0, "lon": 14.0, "wn": 2387, "ms": 100000}, now_mono=t0)
+        sync.add_msg("master", {"lat": 50.0, "lon": 14.0, "wn": 2387, "ms": 100000}, now_mono=t0 + 0.005)
+
+        # V čase t0 + 10 ms ještě timeout nevypršel
+        sync.check_timeout(now_mono=t0 + 0.010)
+        self.assertEqual(len(dispatched), 0)
+
+        # V čase t0 + 26 ms timeout vypršel -> částečná epocha se odešle
+        sync.check_timeout(now_mono=t0 + 0.026)
+        self.assertEqual(len(dispatched), 1)
+        self.assertIn("gps", dispatched[0])
+        self.assertIn("master", dispatched[0])
+        self.assertNotIn("slave", dispatched[0])
+
+    def test_baseline_skew_adaptive_tolerance(self):
+        """Ověření, že odchylka spojnice Master->Slave toleruje 8° při jízdě rovně a 15° při zatáčení."""
+        lat0 = 50.0
+        lon0 = 14.0
+        m_deg_lat = 111139.0
+        m_deg_lon = 111139.0 * math.cos(math.radians(50.0))
+
+        # Kurz robota 0.0° (Sever), spojnice Master->Slave má směřovat 91.11°
+        self.core.update_dual_heading(heading=0.0, headingAcc=0.5, headingSol="NARROW_INT")
+
+        # Pootočíme Slave tak, aby úhel spojnice byl 101.11° (odchylka +10.0°)
+        # Master na [-0.2341, 0]
+        # Slave má být na vzdálenosti 0.4682 pod úhlem 101.11°
+        ang_rad = math.radians(101.11)
+        d_east = 0.4682 * math.sin(ang_rad)
+        d_north = 0.4682 * math.cos(ang_rad)
+
+        m_lat = lat0 + 0.2617 / m_deg_lat
+        m_lon = lon0 - 0.2341 / m_deg_lon
+
+        s_lat = m_lat + d_north / m_deg_lat
+        s_lon = m_lon + d_east / m_deg_lon
+
+        # 1. Při jízdě rovně (|wz| = 0.0) je tolerance 8.0° -> odchylka 10° selže a Slave je vyloučena
+        self.core._gyroZ = 0.0
+        self.core.update_gps_antenna(lat0 + 0.32 / m_deg_lat, lon0, 0.02, "NARROW_INT")
+        self.core.update_master_antenna(m_lat, m_lon, 0.02, "NARROW_INT")
+        self.core.update_slave_antenna(s_lat, s_lon, 0.02, "NARROW_INT")
+
+        self.assertIn(self.core._triangle_status, ("EXCLUDED_SLAVE", "TRIANGLE_DEGRADED"))
+
+        # 2. V ostré rotaci (|wz| = 15.0°/s) je tolerance rozšířena na 15.0° -> 10° projde
+        self.core._gyroZ = 15.0
+        # Po přiblížení ramen na nominál pro 3 antény:
+        # Nastavíme GPS tak, aby ramena GM i GS seděla do 8 cm
+        self.core.constellation.evaluate_constellation_and_position(
+            heading_deg=0.0, heading_initialized=True, wz_deg_s=15.0
+        )
+        self.assertLessEqual(abs(self.core.constellation.baseline_skew_deg - 10.0), 0.5)
+
+    def test_single_antenna_rtk_rejected_to_dr(self):
+        """Ověření pravidla: Samostatná 1 anténa s RTK fixem nesmí sama držet polohu bez geometrického konsenzu."""
+        lat0 = 50.0
+        lon0 = 14.0
+
+        # Inicializace kurzu
+        self.core.update_dual_heading(heading=0.0, headingAcc=0.5, headingSol="NARROW_INT")
+
+        # Pouze GPS má NARROW_INT, Master a Slave jsou NONE
+        self.core.constellation.ant_master.valid = False
+        self.core.constellation.ant_slave.valid = False
+        self.core.update_gps_antenna(lat0, lon0, 0.02, "NARROW_INT")
+
+        # Konstelace musí být v DEGRADED stavu (chybí konsenzus min. 2 antén)
+        self.assertEqual(self.core._triangle_status, "TRIANGLE_DEGRADED")
+        # Polohový tracker odmítá RTK fix
+        self.assertFalse(self.core.position_tracker.gnss_is_rtk)
+
+        # Při pohybu podvozku tracker přechází do Dead Reckoningu
+        self.core.update_odometry(500.0, 500.0, left_steps=100, right_steps=100)
+        self.assertTrue(self.core._dr_active)
 
 
 if __name__ == '__main__':

@@ -21,6 +21,11 @@ def angle_diff(target: float, current: float) -> float:
     return diff
 
 
+def wrap180(deg: float) -> float:
+    """Zabalení úhlu do rozsahu [-180, +180]."""
+    return (deg + 180.0) % 360.0 - 180.0
+
+
 def circular_mean(angles: List[float]) -> float:
     """Kruhový průměr úhlů ve stupních s korektním ošetřením periody 360°."""
     if not angles:

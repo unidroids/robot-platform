@@ -264,6 +264,32 @@ class FusionCore:
 
     # ------------------ Anténní aktualizace ------------------
 
+    def update_gnss_epoch(self, epoch_msgs: Dict[str, Any]) -> None:
+        """Aktualizace synchronizované epochy polohových GNSS zpráv (BESTNAV / BESTNAVH)."""
+        self._last_msg_mono_ts = time.monotonic()
+        self.constellation.update_epoch(
+            epoch_msgs=epoch_msgs,
+            heading_deg=self.heading.fused_heading.heading,
+            heading_initialized=self.heading.heading_initialized,
+            wz_deg_s=self._gyroZ
+        )
+        is_rtk = (self.constellation.bestnav_pos_type in ConstellationManager.RTK_SOLUTIONS) and (
+            self.constellation.triangle_status in (
+                "TRIANGLE_OK", "EXCLUDED_GPS", "EXCLUDED_MASTER", "EXCLUDED_SLAVE"
+            )
+        )
+        if self.constellation.have_position:
+            self.position_tracker.update_gnss(
+                lat=self.constellation.center_lat,
+                lon=self.constellation.center_lon,
+                hAcc=self.constellation.center_hAcc,
+                pos_type=self.constellation.gpsSol,
+                is_rtk=is_rtk,
+                ts_mono=time.monotonic()
+            )
+        self._evaluate_antenna_headings()
+        self._update_ready_flag()
+
     def update_gps_antenna(
         self,
         lat: float,
@@ -271,10 +297,12 @@ class FusionCore:
         hAcc: float,
         pos_type: str,
         trk_gnd: float = 0.0,
-        hor_spd: float = 0.0
+        hor_spd: float = 0.0,
+        wn: Optional[int] = None,
+        ms: Optional[int] = None
     ) -> None:
         """Aktualizace primární GNSS antény UM980 (gnss-gps)."""
-        self.constellation.update_gps(lat, lon, hAcc, pos_type, trk_gnd, hor_spd)
+        self.constellation.update_gps(lat, lon, hAcc, pos_type, trk_gnd, hor_spd, wn=wn, ms=ms)
         self._last_msg_mono_ts = time.monotonic()
         self._evaluate_constellation_and_position()
         self._evaluate_antenna_headings()
@@ -286,10 +314,12 @@ class FusionCore:
         hAcc: float,
         pos_type: str,
         trk_gnd: float = 0.0,
-        hor_spd: float = 0.0
+        hor_spd: float = 0.0,
+        wn: Optional[int] = None,
+        ms: Optional[int] = None
     ) -> None:
         """Aktualizace Master antény UM982 (gnss-dual)."""
-        self.constellation.update_master(lat, lon, hAcc, pos_type, trk_gnd, hor_spd)
+        self.constellation.update_master(lat, lon, hAcc, pos_type, trk_gnd, hor_spd, wn=wn, ms=ms)
         self._last_msg_mono_ts = time.monotonic()
         self._evaluate_constellation_and_position()
         self._evaluate_antenna_headings()
@@ -301,10 +331,12 @@ class FusionCore:
         hAcc: float,
         pos_type: str,
         trk_gnd: float = 0.0,
-        hor_spd: float = 0.0
+        hor_spd: float = 0.0,
+        wn: Optional[int] = None,
+        ms: Optional[int] = None
     ) -> None:
         """Aktualizace Slave antény UM982 (gnss-dual BESTNAVH)."""
-        self.constellation.update_slave(lat, lon, hAcc, pos_type, trk_gnd, hor_spd)
+        self.constellation.update_slave(lat, lon, hAcc, pos_type, trk_gnd, hor_spd, wn=wn, ms=ms)
         self._last_msg_mono_ts = time.monotonic()
         self._evaluate_constellation_and_position()
         self._evaluate_antenna_headings()
@@ -316,14 +348,12 @@ class FusionCore:
     def _evaluate_constellation_and_position(self) -> None:
         self.constellation.evaluate_constellation_and_position(
             heading_deg=self.heading.fused_heading.heading,
-            heading_initialized=self.heading.heading_initialized
+            heading_initialized=self.heading.heading_initialized,
+            wz_deg_s=self._gyroZ
         )
         is_rtk = (self.constellation.bestnav_pos_type in ConstellationManager.RTK_SOLUTIONS) and (
             self.constellation.triangle_status in (
-                "TRIANGLE_OK", "EXCLUDED_GPS", "EXCLUDED_MASTER", "EXCLUDED_SLAVE",
-                "PAIR_DUAL_OK", "PAIR_GPS_MASTER_OK", "PAIR_GPS_SLAVE_OK",
-                "SINGLE_GPS", "SINGLE_MASTER", "SINGLE_SLAVE",
-                "TRIANGLE_DEGRADED"
+                "TRIANGLE_OK", "EXCLUDED_GPS", "EXCLUDED_MASTER", "EXCLUDED_SLAVE"
             )
         )
         if self.constellation.have_position:

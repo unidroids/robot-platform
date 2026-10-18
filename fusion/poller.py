@@ -6,6 +6,11 @@ import zmq
 from typing import Optional
 
 from core import FusionCore
+try:
+    from .core_modules.epoch_sync import EpochSynchronizer
+except (ImportError, ValueError):
+    from core_modules.epoch_sync import EpochSynchronizer
+
 
 class FusionPoller:
     """
@@ -29,13 +34,20 @@ class FusionPoller:
         endpoint_gps: str = "ipc:///tmp/robot-gnss-gps",
         endpoint_dual: str = "ipc:///tmp/robot-gnss-dual",
         endpoint_imu: str = "ipc:///tmp/robot-gnss-imu",
-        endpoint_drive: str = "ipc:///tmp/robot-drive"
+        endpoint_drive: str = "ipc:///tmp/robot-drive",
+        sync_timeout_s: float = 0.025
     ):
         self.core = core
         self.endpoint_gps = endpoint_gps
         self.endpoint_dual = endpoint_dual
         self.endpoint_imu = endpoint_imu
         self.endpoint_drive = endpoint_drive
+
+        # Synchronizátor GNSS epoch pro shlukování BESTNAV a BESTNAVH
+        self.epoch_sync = EpochSynchronizer(
+            dispatch_fn=self.core.update_gnss_epoch,
+            timeout_s=sync_timeout_s
+        )
 
         self.running = False
         self._zmq_context = zmq.Context.instance()
@@ -91,6 +103,8 @@ class FusionPoller:
 
     def stop(self) -> None:
         self.running = False
+        self.epoch_sync.flush()
+
         for s in [self._sub_gps, self._sub_dual, self._sub_imu, self._sub_drive]:
             if s is not None:
                 try:
@@ -118,8 +132,12 @@ class FusionPoller:
             poller.register(self._sub_drive, zmq.POLLIN)
 
         while self.running:
+            poll_timeout = 100
+            if self.epoch_sync.has_pending():
+                poll_timeout = self.epoch_sync.remaining_time_ms()
+
             try:
-                socks = dict(poller.poll(100))
+                socks = dict(poller.poll(poll_timeout))
             except (zmq.error.ContextTerminated, zmq.error.ZMQError):
                 break
             except Exception as e:
@@ -142,6 +160,9 @@ class FusionPoller:
                 if self._sub_drive in socks and socks[self._sub_drive] == zmq.POLLIN:
                     parts = self._sub_drive.recv_multipart()
                     self._handle_drive_msg(parts)
+
+                # Kontrola timeoutu rozpracované GNSS epochy
+                self.epoch_sync.check_timeout()
             except zmq.error.ContextTerminated:
                 break
             except Exception as e:
@@ -226,7 +247,22 @@ class FusionPoller:
             else:
                 hdg_acc = 180.0
 
-            self.core.update_gps_antenna(lat, lon, hAcc, gpsSol, trk_gnd=trk_gnd, hor_spd=hor_spd)
+            wn = data.get("wn")
+            ms = data.get("ms")
+
+            msg_dict = {
+                "lat": lat,
+                "lon": lon,
+                "hAcc": hAcc,
+                "pos_type": gpsSol,
+                "trk_gnd": trk_gnd,
+                "hor_spd": hor_spd,
+                "wn": wn,
+                "ms": ms
+            }
+            # Shlukování polohy do epochy
+            self.epoch_sync.add_msg("gps", msg_dict)
+            # Okamžitá aktualizace kurzu z pohybu (nezávisle na poloze)
             self.core.update_gps_heading(trk_gnd, hdg_acc, gpsSol, hor_spd=hor_spd)
         except Exception as e:
             print(f"[FusionPoller GPS BESTNAV Error] {e}")
@@ -242,8 +278,20 @@ class FusionPoller:
             gpsSol = data.get("pos_type", "NONE")
             trk_gnd = float(data.get("trk_gnd", 0.0))
             hor_spd = float(data.get("hor_spd", 0.0))
+            wn = data.get("wn")
+            ms = data.get("ms")
 
-            self.core.update_master_antenna(lat, lon, hAcc, gpsSol, trk_gnd=trk_gnd, hor_spd=hor_spd)
+            msg_dict = {
+                "lat": lat,
+                "lon": lon,
+                "hAcc": hAcc,
+                "pos_type": gpsSol,
+                "trk_gnd": trk_gnd,
+                "hor_spd": hor_spd,
+                "wn": wn,
+                "ms": ms
+            }
+            self.epoch_sync.add_msg("master", msg_dict)
         except Exception as e:
             print(f"[FusionPoller Dual Master Error] {e}")
 
@@ -258,8 +306,20 @@ class FusionPoller:
             gpsSol = data.get("pos_type", "NONE")
             trk_gnd = float(data.get("trk_gnd", 0.0))
             hor_spd = float(data.get("hor_spd", 0.0))
+            wn = data.get("wn")
+            ms = data.get("ms")
 
-            self.core.update_slave_antenna(lat, lon, hAcc, gpsSol, trk_gnd=trk_gnd, hor_spd=hor_spd)
+            msg_dict = {
+                "lat": lat,
+                "lon": lon,
+                "hAcc": hAcc,
+                "pos_type": gpsSol,
+                "trk_gnd": trk_gnd,
+                "hor_spd": hor_spd,
+                "wn": wn,
+                "ms": ms
+            }
+            self.epoch_sync.add_msg("slave", msg_dict)
         except Exception as e:
             print(f"[FusionPoller Dual Slave Error] {e}")
 
@@ -271,6 +331,7 @@ class FusionPoller:
             headingSol = data.get("pos_type", "NONE")
             length = float(data.get("length", 0.0))
 
+            # UNIHEADING je interferometrická skupina orientace -> okamžitá fúze kurzu
             self.core.update_dual_heading(heading, hdg_std, headingSol, length)
         except Exception as e:
             print(f"[FusionPoller UNIHEADING Error] {e}")

@@ -65,7 +65,8 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **— Vidění —** | | *Vizuální percepční služby* |
 | **VISION-QRCODE** | 9201 | Vyhledání QR Codu v kamerovém vstupu        |
 | **VISION-LINE** | 9202 | Future - Vyhledání čáry z kamerového vstupu      |
-
+| **— Profily —** | | *Lidarové profily (kolizní kurzy, traverzibilita, ...)* |
+| **LIDAR-KOLIZE** | 9222 | Kolizní kurzy a minimální vzdálenosti překážek |
 
 ## obsolete
 

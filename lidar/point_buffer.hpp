@@ -1,11 +1,13 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <vector>
 #include <cmath>
 #include <string>
 #include <utility>
+#include <algorithm>
 #include <Eigen/Dense>
 
 #include "unitree_lidar_utilities.h"  // PointCloudUnitree
@@ -33,6 +35,13 @@ public:
         bool  enabled = false;
     };
 
+    struct IncrementalResult {
+        std::size_t count = 0;
+        bool overflow = false;
+        double min_time = 0.0;
+        double max_time = 0.0;
+    };
+
     static constexpr std::size_t kCapacity = 1u << 16; // 65536 bodů
 
     explicit LidarPointBuffer(std::string base_dir = "/data/robot/lidar")
@@ -41,9 +50,41 @@ public:
 
     void setCalibrationAvailable(bool enabled) { has_calibration_ = enabled; }
     void setMask(const Mask &mask) { mask_ = mask; mask_.enabled = true; }
-    void clear() { head_ = 0; size_ = 0; }
+    void clear() { head_ = 0; size_ = 0; total_written_.store(0, std::memory_order_relaxed); }
 
     std::size_t size() const noexcept { return size_; }
+    uint64_t totalWritten() const noexcept { return total_written_.load(std::memory_order_acquire); }
+
+    // Inkrementální vyčtení nových vzorků od last_seq
+    IncrementalResult getNewSamples(uint64_t &last_seq, std::vector<Sample> &out) const
+    {
+        IncrementalResult res{};
+        uint64_t current_seq = total_written_.load(std::memory_order_acquire);
+        if (current_seq <= last_seq) {
+            out.clear();
+            return res;
+        }
+
+        uint64_t available = current_seq - last_seq;
+        if (available > kCapacity) {
+            res.overflow = true;
+            last_seq = current_seq - kCapacity;
+            available = kCapacity;
+        }
+
+        out.resize(available);
+        for (uint64_t i = 0; i < available; ++i) {
+            uint64_t idx = (last_seq + i) % kCapacity;
+            out[i] = buffer_[idx];
+            double t = out[i].ftime + out[i].rtime;
+            if (i == 0 || t < res.min_time) res.min_time = t;
+            if (i == 0 || t > res.max_time) res.max_time = t;
+        }
+
+        last_seq = current_seq;
+        res.count = available;
+        return res;
+    }
 
     // Transformuje cloud do rámce C, přeškáluje na cm, aplikuje masku a ukládá do ring bufferu.
     // T_CL musí být 4x4 homogenní matice v metrech.
@@ -154,6 +195,7 @@ private:
         if (size_ < kCapacity) {
             ++size_;
         }
+        total_written_.fetch_add(1, std::memory_order_release);
 
         if (size_ == kCapacity && head_ == 0) {
             ply_logger_.dump(buffer_.data(), kCapacity);
@@ -166,5 +208,6 @@ private:
     std::array<Sample, kCapacity> buffer_{};
     std::uint16_t head_{0};
     std::size_t   size_{0};
+    std::atomic<uint64_t> total_written_{0};
     PLYLogger<Sample> ply_logger_;
 };

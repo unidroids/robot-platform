@@ -165,6 +165,10 @@ public:
         return dist_out >= 0.0f;
     }
 
+    const LidarPointBuffer& getPointBuffer() const {
+        return point_buffer_;
+    }
+
     bool getReflectivityImage(std::string &saved_path_out) {
         std::lock_guard<std::mutex> lg(mtx_);
         if (point_buffer_.size() == 0) {

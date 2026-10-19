@@ -1,14 +1,17 @@
-# build sequence, result in bin
-mkdir build
-cd build
+# Služba robot_lidar_tcp (LiDAR Unitree L2)
+
+Tento program integruje dvě služby běžící v oddělených vláknech:
+- **Port 9002 (`LIDAR`)**: Nízkoúrovňový ovladač laseru, kalibrace, čtení UDP paketů, ZMQ PUB `DISTANCE` na `ipc:///tmp/robot-lidar`.
+- **Port 9222 (`LIDAR-KOLIZE`)**: Vyhodnocování kolizních kurzů v podadresáři `kolize/` (12 pater, 36 sektorů, alfa-beta filtr, inflace, ZMQ PUB `COLLISIONS` na `ipc:///tmp/robot-lidar-kolize`).
+
+## Build sekvence
+```bash
+mkdir -p build && cd build
 cmake ..
 make -j$(nproc)
-
-
 chmod +x ../bin/robot_lidar_tcp
-# cp ../bin/robot_lidar_tcp ../../server/robot_lidar_tcp
-
 sudo systemctl restart robot-lidar
+```
 
 
 

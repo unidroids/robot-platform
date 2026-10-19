@@ -10,6 +10,7 @@
 
 #include "lidar_controller.hpp"   // náš wrapper
 #include "lidar_publisher.hpp"
+#include "kolize/collision_service.hpp"
 
 #include <atomic>
 #include <cerrno>
@@ -34,6 +35,7 @@ constexpr const char *kBindAddr = "127.0.0.1";
 // ------------------------------------------------------
 static LidarController lidar;          // jediná instance (safe)
 static LidarPublisher lidar_pub(&lidar);
+static CollisionService collision_service(&lidar); // nová služba LIDAR-KOLIZE (port 9222)
 
 std::atomic<bool> shutting_down{false};
 std::atomic<int>  listen_fd{-1};
@@ -151,11 +153,18 @@ void handle_client(int sock) {
                 ::shutdown(sock, SHUT_RDWR);
                 break;
             } else if (line == "SHUTDOWN") {
-                send_line(sock, "SHUTTING DOWN");
-                shutting_down.store(true);
-                lidar.stop();
-                stop_listener();
-                break;
+                bool lidar_active = lidar.isRunning();
+                bool eval_active  = collision_service.isEvaluating();
+                if (lidar_active || eval_active) {
+                    send_line(sock, "ERR CANNOT_SHUTDOWN_WHILE_RUNNING (STOP services first)");
+                } else {
+                    send_line(sock, "SHUTTING DOWN");
+                    shutting_down.store(true);
+                    lidar.stop();
+                    collision_service.stop();
+                    stop_listener();
+                    break;
+                }
             } else {
                 send_line(sock, "ERR UNKNOWN COMMAND");
             }
@@ -189,6 +198,13 @@ int main() {
 
     lidar_pub.start();
 
+    // Spuštění TCP serveru pro LIDAR-KOLIZE na portu 9222
+    collision_service.setShutdownCallback([]{
+        shutting_down.store(true);
+        stop_listener();
+    });
+    collision_service.startServer();
+
     while (!shutting_down.load()) {
         sockaddr_in cli{}; socklen_t len=sizeof(cli);
         int cs = accept(listen_sock, (sockaddr*)&cli, &len);
@@ -198,6 +214,7 @@ int main() {
 
     close_all_clients();
     lidar_pub.stop();
+    collision_service.stop();
     std::cout << "🛑 robot-lidar server ukončen." << std::endl;
     return 0;
 }

@@ -35,8 +35,8 @@ class RobotourPilotService:
         self.status_info = ""
         self.source = ""
         
-        self.max_speed = 100
-        self.max_pwm = 150
+        self.max_speed = 170
+        self.max_pwm = 240
         
         # Limity zrychlení (v jednotkách rychlosti za iteraci, tedy per 0.1s)
         self.max_fwd_accel_step = 20.0
@@ -321,9 +321,9 @@ class RobotourPilotService:
         kappa_v = current_speed * 1.5
         v_center = current_speed * math.exp(- (abs(heading_error)/45.0)**2)
         
-        # Zpomalení dle LiDARu (mezi 50 a 150 cm)
-        if 50.0 <= lidar_dist < 150.0:
-            lidar_factor = max(0.2, (lidar_dist - 50.0) / 100.0)
+        # Zpomalení dle LiDARu (mezi 50 a 180 cm)
+        if 50.0 <= lidar_dist < 180.0:
+            lidar_factor = max(0.1, (lidar_dist - 70.0) / 100.0)
             v_center *= lidar_factor
             
         v_turn_pp = heading_error * (kappa_v / 90.0)
@@ -444,7 +444,7 @@ class RobotourPilotService:
                         target_left, target_right = 0, 0
                     else:
                         # Pokud byla chyba GPS odstraněna, obnovíme běh
-                        if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 6.0:
+                        if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 12.0:
                             self.resume_service(source="GPS", info=f"Přesnost GPS obnovena (hAcc: {hAcc} mm, sol: {heading_sol})")
                             
                         near_state = self.path_tracker.update(nose_lat, nose_lon)

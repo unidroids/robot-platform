@@ -1,0 +1,533 @@
+# mission_maraton/test_mission_maraton.py
+import asyncio
+import json
+import os
+import shutil
+import socket
+import sys
+import tempfile
+import threading
+import time
+import unittest
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+from mission_maraton.data_logger import MissionDataLogger
+from mission_maraton.microservices import (
+    ping_service,
+    check_all_services,
+    send_tcp_command,
+    MICROSERVICES_CONFIG
+)
+from mission_maraton.service import MissionMaratonService, calculate_geodesic_distance_m
+from mission_maraton.terminal_client import TerminalClient
+from mission_maraton.main import handle_client
+
+
+class MockTcpServer:
+    """Jednoduchý mock TCP server pro testování odpovědí mikroslužeb."""
+
+    def __init__(self, port: int, response_map: dict):
+        self.port = port
+        self.response_map = response_map
+        self.received_cmds = []
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server_sock.bind(("127.0.0.1", self.port))
+        self.server_sock.listen(5)
+        self.server_sock.settimeout(0.5)
+        self.running = True
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        while self.running:
+            try:
+                conn, _ = self.server_sock.accept()
+            except socket.timeout:
+                continue
+            except Exception:
+                if not self.running:
+                    break
+                continue
+
+            try:
+                with conn:
+                    conn.settimeout(2.0)
+                    data = b""
+                    while not data.endswith(b"\n"):
+                        chunk = conn.recv(2048)
+                        if not chunk:
+                            break
+                        data += chunk
+                    if data:
+                        cmd = data.decode("utf-8").strip()
+                        self.received_cmds.append(cmd)
+                        cmd_word = cmd.split()[0].upper() if cmd else ""
+                        resp = self.response_map.get(cmd_word, self.response_map.get(cmd, "OK\n"))
+                        if isinstance(resp, str):
+                            if not resp.endswith("\n"):
+                                resp += "\n"
+                            conn.sendall(resp.encode("utf-8"))
+            except Exception:
+                pass
+
+    def stop(self):
+        self.running = False
+        try:
+            self.server_sock.close()
+        except Exception:
+            pass
+        self.thread.join(timeout=1.0)
+
+
+class TestMissionMaratonBasics(unittest.TestCase):
+    """Testy základních funkcí: výpočet vzdálenosti, logování a PING."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_geodesic_distance(self):
+        # Kramolín start a bod ~200 m severovýchodně
+        lat1, lon1 = 49.554131, 12.741158
+        lat2, lon2 = 49.555201, 12.743162
+        dist = calculate_geodesic_distance_m(lat1, lon1, lat2, lon2)
+        self.assertGreater(dist, 180.0)
+        self.assertLess(dist, 250.0)
+
+    def test_data_logger(self):
+        logger = MissionDataLogger(base_dir=self.test_dir)
+        path = logger.start_mission()
+        self.assertTrue(os.path.exists(path))
+        logger.log("TEST_EVENT", {"param": 123})
+        logger.close()
+
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+            self.assertIn("MISSION_INIT", content)
+            self.assertIn("TEST_EVENT", content)
+            self.assertIn("123", content)
+            self.assertIn("MISSION_CLOSED", content)
+
+    def test_ping_service_verification(self):
+        mock = MockTcpServer(19009, {"PING": "PONG FUSION"})
+        try:
+            ok, resp = ping_service("FUSION", host="127.0.0.1", port=19009)
+            self.assertTrue(ok)
+            self.assertEqual(resp, "PONG FUSION")
+
+            # Test při neočekávaném PONG
+            ok_bad, msg_bad = ping_service("PILOT-MARATON", host="127.0.0.1", port=19009)
+            self.assertFalse(ok_bad)
+            self.assertIn("Chybný název", msg_bad)
+        finally:
+            mock.stop()
+
+
+class TestTerminalClient(unittest.TestCase):
+    """Test komunikace s TERMINAL klientem."""
+
+    def test_terminal_messages(self):
+        mock = MockTcpServer(19022, {"MESSAGE": "OK", "SOUND": "OK", "BLINK": "OK"})
+        try:
+            client = TerminalClient(host="127.0.0.1", port=19022)
+            self.assertTrue(client.show_message("Header", "Text", [{"id": "btn", "text": "OK"}]))
+            self.assertTrue(client.sound("barking"))
+            self.assertTrue(client.blink("#FFA500", 2.0, 3000))
+            self.assertTrue(client.hide_message())
+            self.assertEqual(len(mock.received_cmds), 4)
+            self.assertTrue(mock.received_cmds[0].startswith("MESSAGE {"))
+            self.assertTrue(mock.received_cmds[1].startswith("SOUND barking"))
+            self.assertTrue(mock.received_cmds[2].startswith("BLINK #FFA500 2.0 3000"))
+            self.assertEqual(mock.received_cmds[3], "MESSAGE CLEAR")
+        finally:
+            mock.stop()
+
+
+class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
+    """Test stavového automatu mise Maraton s mockovanými mikroslužbami."""
+
+    async def asyncSetUp(self):
+        self.ports = {
+            "QRSCANER": 29021,
+            "TERMINAL": 29022,
+            "DRIVE": 29003,
+            "GNSS-DUAL": 29006,
+            "GNSS-GPS": 29004,
+            "RTK": 29015,
+            "GNSS-IMU": 29016,
+            "LOGGER": 29012,
+            "FUSION": 29009,
+            "MAPS": 29040,
+            "LIDAR": 29002,
+            "LIDAR-KOLIZE": 29222,
+            "OOW-BRIDGE": 29030,
+            "PILOT-MARATON": 29105
+        }
+        
+        # Uložíme původní porty
+        self.orig_config = {k: v["port"] for k, v in MICROSERVICES_CONFIG.items()}
+        for k, p in self.ports.items():
+            MICROSERVICES_CONFIG[k]["port"] = p
+
+        # Nastavíme mock servery
+        self.mocks = {}
+        for name, port in self.ports.items():
+            resp_map = {
+                "PING": MICROSERVICES_CONFIG[name]["expected_pong"][0],
+                "START": "OK",
+                "STOP": "OK",
+                "ON": "OK",
+                "OFF": "OK"
+            }
+            if name == "FUSION":
+                resp_map["DATA"] = json.dumps({
+                    "lat": 49.554131,
+                    "lon": 12.741158,
+                    "gpsSol": "FIX",
+                    "hAcc": 150
+                })
+            elif name == "MAPS":
+                resp_map["FIND_ROUTE"] = json.dumps({
+                    "metadata": {
+                        "search_result": "found",
+                        "route_length_m": 210.5
+                    },
+                    "nodes": [
+                        {"id": "n1", "lat": 49.554131, "lon": 12.741158},
+                        {"id": "n2", "lat": 49.555201, "lon": 12.743162}
+                    ],
+                    "edges": []
+                })
+            elif name == "PILOT-MARATON":
+                resp_map["STATUS"] = json.dumps({
+                    "state": "RUNNING",
+                    "wp_index": 1,
+                    "wp_total": 2,
+                    "distance_to_goal_m": 150.0,
+                    "speed": 0.8,
+                    "speed_actual": 0.8,
+                    "speed_target": 1.2,
+                    "gps_sol": "FIX"
+                })
+
+            self.mocks[name] = MockTcpServer(port, resp_map)
+
+        self.service = MissionMaratonService()
+        self.service.terminal = TerminalClient(host="127.0.0.1", port=self.ports["TERMINAL"])
+
+    async def asyncTearDown(self):
+        self.service.stop_mission()
+        for k, p in self.orig_config.items():
+            MICROSERVICES_CONFIG[k]["port"] = p
+        for mock in self.mocks.values():
+            mock.stop()
+
+    async def test_full_mission_flow(self):
+        # 1. Spustíme misi
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        self.assertEqual(msg, "OK")
+
+        # Počkáme, než proběhne krok 0 a krok 1
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
+
+        # 2. Simulace stisku 'scan_qrcode' na úvodní obrazovce
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 4)
+
+        # 3. Simulace příjmu QR kódu
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 15)
+
+        # 4. Simulace stisku 'destination_ok'
+        self.service.on_button_pressed("destination_ok")
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
+
+        # 5. Simulace stisku 'mission_go' po nalezení trasy
+        self.service.on_button_pressed("mission_go")
+        for _ in range(40):
+            if self.service.current_step in (18, 19, 21):
+                break
+            await asyncio.sleep(0.1)
+        self.assertIn(self.service.current_step, (18, 19, 21))
+
+        # Ověříme, že DRIVE dostal příkaz ON a PILOT-MARATON dostal START a LIDAR dostal START
+        drive_cmds = self.mocks["DRIVE"].received_cmds
+        pilot_cmds = self.mocks["PILOT-MARATON"].received_cmds
+        lidar_cmds = self.mocks["LIDAR"].received_cmds
+        self.assertIn("ON", drive_cmds)
+        self.assertIn("START", lidar_cmds)
+        self.assertTrue(any(c.startswith("START") for c in pilot_cmds))
+
+        # 6. Změníme odpověď pilota na FINISHED
+        self.mocks["PILOT-MARATON"].response_map["STATUS"] = json.dumps({
+            "state": "FINISHED",
+            "info": "Goal reached"
+        })
+
+        # Počkáme až stavový automat zaregistruje FINISHED (krok 20)
+        for _ in range(40):
+            if self.service.current_step == 20:
+                break
+            await asyncio.sleep(0.1)
+
+        self.assertEqual(self.service.current_step, 20)
+
+        # Ověříme, že ihned po FINISHED (krok 20) byl zastaven LIDAR a PILOT, ale motory ještě čekají na acknowledge
+        self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
+        self.assertIn("STOP", self.mocks["PILOT-MARATON"].received_cmds)
+        self.assertNotIn("OFF", self.mocks["DRIVE"].received_cmds)
+
+        # 7. Simulace potvrzení 'acknowledge' v cíli
+        self.service.on_button_pressed("acknowledge")
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+
+        self.assertEqual(self.service.current_step, 2)
+
+        # A motory byly vypnuty DRIVE OFF
+        self.assertIn("OFF", self.mocks["DRIVE"].received_cmds)
+
+    async def test_workflow_start_far_and_check_again(self):
+        """Ověření, že při startu dále než 5m z mapy systém nabídne check_again a po přiblížení najde trasu."""
+        self.mocks["MAPS"].response_map["FIND_ROUTE"] = json.dumps({
+            "metadata": {
+                "search_result": "cesta nenalezena",
+                "reason": "Start je dále než 5m od nejbližšího místa na mapě. Nejbližší místo je 8.50 m.",
+                "start_distance_to_map_m": 8.5,
+                "goal_distance_to_map_m": 1.2
+            }
+        })
+
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
+
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 4)
+
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 15)
+
+        self.service.on_button_pressed("destination_ok")
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 17)
+
+        self.mocks["MAPS"].response_map["FIND_ROUTE"] = json.dumps({
+            "metadata": {
+                "search_result": "found",
+                "route_length_m": 210.5
+            },
+            "nodes": [
+                {"id": "n1", "lat": 49.554131, "lon": 12.741158},
+                {"id": "n2", "lat": 49.555201, "lon": 12.743162}
+            ],
+            "edges": []
+        })
+
+        self.service.on_button_pressed("check_again")
+        for _ in range(40):
+            if self.service.route_json_str is not None:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("mission_go")
+        for _ in range(40):
+            if self.service.current_step in (18, 19, 21):
+                break
+            await asyncio.sleep(0.1)
+
+        self.assertIn(self.service.current_step, (18, 19, 21))
+
+    async def test_cancel_mission_stops_all_driving_services(self):
+        """Ověření, že při zrušení mise (cancel_mission) se spolehlivě zastaví všechny pohybové služby."""
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 2)
+
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 4)
+
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+        self.assertEqual(self.service.current_step, 15)
+
+        self.service.on_button_pressed("cancel_mission")
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+
+        self.assertEqual(self.service.current_step, 2)
+
+        self.assertIn("OFF", self.mocks["DRIVE"].received_cmds)
+        self.assertIn("STOP", self.mocks["PILOT-MARATON"].received_cmds)
+        self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
+        self.assertIn("STOP", self.mocks["MAPS"].received_cmds)
+
+    async def test_pilot_paused_handling(self):
+        """Ověření, že pokud pilot vrátí PAUSED, stavový automat přejde do STEP_22_PAUSED a terminál obdrží zprávu."""
+        self.mocks["PILOT-MARATON"].response_map["STATUS"] = json.dumps({
+            "state": "PAUSED",
+            "source": "OOW_TCP",
+            "info": "Lost OOW connection",
+            "wp_index": 0,
+            "wp_total": 2,
+            "distance_to_goal_m": 131.3,
+            "speed": 0.0,
+            "speed_actual": 0.0,
+            "speed_target": 0.0,
+            "gps_sol": "FIX"
+        })
+
+        ok, msg = self.service.start_mission()
+        self.assertTrue(ok)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("destination_ok")
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("mission_go")
+        for _ in range(40):
+            if self.service.current_step == 22:
+                break
+            await asyncio.sleep(0.1)
+
+        self.assertEqual(self.service.current_step, 22)
+
+        term_cmds = [c for c in self.mocks["TERMINAL"].received_cmds if c.startswith("MESSAGE {")]
+        self.assertTrue(any("Maraton - Pozastaveno" in c for c in term_cmds))
+        self.assertTrue(any("Lost OOW connection" in c for c in term_cmds))
+
+
+class TestMissionMaratonTCP(unittest.TestCase):
+    """Test TCP rozhraní služby MISSION-MARATON na portu 19033."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.test_port = 19033
+        cls.service = MissionMaratonService()
+        cls.server_ready = threading.Event()
+
+        def run_server():
+            async def amain():
+                cls.stop_event = asyncio.Event()
+                cls.server = await asyncio.start_server(
+                    lambda r, w: handle_client(r, w, cls.service),
+                    '127.0.0.1', cls.test_port
+                )
+                cls.server_ready.set()
+                async with cls.server:
+                    await cls.stop_event.wait()
+
+            cls.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(cls.loop)
+            cls.loop.run_until_complete(amain())
+            cls.loop.close()
+
+        cls.thread = threading.Thread(target=run_server, daemon=True)
+        cls.thread.start()
+        cls.server_ready.wait(timeout=2.0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.service.shutdown()
+        if hasattr(cls, 'loop') and hasattr(cls, 'stop_event'):
+            cls.loop.call_soon_threadsafe(cls.stop_event.set)
+        if hasattr(cls, 'thread'):
+            cls.thread.join(timeout=1.0)
+
+    def _send_cmd(self, cmd: str) -> str:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(("127.0.0.1", self.test_port))
+        s.sendall((cmd + "\n").encode("utf-8"))
+        f = s.makefile("rwb", buffering=0)
+        resp = f.readline().decode("utf-8").strip()
+        s.close()
+        return resp
+
+    def test_ping(self):
+        resp = self._send_cmd("PING")
+        self.assertEqual(resp, "PONG MISSION_MARATON")
+
+    def test_status(self):
+        resp = self._send_cmd("STATUS")
+        data = json.loads(resp)
+        self.assertEqual(data["service"], "MISSION-MARATON")
+        self.assertIn("state", data)
+        self.assertIn("step", data)
+
+    def test_stop_command(self):
+        resp = self._send_cmd("STOP")
+        self.assertIn(resp, ["OK", "ERROR WAS_NOT_RUNNING"])
+
+
+if __name__ == "__main__":
+    unittest.main()

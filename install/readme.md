@@ -54,6 +54,12 @@ chmod 755 /data/logs/pilot_robotour
 touch /data/logs/pilot_robotour/pilot_robotour.log
 chmod 664 /data/logs/pilot_robotour/pilot_robotour.log
 
+mkdir -p /data/logs/pilot_maraton
+chown user:user /data/logs/pilot_maraton
+chmod 755 /data/logs/pilot_maraton
+touch /data/logs/pilot_maraton/pilot_maraton.log
+chmod 664 /data/logs/pilot_maraton/pilot_maraton.log
+
 mkdir -p /data/logs/maps
 chown user:user /data/logs/maps
 chmod 755 /data/logs/maps
@@ -69,6 +75,20 @@ chmod 664 /data/logs/mission_robotour/mission_robotour.log
 mkdir -p /data/robot/mission-robotour
 chown -R user:user /data/robot/mission-robotour
 chmod -R 775 /data/robot/mission-robotour
+
+mkdir -p /data/logs/mission_maraton
+chown user:user /data/logs/mission_maraton
+chmod 755 /data/logs/mission_maraton
+touch /data/logs/mission_maraton/mission_maraton.log
+chmod 664 /data/logs/mission_maraton/mission_maraton.log
+
+mkdir -p /data/robot/mission_maraton
+chown -R user:user /data/robot/mission_maraton
+chmod -R 775 /data/robot/mission_maraton
+
+mkdir -p /data/robot/pilot_maraton
+chown -R user:user /data/robot/pilot_maraton
+chmod -R 775 /data/robot/pilot_maraton
 
 # installace
 chmod +x register_fastapi.sh unregister_fastapi.sh
@@ -109,6 +129,10 @@ chmod +x pilot_robotour_register.sh pilot_robotour_unregister.sh
 ./pilot_robotour_register.sh
 systemctl status robot-pilot-robotour
 
+chmod +x pilot_maraton_register.sh pilot_maraton_unregister.sh
+./pilot_maraton_register.sh
+systemctl status robot-pilot-maraton
+
 chmod +x logger_register.sh logger_unregister.sh
 ./logger_register.sh
 systemctl status robot-logger
@@ -133,12 +157,17 @@ chmod +x mission_robotour_register.sh mission_robotour_unregister.sh
 ./mission_robotour_register.sh
 systemctl status robot-mission-robotour
 
+chmod +x mission_maraton_register.sh mission_maraton_unregister.sh
+./mission_maraton_register.sh
+systemctl status robot-mission-maraton
+
 # uninstallace
 ./unregister_fastapi.sh 
 ./unregister_zeroconf.sh 
 ./vision_unregister.sh
 ./pilot_waypoints_unregister.sh
 ./pilot_robotour_unregister.sh
+./pilot_maraton_unregister.sh
 ./logger_unregister.sh
 ./compass_unregister.sh
 ./gps_unregister.sh
@@ -146,6 +175,7 @@ systemctl status robot-mission-robotour
 ./camera_stereo_unregister.sh
 ./maps_unregister.sh
 ./mission_robotour_unregister.sh
+./mission_maraton_unregister.sh
 
 # status
 systemctl status fastapi-server
@@ -157,7 +187,9 @@ systemctl status robot-vision
 systemctl status robot-pilot-vision
 systemctl status robot-pilot-waypoints
 systemctl status robot-pilot-robotour
+systemctl status robot-pilot-maraton
 systemctl status robot-mission-robotour
+systemctl status robot-mission-maraton
 systemctl status robot-logger
 systemctl status robot-compass
 systemctl status robot-gps

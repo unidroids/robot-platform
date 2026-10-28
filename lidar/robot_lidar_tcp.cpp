@@ -10,7 +10,8 @@
 
 #include "lidar_controller.hpp"   // náš wrapper
 #include "lidar_publisher.hpp"
-#include "kolize/collision_service.hpp"
+#include "collisions/collision_service.hpp"
+#include "traversability/traversability_service.hpp"
 
 #include <atomic>
 #include <cerrno>
@@ -35,7 +36,8 @@ constexpr const char *kBindAddr = "127.0.0.1";
 // ------------------------------------------------------
 static LidarController lidar;          // jediná instance (safe)
 static LidarPublisher lidar_pub(&lidar);
-static CollisionService collision_service(&lidar); // nová služba LIDAR-KOLIZE (port 9222)
+static CollisionService collision_service(&lidar);           // služba LIDAR-COLLISIONS (port 9222)
+static TraversabilityService traversability_service(&lidar); // služba LIDAR-TRAVERSABILITY (port 9223)
 
 std::atomic<bool> shutting_down{false};
 std::atomic<int>  listen_fd{-1};
@@ -63,6 +65,13 @@ void close_all_clients() {
 void stop_listener() {
     int fd = listen_fd.exchange(-1);
     if (fd >= 0) { ::shutdown(fd, SHUT_RDWR); ::close(fd); }
+}
+
+bool can_shutdown_all() {
+    bool lidar_active = lidar.isRunning();
+    bool kolize_active = collision_service.isEvaluating();
+    bool trav_active = traversability_service.isEvaluating();
+    return !(lidar_active || kolize_active || trav_active);
 }
 
 // ------------------------------------------------------
@@ -153,15 +162,14 @@ void handle_client(int sock) {
                 ::shutdown(sock, SHUT_RDWR);
                 break;
             } else if (line == "SHUTDOWN") {
-                bool lidar_active = lidar.isRunning();
-                bool eval_active  = collision_service.isEvaluating();
-                if (lidar_active || eval_active) {
+                if (!can_shutdown_all()) {
                     send_line(sock, "ERR CANNOT_SHUTDOWN_WHILE_RUNNING (STOP services first)");
                 } else {
                     send_line(sock, "SHUTTING DOWN");
                     shutting_down.store(true);
                     lidar.stop();
                     collision_service.stop();
+                    traversability_service.stop();
                     stop_listener();
                     break;
                 }
@@ -198,12 +206,20 @@ int main() {
 
     lidar_pub.start();
 
-    // Spuštění TCP serveru pro LIDAR-KOLIZE na portu 9222
-    collision_service.setShutdownCallback([]{
+    auto trigger_shutdown = []{
         shutting_down.store(true);
         stop_listener();
-    });
+    };
+
+    // Spuštění TCP serveru pro LIDAR-COLLISIONS na portu 9222
+    collision_service.setCanShutdownCallback(can_shutdown_all);
+    collision_service.setShutdownCallback(trigger_shutdown);
     collision_service.startServer();
+
+    // Spuštění TCP serveru pro LIDAR-TRAVERSABILITY na portu 9223
+    traversability_service.setCanShutdownCallback(can_shutdown_all);
+    traversability_service.setShutdownCallback(trigger_shutdown);
+    traversability_service.startServer();
 
     while (!shutting_down.load()) {
         sockaddr_in cli{}; socklen_t len=sizeof(cli);
@@ -215,6 +231,7 @@ int main() {
     close_all_clients();
     lidar_pub.stop();
     collision_service.stop();
+    traversability_service.stop();
     std::cout << "🛑 robot-lidar server ukončen." << std::endl;
     return 0;
 }

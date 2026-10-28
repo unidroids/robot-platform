@@ -66,9 +66,10 @@ Repozitář vznikl původně pro soutěž Robotour 2025, ale nyní slouží jako
 | **PILOT-MARATON**  | 9105 | Řízení pro maraton s vyhýbáním překážkám a detekcí krajnic |
 | **— Vidění —** | | *Vizuální percepční služby* |
 | **VISION-QRCODE** | 9201 | Vyhledání QR Codu v kamerovém vstupu        |
-| **VISION-LINE** | 9202 | Future - Vyhledání čáry z kamerového vstupu      |
+| **VISION-LINE** | 9202 | Future - Vyhledání čáry z kamerovém vstupu      |
 | **— Profily —** | | *Lidarové profily (kolizní kurzy, traverzibilita, ...)* |
-| **LIDAR-KOLIZE** | 9222 | Kolizní kurzy a minimální vzdálenosti překážek |
+| **LIDAR-COLLISIONS** | 9222 | Kolizní kurzy a minimální vzdálenosti překážek |
+| **LIDAR-TRAVERSABILITY** | 9223 | Lokální 2D potenciálová mapa sjízdnosti terénu (8×8 m) |
 
 ## obsolete
 

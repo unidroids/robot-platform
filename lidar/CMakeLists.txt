@@ -4,9 +4,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 # --- Unitree SDK ---
 include_directories(${CMAKE_SOURCE_DIR}/unitree_lidar_sdk/include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/kolize)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/collisions)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/traversability)
 link_directories(${CMAKE_SOURCE_DIR}/unitree_lidar_sdk/lib/${CMAKE_SYSTEM_PROCESSOR})
 add_executable(robot_lidar_tcp robot_lidar_tcp.cpp)
 target_link_libraries(robot_lidar_tcp PRIVATE pthread unilidar_sdk2 zmq)
-target_include_directories(robot_lidar_tcp PRIVATE /usr/include/eigen3 ${CMAKE_CURRENT_SOURCE_DIR}/kolize)
-
+target_include_directories(robot_lidar_tcp PRIVATE /usr/include/eigen3 ${CMAKE_CURRENT_SOURCE_DIR}/collisions ${CMAKE_CURRENT_SOURCE_DIR}/traversability)

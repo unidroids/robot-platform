@@ -1,6 +1,6 @@
 # Kolizní kurzy a prostorové vyhodnocení překážek (LiDAR L2)
 
-Implementace služby kolizních kurzů **`LIDAR-KOLIZE`** (TCP port 9222) běží v rámci jednoho společného procesu služby **`LIDAR`** (TCP port 9002). To umožňuje optimalizaci výkonu a sdílení dat mezi oběma službami.
+Implementace služby kolizních kurzů **`LIDAR-COLLISIONS`** (TCP port 9222) běží v rámci jednoho společného procesu služby **`LIDAR`** (TCP port 9002). To umožňuje optimalizaci výkonu a sdílení dat mezi oběma službami.
 
 ---
 
@@ -25,7 +25,7 @@ Implementace služby kolizních kurzů **`LIDAR-KOLIZE`** (TCP port 9222) běž�
 
 ## 2. Výstupní JSON (`COLLISIONS`)
 
-Publikováno s frekvencí **10 Hz** na ZMQ `ipc:///tmp/robot-lidar-kolize` (topic `COLLISIONS`) a dostupné na TCP portu `9222` příkazem `COLLISIONS` (automaticky logováno službou `logger`):
+Publikováno s frekvencí **10 Hz** na ZMQ `ipc:///tmp/robot-lidar-collisions` (topic `COLLISIONS`) a dostupné na TCP portu `9222` příkazem `COLLISIONS` (automaticky logováno službou `logger`):
 
 ```json
 {
@@ -51,7 +51,7 @@ Publikováno s frekvencí **10 Hz** na ZMQ `ipc:///tmp/robot-lidar-kolize` (topi
 
 ## 3. Napojení v `pilot_maraton` a pravidlo $\frac{2}{5}\,\text{TTC}$
 
-Služba `pilot_maraton` odebírá `COLLISIONS` z `ipc:///tmp/robot-lidar-kolize` (a ponechává si `DISTANCE` z `ipc:///tmp/robot-lidar` jako záložní pojistku):
+Služba `pilot_maraton` odebírá `COLLISIONS` z `ipc:///tmp/robot-lidar-collisions` (a ponechává si `DISTANCE` z `ipc:///tmp/robot-lidar` jako záložní pojistku):
 - **Zastavení na $0.7\text{ m}$ ($70\text{ cm}$):** Při překážce $\le 70\text{ cm}$ v přímém koridoru robota (šířka $75\text{ cm}$) nastaví cílovou rychlost na $0\text{ m/s}$.
 - **Plná rychlost až $2.0\text{ m/s}$ při volnu $\ge 6.0\text{ m}$ ($600\text{ cm}$):** Mezi $0.7\text{ m}$ a $6.0\text{ m}$ plynule omezuje maximální rychlost.
 - **Pravidlo zastavení za $\frac{2}{5}\,\text{TTC}$:** Robot musí být schopen zastavit v čase $t_{stop} = \frac{2}{5}\cdot\text{min\_ttc\_s}$ (čímž nechává protijedoucímu objektu čas zastavit a drží $\frac{1}{5}$ rezervu). Při predikovatelném brzdění $a_{nom} = 2\text{ m/s}^2$ omezuje rychlost na $v_{max} = a_{nom} \cdot \frac{2}{5}\,\text{TTC}$ a v případě nutnosti dynamicky zvyšuje brzdnou deceleraci až na nouzové maximum $0.4g \approx 4\text{ m/s}^2$.

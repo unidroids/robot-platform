@@ -26,7 +26,7 @@
 
 #include <zmq.hpp>
 
-// Služba LIDAR-KOLIZE (TCP port 9222)
+// Služba LIDAR-COLLISIONS (TCP port 9222)
 class CollisionService {
 public:
     enum class State {
@@ -52,6 +52,10 @@ public:
         shutdown_cb_ = std::move(cb);
     }
 
+    void setCanShutdownCallback(std::function<bool()> cb) {
+        can_shutdown_cb_ = std::move(cb);
+    }
+
     bool isRunning() const {
         return running_server_.load();
     }
@@ -66,7 +70,7 @@ public:
 
         server_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
         if (server_fd_ < 0) {
-            std::perror("[LIDAR-KOLIZE] socket");
+            std::perror("[LIDAR-COLLISIONS] socket");
             return false;
         }
 
@@ -74,7 +78,7 @@ public:
         addr.sin_family = AF_INET;
         addr.sin_port   = htons(port_);
         if (inet_pton(AF_INET, bind_addr_.c_str(), &addr.sin_addr) <= 0) {
-            std::perror("[LIDAR-KOLIZE] inet_pton");
+            std::perror("[LIDAR-COLLISIONS] inet_pton");
             ::close(server_fd_);
             server_fd_ = -1;
             return false;
@@ -83,20 +87,20 @@ public:
         int opt = 1;
         setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
         if (bind(server_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-            std::perror("[LIDAR-KOLIZE] bind");
+            std::perror("[LIDAR-COLLISIONS] bind");
             ::close(server_fd_);
             server_fd_ = -1;
             return false;
         }
 
         if (listen(server_fd_, 8) < 0) {
-            std::perror("[LIDAR-KOLIZE] listen");
+            std::perror("[LIDAR-COLLISIONS] listen");
             ::close(server_fd_);
             server_fd_ = -1;
             return false;
         }
 
-        std::cout << "🛡️  [LIDAR-KOLIZE] TCP server naslouchá na " << bind_addr_ << ":" << port_ << std::endl;
+        std::cout << "🛡️  [LIDAR-COLLISIONS] TCP server naslouchá na " << bind_addr_ << ":" << port_ << std::endl;
 
         running_server_.store(true);
         tcp_thread_ = std::thread([this]{ tcpListenLoop(); });
@@ -123,7 +127,7 @@ public:
         evaluating_.store(true);
         eval_thread_ = std::thread([this]{ evalLoop(); });
 
-        std::cout << "🚀 [LIDAR-KOLIZE] Vyhodnocování kolizních kurzů spuštěno (10 Hz)" << std::endl;
+        std::cout << "🚀 [LIDAR-COLLISIONS] Vyhodnocování kolizních kurzů spuštěno (10 Hz)" << std::endl;
         return true;
     }
 
@@ -137,7 +141,7 @@ public:
         }
 
         state_.store(State::IDLE);
-        std::cout << "🛑 [LIDAR-KOLIZE] Vyhodnocování kolizních kurzů zastaveno" << std::endl;
+        std::cout << "🛑 [LIDAR-COLLISIONS] Vyhodnocování kolizních kurzů zastaveno" << std::endl;
     }
 
     // Úplné zastavení služby a serveru
@@ -160,7 +164,7 @@ public:
             if (heading_thread_.joinable()) {
                 heading_thread_.join();
             }
-            std::cout << "🛑 [LIDAR-KOLIZE] Služba ukončena" << std::endl;
+            std::cout << "🛑 [LIDAR-COLLISIONS] Služba ukončena" << std::endl;
         }
     }
 
@@ -216,7 +220,7 @@ private:
             int cs = ::accept(server_fd_, reinterpret_cast<sockaddr*>(&cli), &len);
             if (cs < 0) {
                 if (!running_server_.load()) break;
-                std::perror("[LIDAR-KOLIZE] accept");
+                std::perror("[LIDAR-COLLISIONS] accept");
                 continue;
             }
             std::thread([this, cs]{ handleClient(cs); }).detach();
@@ -244,7 +248,7 @@ private:
                 if (!line.empty() && line.back() == '\r') line.pop_back();
 
                 if (line == "PING") {
-                    sendLine(sock, "PONG LIDAR-KOLIZE");
+                    sendLine(sock, "PONG LIDAR-COLLISIONS");
                 } else if (line == "START") {
                     bool ok = startEvaluating();
                     sendLine(sock, ok ? "OK STARTED" : "ERR START");
@@ -265,10 +269,11 @@ private:
                     ::shutdown(sock, SHUT_RDWR);
                     break;
                 } else if (line == "SHUTDOWN") {
-                    bool lidar_active = (lidar_ && lidar_->isRunning());
-                    bool eval_active  = evaluating_.load();
+                    bool can_shutdown = can_shutdown_cb_
+                        ? can_shutdown_cb_()
+                        : !( (lidar_ && lidar_->isRunning()) || evaluating_.load() );
 
-                    if (lidar_active || eval_active) {
+                    if (!can_shutdown) {
                         sendLine(sock, "ERR CANNOT_SHUTDOWN_WHILE_RUNNING (STOP services first)");
                     } else {
                         sendLine(sock, "SHUTTING DOWN");
@@ -301,7 +306,7 @@ private:
             sub.connect("ipc:///tmp/robot-fusion");
             sub.set(zmq::sockopt::subscribe, "SOLUTION");
 
-            std::cout << "🧭 [LIDAR-KOLIZE] ZMQ SUB připojen na ipc:///tmp/robot-fusion (SOLUTION)" << std::endl;
+            std::cout << "🧭 [LIDAR-COLLISIONS] ZMQ SUB připojen na ipc:///tmp/robot-fusion (SOLUTION)" << std::endl;
 
             while (running_server_.load()) {
                 zmq::message_t topic_msg;
@@ -317,7 +322,7 @@ private:
                 parseHeadingJson(payload);
             }
         } catch (const std::exception &e) {
-            std::cerr << "❌ [LIDAR-KOLIZE] Chyba v headingSubLoop: " << e.what() << std::endl;
+            std::cerr << "❌ [LIDAR-COLLISIONS] Chyba v headingSubLoop: " << e.what() << std::endl;
         }
     }
 
@@ -351,11 +356,11 @@ private:
         try {
             zmq::context_t ctx(1);
             zmq::socket_t pub(ctx, zmq::socket_type::pub);
-            std::string ipc_path = "ipc:///tmp/robot-lidar-kolize";
+            std::string ipc_path = "ipc:///tmp/robot-lidar-collisions";
             pub.bind(ipc_path);
-            chmod("/tmp/robot-lidar-kolize", 0777);
+            chmod("/tmp/robot-lidar-collisions", 0777);
 
-            std::cout << "📡 [LIDAR-KOLIZE] ZMQ PUB běží na " << ipc_path << " (10 Hz)" << std::endl;
+            std::cout << "📡 [LIDAR-COLLISIONS] ZMQ PUB běží na " << ipc_path << " (10 Hz)" << std::endl;
 
             std::vector<LidarPointBuffer::Sample> samples;
             samples.reserve(20000);
@@ -463,7 +468,7 @@ private:
                 checkReport(last_report_time, report_cycles);
             }
         } catch (const std::exception &e) {
-            std::cerr << "❌ [LIDAR-KOLIZE] Chyba v evalLoop: " << e.what() << std::endl;
+            std::cerr << "❌ [LIDAR-COLLISIONS] Chyba v evalLoop: " << e.what() << std::endl;
         }
     }
 
@@ -476,7 +481,7 @@ private:
             if (state_.load() == State::RUNNING) st = "RUNNING";
             else if (state_.load() == State::WAITING_FOR_DATA) st = "WAITING (" + waiting_reason_ + ")";
 
-            std::cout << "🛡️  [LIDAR-KOLIZE] " << st
+            std::cout << "🛡️  [LIDAR-COLLISIONS] " << st
                       << " | " << std::fixed << std::setprecision(1) << rate << " Hz"
                       << " | Pts: " << points_last_cycle_.load()
                       << " | MinClearance: " << std::setprecision(1) << min_clearance_cm_.load() << " cm"
@@ -506,6 +511,7 @@ private:
     std::thread heading_thread_;
     std::thread eval_thread_;
     std::function<void()> shutdown_cb_;
+    std::function<bool()> can_shutdown_cb_;
 
     std::mutex clients_mtx_;
     std::vector<int> client_socks_;

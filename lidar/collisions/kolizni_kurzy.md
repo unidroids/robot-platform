@@ -1,6 +1,6 @@
 # Kolizní kurzy a prostorové vyhodnocení překážek (LiDAR L2)
 
-Tento dokument specifikuje návrh a implementaci služby kolizních kurzů **`LIDAR-KOLIZE`** (TCP port 9222). Služba běží v rámci jednoho společného procesu s nízkoúrovňovým ovladačem **`LIDAR`** (TCP port 9002), ale disponuje vlastní sadou vláken a plně odděleným řízením, diagnostikou i publikační sběrnicí.
+Tento dokument specifikuje návrh a implementaci služby kolizních kurzů **`LIDAR-COLLISIONS`** (TCP port 9222). Služba běží v rámci jednoho společného procesu s nízkoúrovňovým ovladačem **`LIDAR`** (TCP port 9002), ale disponuje vlastní sadou vláken a plně odděleným řízením, diagnostikou i publikační sběrnicí.
 
 ---
 
@@ -23,7 +23,7 @@ Tento dokument specifikuje návrh a implementaci služby kolizních kurzů **`LI
 
 ## 2. Výstupní JSON (`COLLISIONS`)
 
-Publikováno na `ipc:///tmp/robot-lidar-kolize` (topic `COLLISIONS`, 10 Hz) a logováno službou `logger`:
+Publikováno na `ipc:///tmp/robot-lidar-collisions` (topic `COLLISIONS`, 10 Hz) a logováno službou `logger`:
 
 ```json
 {

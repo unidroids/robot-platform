@@ -1,8 +1,9 @@
 # Služba robot_lidar_tcp (LiDAR Unitree L2)
 
-Tento program integruje dvě služby běžící v oddělených vláknech:
-- **Port 9002 (`LIDAR`)**: Nízkoúrovňový ovladač laseru, kalibrace, čtení UDP paketů, ZMQ PUB `DISTANCE` na `ipc:///tmp/robot-lidar`.
-- **Port 9222 (`LIDAR-KOLIZE`)**: Vyhodnocování kolizních kurzů v podadresáři `kolize/` (12 pater, 36 sektorů, alfa-beta filtr, inflace, ZMQ PUB `COLLISIONS` na `ipc:///tmp/robot-lidar-kolize`).
+Tento program integruje tři služby běžící v oddělených vláknech nad společným bez-zámkovým kruhovým bufferem bodů:
+- **Port 9002 (`LIDAR`)**: Nízkoúrovňový ovladač laseru, kalibrace s pevnou maskou podvozku (`x ∈ [-0.70, +0.23] m`, `y ∈ [-0.35, +0.35] m`), čtení UDP paketů, ZMQ PUB `DISTANCE` na `ipc:///tmp/robot-lidar`.
+- **Port 9222 (`LIDAR-COLLISIONS`)**: Vyhodnocování kolizních kurzů v podadresáři [`collisions/`](file:///e:/robotour/robot-platform/lidar/collisions/kolizni_kurzy.md) (72 sektorů po 5° CW, CBDR kolizní predikce, ZMQ PUB `COLLISIONS` na `ipc:///tmp/robot-lidar-collisions`).
+- **Port 9223 (`LIDAR-TRAVERSABILITY`)**: Lokální potenciálová mapa sjízdnosti terénu v podadresáři [`traversability/`](file:///e:/robotour/robot-platform/lidar/traversability/traversability.md) (`80 × 80` buněk po `10 cm`, stabilizovaná North-Up paměť `140 × 140`, ZMQ PUB `TRAVERSABILITY` na `ipc:///tmp/robot-lidar-traversability`).
 
 ## Build sekvence
 ```bash
@@ -12,8 +13,6 @@ make -j$(nproc)
 chmod +x ../bin/robot_lidar_tcp
 sudo systemctl restart robot-lidar
 ```
-
-
 
 # set mode
 Bit	Function                                              - Value 0                     Value 1

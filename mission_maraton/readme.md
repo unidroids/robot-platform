@@ -35,7 +35,7 @@ Služba naslouchá na TCP portu `9033` (výchozí bind `127.0.0.1:9033`).
 | **`FUSION`** | 9009 | Fúze polohy a orientace (příkaz DATA) | `PONG FUSION` |
 | **`MAPS`** | 9040 | Vyhledávání tras v grafu cest (FIND_ROUTE) | `PONG MAPS` |
 | **`LIDAR`** | 9002 | Antikolizní laserový scanner | `PONG LIDAR` |
-| **`LIDAR-KOLIZE`** | 9222 | Kolizní kurzy a minimální vzdálenosti překážek | `PONG LIDAR-KOLIZE` |
+| **`LIDAR-COLLISIONS`** | 9222 | Kolizní kurzy a minimální vzdálenosti překážek | `PONG LIDAR-COLLISIONS` |
 | **`OOW-BRIDGE`**| 9030 | Bezpečnostní dohled OOW | `PONG OOW` |
 | **`PILOT-MARATON`**| 9105 | Autonomní pilot robota pro maraton | `PONG PILOT_MARATON` |
 

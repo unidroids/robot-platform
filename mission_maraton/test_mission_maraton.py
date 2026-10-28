@@ -165,7 +165,7 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
             "FUSION": 29009,
             "MAPS": 29040,
             "LIDAR": 29002,
-            "LIDAR-KOLIZE": 29222,
+            "LIDAR-COLLISIONS": 29222,
             "OOW-BRIDGE": 29030,
             "PILOT-MARATON": 29105
         }

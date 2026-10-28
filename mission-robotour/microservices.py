@@ -51,9 +51,9 @@ MICROSERVICES_CONFIG: Dict[str, Dict[str, Any]] = {
         "port": 9002,
         "expected_pong": ["PONG LIDAR"]
     },
-    "LIDAR-KOLIZE": {
+    "LIDAR-COLLISIONS": {
         "port": 9222,
-        "expected_pong": ["PONG LIDAR-KOLIZE", "PONG LIDAR_KOLIZE"]
+        "expected_pong": ["PONG LIDAR-COLLISIONS", "PONG LIDAR_COLLISIONS", "PONG LIDAR-KOLIZE", "PONG LIDAR_KOLIZE"]
     },
     "OOW-BRIDGE": {
         "port": 9030,

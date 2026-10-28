@@ -3,6 +3,7 @@ import threading
 import time
 import math
 import json
+import base64
 from datetime import datetime
 from pathlib import Path
 import zmq
@@ -75,6 +76,10 @@ class MaratonPilotService:
         self.last_collision_time = 0.0
         self.min_ttc_s = 999.0
         self.min_ttc_angle_deg = -1.0
+        self.traversability_data = None
+        self.traversability_grid = None
+        self.last_traversability_time = 0.0
+        self.traversability_corridor_cm = -1.0
         
         # OOW state
         self.oow_tcp_ok = False
@@ -213,10 +218,11 @@ class MaratonPilotService:
             else:
                 actual_speed_ms = round(raw_fusion_spd, 2)
 
-        # LiDAR obstacle distance & TTC (primárně LIDAR-KOLIZE, záložně LIDAR DISTANCE)
+        # LiDAR obstacle distance & TTC (primárně LIDAR-COLLISIONS / TRAVERSABILITY, záložně LIDAR DISTANCE)
         collisions_active = (time.time() - self.last_collision_time) < 2.0 and self.collision_data is not None
+        traversability_active = (time.time() - self.last_traversability_time) < 2.0 and self.traversability_data is not None
         fallback_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-        lidar_active = collisions_active or fallback_active
+        lidar_active = collisions_active or traversability_active or fallback_active
         obstacle_distance_cm = round(float(self._get_effective_obstacle_distance_cm()), 1) if lidar_active else -1.0
         min_ttc_s = round(float(self.min_ttc_s), 2) if collisions_active else 999.0
         min_ttc_angle_deg = round(float(self.min_ttc_angle_deg), 1) if collisions_active else -1.0
@@ -276,6 +282,33 @@ class MaratonPilotService:
         self.min_ttc_s = float(data.get("min_ttc_s", 999.0))
         self.min_ttc_angle_deg = float(data.get("min_ttc_angle_deg", -1.0))
 
+    def update_traversability(self, data):
+        self.traversability_data = data
+        self.last_traversability_time = time.time()
+        self.traversability_corridor_cm = float(data.get("min_corridor_clearance_cm", -1.0))
+        grid_b64 = data.get("grid_b64")
+        if grid_b64:
+            try:
+                raw = base64.b64decode(grid_b64)
+                if len(raw) == 6400:
+                    self.traversability_grid = raw
+            except Exception:
+                pass
+
+    def get_traversability_cost_at(self, x_fwd_m: float, y_cw_m: float) -> int:
+        """
+        Vrátí potenciálovou cenu sjízdnosti (0..100, kde 100 = nesjízdné/neznámé)
+        v lokálních souřadnicích robota (x_fwd_m in [-2.0, +6.0), y_cw_m in [-4.0, +4.0), +y = vpravo CW).
+        Slouží jako podklad pro plánovač / Elastic Band.
+        """
+        if not self.traversability_grid or (time.time() - self.last_traversability_time) >= 2.0:
+            return 100
+        ix = int(math.floor((x_fwd_m + 2.0) / 0.10))
+        iy = int(math.floor((y_cw_m + 4.0) / 0.10))
+        if ix < 0 or ix >= 80 or iy < 0 or iy >= 80:
+            return 100
+        return int(self.traversability_grid[ix * 80 + iy])
+
     def _get_forward_corridor_distance_cm(self) -> float:
         """
         Z 72 sektorů (po 5°, 0 = vpřed CW) v collision_data vrátí nejbližší
@@ -302,9 +335,10 @@ class MaratonPilotService:
         return min_d if found else -1.0
 
     def _get_effective_obstacle_distance_cm(self) -> float:
-        """Vrátí efektivní vzdálenost překážky před robotem (primárně z COLLISIONS, záložně z DISTANCE)."""
+        """Vrátí efektivní vzdálenost překážky před robotem (primárně z COLLISIONS/TRAVERSABILITY, záložně z DISTANCE)."""
         now = time.time()
         collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
+        traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
         fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
 
         candidates = []
@@ -312,6 +346,8 @@ class MaratonPilotService:
             corr_d = self._get_forward_corridor_distance_cm()
             if corr_d >= 0.0:
                 candidates.append(corr_d)
+        if traversability_active and self.traversability_corridor_cm >= 0.0:
+            candidates.append(float(self.traversability_corridor_cm))
         if fallback_active:
             candidates.append(float(self.lidar_distance))
 
@@ -393,7 +429,8 @@ class MaratonPilotService:
         try:
             sub.connect("ipc:///tmp/robot-fusion")
             sub.connect("ipc:///tmp/robot-lidar")
-            sub.connect("ipc:///tmp/robot-lidar-kolize")
+            sub.connect("ipc:///tmp/robot-lidar-collisions")
+            sub.connect("ipc:///tmp/robot-lidar-traversability")
             sub.connect("ipc:///tmp/robot-oow")
             sub.setsockopt_string(zmq.SUBSCRIBE, "")
             connected = True
@@ -413,6 +450,8 @@ class MaratonPilotService:
                         self.update_lidar(json.loads(payload))
                     elif topic == "COLLISIONS":
                         self.update_collisions(json.loads(payload))
+                    elif topic == "TRAVERSABILITY":
+                        self.update_traversability(json.loads(payload))
                     elif topic in ["STATUS", "CMD"]:
                         self.update_oow_zmq(payload)
                     else:
@@ -524,8 +563,9 @@ class MaratonPilotService:
 
             now_ts = time.time()
             collisions_active = (now_ts - self.last_collision_time) < 2.0 and self.collision_data is not None
+            traversability_active = (now_ts - self.last_traversability_time) < 2.0 and self.traversability_data is not None
             fallback_active = (now_ts - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-            lidar_active = collisions_active or fallback_active
+            lidar_active = collisions_active or traversability_active or fallback_active
             eff_dist = self._get_effective_obstacle_distance_cm()
             current_lidar = round(float(eff_dist), 1) if (lidar_active and eff_dist >= 0.0) else -1.0
 

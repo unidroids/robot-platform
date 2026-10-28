@@ -1,12 +1,13 @@
 # Služba PILOT-MARATON (Port 9105)
 
-Služba `pilot_maraton` zajišťuje autonomní řízení robota podle navigačních bodů (waypoints) pro soutěžní misi Maraton (cíl ujet 5 km za méně než hodinu), se zapojením kolizních kurzů ze služby `LIDAR-KOLIZE`, bezpečnostního dohledu OOW a fúzovaných pozičních dat.
+Služba `pilot_maraton` zajišťuje autonomní řízení robota podle navigačních bodů (waypoints) pro soutěžní misi Maraton (cíl ujet 5 km za méně než hodinu), se zapojením kolizních kurzů ze služby `LIDAR-COLLISIONS`, bezpečnostního dohledu OOW a fúzovaných pozičních dat.
 
 ## Architektura a komunikace
 
 ### 1. ZMQ Odběry (Subscriptions)
 * **`ipc:///tmp/robot-fusion`** (Topic: `SOLUTION`) – fúzovaná poloha a azimut.
-* **`ipc:///tmp/robot-lidar-kolize`** (Topic: `COLLISIONS`) – primární antikolizní data (72 sektorů po $5^\circ$ v těle robota `distances_cm`, predikční diferenciál `delta_d_cms`, `min_ttc_s` a `min_ttc_angle_deg`).
+* **`ipc:///tmp/robot-lidar-collisions`** (Topic: `COLLISIONS`) – primární antikolizní data (72 sektorů po $5^\circ$ v těle robota `distances_cm`, predikční diferenciál `delta_d_cms`, `min_ttc_s` a `min_ttc_angle_deg`).
+* **`ipc:///tmp/robot-lidar-traversability`** (Topic: `TRAVERSABILITY`) – 2D potenciálová mapa sjízdnosti terénu ($80 \times 80$ buněk po $10\text{ cm}$ v `grid_b64`, cena `0..100`, volná vzdálenost předního koridoru `min_corridor_clearance_cm`) jako podklad pro plánovač / Elastic Band (`get_traversability_cost_at(x_fwd_m, y_cw_m)`).
 * **`ipc:///tmp/robot-lidar`** (Topic: `DISTANCE`) – záložní antikolizní vzdálenost z LiDARu.
 * **`ipc:///tmp/robot-oow`** (Topics: `STATUS`, `CMD`) – bezpečnostní dohled OOW.
 

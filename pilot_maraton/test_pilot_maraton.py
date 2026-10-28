@@ -244,6 +244,38 @@ class TestPilotMaratonLogic(unittest.TestCase):
         # Ze 200 cm/s za 0.5 s vyžaduje deceleraci 400 cm/s^2 -> krok 40.0 (0.4g)
         self.assertAlmostEqual(brk_step, 40.0)
 
+    def test_traversability_grid_and_corridor(self):
+        """Ověření dekódování 80x80 potenciálové mapy sjízdnosti (grid_b64) a napojení na koridor."""
+        import base64
+        grid = bytearray([100] * 6400)
+        # ix=20 (x=0.0 m), iy=40 (y=0.0 m) = pozice robota -> nastavíme cost = 5 (hladký asfalt)
+        grid[20 * 80 + 40] = 5
+        # ix=35 (x=1.5 m vpřed), iy=42 (y=0.2 m vpravo CW) -> nastavíme cost = 42
+        grid[35 * 80 + 42] = 42
+
+        b64 = base64.b64encode(bytes(grid)).decode("ascii")
+        self.service.update_traversability({
+            "timestamp": time.time(),
+            "heading": 90.0,
+            "pitch": 1.2,
+            "roll": -0.5,
+            "grid_nx": 80,
+            "grid_ny": 80,
+            "cell_size_cm": 10,
+            "origin_ix": 20,
+            "origin_iy": 40,
+            "valid_cells": 1200,
+            "blocked_cells": 300,
+            "min_corridor_clearance_cm": 185.0,
+            "grid_b64": b64,
+        })
+
+        self.assertEqual(self.service.get_traversability_cost_at(0.05, 0.05), 5)
+        self.assertEqual(self.service.get_traversability_cost_at(1.55, 0.25), 42)
+        self.assertEqual(self.service.get_traversability_cost_at(-1.0, 0.0), 100)
+        self.assertEqual(self.service.get_traversability_cost_at(10.0, 0.0), 100)  # mimo rozsah -> 100
+        self.assertAlmostEqual(self.service._get_effective_obstacle_distance_cm(), 185.0)
+
 
 class TestPilotMaratonTCP(unittest.TestCase):
     """Integrační test TCP protokolu služby PILOT-MARATON."""

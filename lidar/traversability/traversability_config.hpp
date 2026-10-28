@@ -36,6 +36,7 @@ struct TraversabilityConfig {
 
     // Časování a filtrace
     uint32_t period_ms           = 100;     // Perioda vyhodnocení 100 ms (10 Hz)
+    uint32_t max_lag_ms          = 150;     // Max povolená prodleva mezi cykly (150 ms)
     size_t min_points_per_cycle  = 10000;   // Min počet bodů za 100 ms pro platný cyklus
     size_t min_ground_pts_cell   = 2;       // Min počet bodů v buňce pro vyhodnocení země
     size_t min_obstacle_pts_cell = 2;       // Min počet bodů pro vysokou překážku

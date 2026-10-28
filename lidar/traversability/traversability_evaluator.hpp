@@ -24,6 +24,15 @@ public:
     static constexpr size_t kOutCols = 80; // Y: [-4.0 m, +4.0 m) CW, CoR na iy = 40
     static constexpr size_t kMemSize = 140; // 14 × 14 m vnitřní severová paměť
 
+    struct PoseState {
+        double heading_deg = 0.0;
+        double pitch_deg = 0.0;
+        double roll_deg = 0.0;
+        double lat = 0.0;
+        double lon = 0.0;
+        bool has_lat_lon = false;
+    };
+
     struct EvaluationResult {
         double timestamp = 0.0;
         double heading_deg = 0.0;
@@ -32,6 +41,9 @@ public:
         size_t points_count = 0;
         double duration_ms = 0.0;
 
+        uint32_t valid_cells = 0;
+        uint32_t blocked_cells = 0;
+        float min_corridor_clearance_cm = 600.0f;
         size_t traversable_cells_count = 0;
         uint8_t min_cost_front = 100;
 
@@ -57,6 +69,16 @@ public:
         has_anchor_ = false;
         anchor_lat_ = 0.0;
         anchor_lon_ = 0.0;
+    }
+
+    bool evaluate(const std::vector<LidarPointBuffer::Sample> &samples,
+                  const PoseState &pose,
+                  double timestamp,
+                  EvaluationResult &out_result)
+    {
+        double lat = pose.has_lat_lon ? pose.lat : 0.0;
+        double lon = pose.has_lat_lon ? pose.lon : 0.0;
+        return evaluate(samples, lat, lon, pose.heading_deg, pose.pitch_deg, pose.roll_deg, timestamp, out_result);
     }
 
     bool evaluate(const std::vector<LidarPointBuffer::Sample> &samples,
@@ -303,9 +325,13 @@ public:
 
         // Statistiky a Base64 zakódování
         size_t trav_count = 0;
+        uint32_t valid_cnt = 0;
+        uint32_t blocked_cnt = 0;
         uint8_t min_front = 100;
         for (size_t ix = 0; ix < kOutRows; ++ix) {
             for (size_t iy = 0; iy < kOutCols; ++iy) {
+                if (seen_mask[ix][iy]) valid_cnt++;
+                if (obs_mask[ix][iy]) blocked_cnt++;
                 uint8_t c = out_result.cost_grid[ix * kOutCols + iy];
                 if (c < 100) trav_count++;
                 if (ix >= 25 && ix <= 45 && iy >= 30 && iy <= 50 && c < min_front) {
@@ -314,19 +340,32 @@ public:
             }
         }
 
+        // Výpočet volné délky v přímém koridoru před robotem (od ix = 25, tj. +50 cm před CoR, na ose iy = 40)
+        // Pozn.: cost_grid již zahrnuje inflaci o poloviční šířku robota (±35 cm)
+        float corridor_cm = 600.0f;
+        for (size_t ix = 25; ix < kOutRows; ++ix) {
+            if (out_result.cost_grid[ix * kOutCols + 40] >= 100) {
+                corridor_cm = static_cast<float>(ix - 20) * config_.cell_size_cm;
+                break;
+            }
+        }
+
         auto end_time = std::chrono::steady_clock::now();
         double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
-        out_result.timestamp               = timestamp;
-        out_result.heading_deg             = heading_deg;
-        out_result.pitch_deg               = pitch_deg;
-        out_result.roll_deg                = roll_deg;
-        out_result.points_count            = samples.size();
-        out_result.duration_ms             = duration_ms;
-        out_result.traversable_cells_count = trav_count;
-        out_result.min_cost_front          = min_front;
-        out_result.grid_b64                = encodeBase64(out_result.cost_grid.data(), out_result.cost_grid.size());
-        out_result.json_payload            = buildJsonPayload(out_result);
+        out_result.timestamp                 = timestamp;
+        out_result.heading_deg               = heading_deg;
+        out_result.pitch_deg                 = pitch_deg;
+        out_result.roll_deg                  = roll_deg;
+        out_result.points_count              = samples.size();
+        out_result.duration_ms               = duration_ms;
+        out_result.valid_cells               = valid_cnt;
+        out_result.blocked_cells             = blocked_cnt;
+        out_result.min_corridor_clearance_cm = corridor_cm;
+        out_result.traversable_cells_count   = trav_count;
+        out_result.min_cost_front            = min_front;
+        out_result.grid_b64                  = encodeBase64(out_result.cost_grid.data(), out_result.cost_grid.size());
+        out_result.json_payload              = buildJsonPayload(out_result);
 
         return true;
     }
@@ -516,12 +555,15 @@ private:
            << "\"heading\":" << std::setprecision(1) << res.heading_deg << ","
            << "\"pitch\":" << std::setprecision(1) << res.pitch_deg << ","
            << "\"roll\":" << std::setprecision(1) << res.roll_deg << ","
-           << "\"rows\":80,"
-           << "\"cols\":80,"
-           << "\"cell_cm\":10,"
-           << "\"origin_row\":20,"
-           << "\"origin_col\":40,"
+           << "\"grid_nx\":80,"
+           << "\"grid_ny\":80,"
+           << "\"cell_size_cm\":10,"
+           << "\"origin_ix\":20,"
+           << "\"origin_iy\":40,"
+           << "\"valid_cells\":" << res.valid_cells << ","
+           << "\"blocked_cells\":" << res.blocked_cells << ","
            << "\"traversable_cells\":" << res.traversable_cells_count << ","
+           << "\"min_corridor_clearance_cm\":" << std::setprecision(1) << res.min_corridor_clearance_cm << ","
            << "\"min_cost_front\":" << static_cast<int>(res.min_cost_front) << ","
            << "\"grid_b64\":\"" << res.grid_b64 << "\""
            << "}";

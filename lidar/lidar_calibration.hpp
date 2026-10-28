@@ -21,11 +21,18 @@ struct LidarCalibration
     // Transformace z rámce LiDARu L do kalibrovaného rámce C (v metrech)
     Eigen::Matrix4f T_CL = Eigen::Matrix4f::Identity();
 
-    // Maska robota v rámce C (v metrech)
-    float mask_front_x = 0.0f;  // přední hrana (x_max + 5 cm)
-    float mask_x_min   = 0.0f;  // zadní hrana (typicky -0.70)
-    float mask_y_min   = 0.0f;
-    float mask_y_max   = 0.0f;
+    // Pevný geometrický obrys šasi robota v rámci C (v metrech od LiDARu):
+    // LiDAR je 22 cm před CoR, čumák 40 cm před CoR (+18 cm + 5 cm rezerva = +0.23 m),
+    // zadní hrana -0.70 m, šířka šasi 60 cm (±30 cm + 5 cm rezerva = ±0.35 m).
+    static constexpr float kDefaultMaskFrontX =  0.23f;
+    static constexpr float kDefaultMaskXMin   = -0.70f;
+    static constexpr float kDefaultMaskYMin   = -0.35f;
+    static constexpr float kDefaultMaskYMax   =  0.35f;
+
+    float mask_front_x = kDefaultMaskFrontX;
+    float mask_x_min   = kDefaultMaskXMin;
+    float mask_y_min   = kDefaultMaskYMin;
+    float mask_y_max   = kDefaultMaskYMax;
 };
 
 inline bool saveCalibration(const std::string &path, const LidarCalibration &c)
@@ -161,10 +168,11 @@ inline bool loadCalibration(const std::string &path, LidarCalibration &out)
     }
 
     out.T_CL         = T;
-    out.mask_front_x = mask_front_x;
-    out.mask_x_min   = mask_x_min;
-    out.mask_y_min   = mask_y_min;
-    out.mask_y_max   = mask_y_max;
+    // Použijeme pevné geometrické rozměry šasi robota z konfigurace
+    out.mask_front_x = LidarCalibration::kDefaultMaskFrontX;
+    out.mask_x_min   = LidarCalibration::kDefaultMaskXMin;
+    out.mask_y_min   = LidarCalibration::kDefaultMaskYMin;
+    out.mask_y_max   = LidarCalibration::kDefaultMaskYMax;
 
     std::cout << "[CALIBRATION] loaded from " << path << std::endl;
     return true;
@@ -803,49 +811,13 @@ public:
 
 
 
-        // 5) Detekce obrysu robota (z≥5 cm, r≤1 m)
-        const float r_max        = 0.7f;
-        const float z_robot_min  = 0.07f;
-
-        float x_robot_max = -std::numeric_limits<float>::infinity();
-        float y_robot_min =  std::numeric_limits<float>::infinity();
-        float y_robot_max = -std::numeric_limits<float>::infinity();
-
-        for (const auto &cloud : clouds) {
-            for (const auto &pt : cloud.points) {
-                Eigen::Vector4f p_L_h(pt.x, pt.y, pt.z, 1.0f);
-                Eigen::Vector4f p_C_h = T_CL * p_L_h;
-
-                const float x = p_C_h.x();
-                const float y = p_C_h.y();
-                const float z = p_C_h.z();
-
-                if (z < z_robot_min) continue;
-
-                const float r2 = x*x + y*y;
-                if (r2 > r_max * r_max) continue;
-
-                if (x > x_robot_max) x_robot_max = x;
-                if (y < y_robot_min) y_robot_min = y;
-                if (y > y_robot_max) y_robot_max = y;
-            }
-        }
-
-        if (!std::isfinite(x_robot_max) ||
-            !std::isfinite(y_robot_min) ||
-            !std::isfinite(y_robot_max)) {
-            std::cerr << "[CALIBRATE] no robot points detected" << std::endl;
-            return false;
-        }
-
-        const float safety_x = 0.05f;
-        const float safety_y = 0.05f;
-
+        // 5) Nastavení pevného geometrického obrysu šasi robota z konfigurace
+        // (eliminace falešné detekce okolních předmětů během kalibrace roviny země)
         out.T_CL         = T_CL;
-        out.mask_front_x = x_robot_max + safety_x;
-        out.mask_x_min   = -0.70f; // zadní hrana robota (konstanta)
-        out.mask_y_min   = y_robot_min - safety_y;
-        out.mask_y_max   = y_robot_max + safety_y;
+        out.mask_front_x = LidarCalibration::kDefaultMaskFrontX;
+        out.mask_x_min   = LidarCalibration::kDefaultMaskXMin;
+        out.mask_y_min   = LidarCalibration::kDefaultMaskYMin;
+        out.mask_y_max   = LidarCalibration::kDefaultMaskYMax;
 
         if (!file.empty()) {
             if (!saveCalibration(file, out)) {

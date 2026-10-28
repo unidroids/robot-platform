@@ -80,6 +80,7 @@ class LoggerService:
             "ipc:///tmp/robot-camera",
             "ipc:///tmp/robot-vision",
             "ipc:///tmp/robot-lidar",
+            "ipc:///tmp/robot-lidar-kolize",
             "ipc:///tmp/robot-drive",
             "ipc:///tmp/robot-gnss-dual",
             "ipc:///tmp/robot-gnss-gps",

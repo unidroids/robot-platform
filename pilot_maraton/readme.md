@@ -1,27 +1,31 @@
 # Služba PILOT-MARATON (Port 9105)
 
-Služba `pilot_maraton` zajišťuje autonomní řízení robota podle navigačních bodů (waypoints) pro soutěžní misi Maraton (cíl ujet 5 km za méně než hodinu), s budoucím zapojením antikolizního algoritmu kolizních kurzů z LiDARu a detekce krajnic z kamer.
-
-V této fázi vychází ze služby `pilot_robotour`, používá osvědčené řídicí jádro a slouží jako základ pro misi `mission_maraton`.
+Služba `pilot_maraton` zajišťuje autonomní řízení robota podle navigačních bodů (waypoints) pro soutěžní misi Maraton (cíl ujet 5 km za méně než hodinu), se zapojením kolizních kurzů ze služby `LIDAR-KOLIZE`, bezpečnostního dohledu OOW a fúzovaných pozičních dat.
 
 ## Architektura a komunikace
 
 ### 1. ZMQ Odběry (Subscriptions)
 * **`ipc:///tmp/robot-fusion`** (Topic: `SOLUTION`) – fúzovaná poloha a azimut.
-* **`ipc:///tmp/robot-lidar`** (Topic: `DISTANCE`) – antikolizní data z LiDARu (< 70 cm zastavení).
+* **`ipc:///tmp/robot-lidar-kolize`** (Topic: `COLLISIONS`) – primární antikolizní data (72 sektorů po $5^\circ$ v těle robota `distances_cm`, predikční diferenciál `delta_d_cms`, `min_ttc_s` a `min_ttc_angle_deg`).
+* **`ipc:///tmp/robot-lidar`** (Topic: `DISTANCE`) – záložní antikolizní vzdálenost z LiDARu.
 * **`ipc:///tmp/robot-oow`** (Topics: `STATUS`, `CMD`) – bezpečnostní dohled OOW.
 
-### 2. Odchozí TCP komunikace
+### 2. Logika řízení rychlosti a zastavení před překážkou
+* **Maximální rychlost:** až $2.0\text{ m/s}$ ($200\text{ cm/s}$, omezeno parametrem `START`) při volném prostoru v předním koridoru $\ge 6.0\text{ m}$ ($600\text{ cm}$).
+* **Minimální vzdálenost zastavení:** $0.7\text{ m}$ ($70\text{ cm}$) před překážkou.
+* **Pravidlo $\frac{2}{5}\,\text{TTC}$:** Robot omezuje rychlost tak, aby dokázal zastavit za $\frac{2}{5}\cdot\text{min\_ttc\_s}$ při predikovatelném brzdném zpomalení $2.0\text{ m/s}^2$ (a v nouzi dynamicky zvyšuje brzdné zpomalení až na $0.4g \approx 4.0\text{ m/s}^2$).
+
+### 3. Odchozí TCP komunikace
 * **DRIVE (`127.0.0.1:9003`)** – posílání povelů motorům (`DRIVE pwm ...`, `STOP`, `BREAK`).
 * **OOW Poller (`127.0.0.1:9030`)** – periodický heartbeat dotaz `OOW\n`.
 
-### 3. Příchozí TCP komunikace (Port 9105)
+### 4. Příchozí TCP komunikace (Port 9105)
 Služba naslouchá na portu **`9105`**:
 * `START [speed] [pwm] <json_trasa>` – spuštění autonomní jízdy po waypointové trase předané v JSON payloadu.
 * `STOP` – zastavení řízení (`STOPPED`).
 * `PAUSE` – dočasné pozastavení (`PAUSED`).
 * `RESUME` – obnovení jízdy (`RUNNING`).
-* `STATUS` – aktuální stav (waypoint index, souřadnice, azimut, kvalita fixu, překážky).
+* `STATUS` – aktuální stav (waypoint index, souřadnice, azimut, kvalita fixu, `obstacle_distance_cm`, `min_ttc_s`, `min_ttc_angle_deg`).
 * `PING` – vrací `PONG PILOT_MARATON`.
 * `EXIT` – uzavření klientského spojení (`BYE`).
 * `SHUTDOWN` – ukončení procesu služby.

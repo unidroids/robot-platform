@@ -27,12 +27,15 @@ public:
         std::uint32_t ring;
     };
 
+    // Pevný geometrický obrys šasi robota v kalibrovaném rámci LiDARu C [v metrech]:
+    // LiDAR je 22 cm před CoR, čumák 40 cm před CoR (+18 cm + 5 cm rezerva = +0.23 m),
+    // zadní hrana -0.70 m, šířka šasi 60 cm (±30 cm + 5 cm rezerva = ±0.35 m).
     struct Mask {
-        float front_x = 0.0f;
-        float x_min   = 0.0f;
-        float y_min   = 0.0f;
-        float y_max   = 0.0f;
-        bool  enabled = false;
+        float front_x =  0.23f;
+        float x_min   = -0.70f;
+        float y_min   = -0.35f;
+        float y_max   =  0.35f;
+        bool  enabled = true;
     };
 
     struct IncrementalResult {
@@ -150,11 +153,15 @@ private:
                    std::sin(th_y), 0,  std::cos(th_y), 0,
                                  0, 0,              0, 1;
 
+            // Rotace o 180° kolem osy X (shodně s kalibrací R_CL)
+            Eigen::Matrix4f Rx_pi = Eigen::Matrix4f::Identity();
+            Rx_pi(1,1) = -1.0f;
+            Rx_pi(2,2) = -1.0f;
+
             Eigen::Matrix4f Ms = Eigen::Matrix4f::Identity();
             Ms(0,0) = Ms(1,1) = Ms(2,2) = 100.0f;   // m → cm
 
-            Eigen::Matrix4f Tx = Eigen::Matrix4f::Identity();
-            Tx = Ms * Ry * Rz;
+            Eigen::Matrix4f Tx = Ms * Rx_pi * Ry * Rz;
             return Tx;
         }();
         return M;
@@ -174,9 +181,8 @@ private:
     bool ignoreBox(float x_cm, float y_cm) const
     {
         if (!mask_.enabled) {
-            // fallback původní fixní kvádr v cm
-            return (y_cm > -20.0f && y_cm <  20.0f &&
-                    x_cm <  20.0f && x_cm > -50.0f);
+            return (y_cm >= -35.0f && y_cm <=  35.0f &&
+                    x_cm <=  23.0f && x_cm >= -70.0f);
         }
 
         const float x = x_cm / 100.0f;  // zpět do metrů

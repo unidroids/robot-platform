@@ -201,6 +201,49 @@ class TestPilotMaratonLogic(unittest.TestCase):
             for c in expected_new_cols:
                 self.assertIn(c, cols)
 
+    def test_collisions_corridor_and_ttc_speed_regulation(self):
+        """Ověření výpočtu vzdálenosti v předním koridoru a brzdného pravidla 2/5 TTC."""
+        # 72 sektorů po 5°: přední polokoule 0..17 a 54..71 volná (2000 cm), zadní 18..53 slepá (-1)
+        distances = [2000 if (b < 18 or b >= 54) else -1 for b in range(72)]
+        delta_d = [0] * 72
+
+        self.service.update_collisions({
+            "timestamp": time.time(),
+            "heading": 45.0,
+            "min_ttc_s": 999.0,
+            "min_ttc_angle_deg": -1.0,
+            "distances_cm": distances,
+            "delta_d_cms": delta_d,
+        })
+        self.assertAlmostEqual(self.service._get_forward_corridor_distance_cm(), 2000.0)
+
+        # Volno >= 6 m (600 cm) a žádné TTC -> plná rychlost 200 cm/s (2.0 m/s)
+        v_lim, brk_step, reason = self.service._evaluate_collision_limits(200.0, 600.0)
+        self.assertAlmostEqual(v_lim, 200.0)
+        self.assertAlmostEqual(brk_step, 20.0)
+        self.assertEqual(reason, "")
+
+        # Překážka na 0.7 m (70 cm) -> okamžité zastavení (target_v = 0, nouzové brzdění 40.0)
+        v_lim, brk_step, reason = self.service._evaluate_collision_limits(200.0, 70.0)
+        self.assertAlmostEqual(v_lim, 0.0)
+        self.assertAlmostEqual(brk_step, 40.0)
+        self.assertTrue(len(reason) > 0)
+
+        # Kolizní kurz s min_ttc_s = 1.25 s -> 2/5 TTC = 0.5 s -> max rychlost při 2 m/s^2 je 1.0 m/s (100 cm/s)
+        self.service.current_speed = 200.0
+        self.service.update_collisions({
+            "timestamp": time.time(),
+            "heading": 45.0,
+            "min_ttc_s": 1.25,
+            "min_ttc_angle_deg": 5.0,
+            "distances_cm": distances,
+            "delta_d_cms": delta_d,
+        })
+        v_lim, brk_step, reason = self.service._evaluate_collision_limits(200.0, 800.0)
+        self.assertAlmostEqual(v_lim, 100.0)
+        # Ze 200 cm/s za 0.5 s vyžaduje deceleraci 400 cm/s^2 -> krok 40.0 (0.4g)
+        self.assertAlmostEqual(brk_step, 40.0)
+
 
 class TestPilotMaratonTCP(unittest.TestCase):
     """Integrační test TCP protokolu služby PILOT-MARATON."""

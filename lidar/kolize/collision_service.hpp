@@ -178,6 +178,7 @@ public:
            << "\"points_last_cycle\":" << points_last_cycle_.load() << ","
            << "\"min_clearance_cm\":" << std::fixed << std::setprecision(1) << min_clearance_cm_.load() << ","
            << "\"min_ttc_s\":" << std::setprecision(2) << min_ttc_s_.load() << ","
+           << "\"min_ttc_angle_deg\":" << std::setprecision(1) << min_ttc_angle_deg_.load() << ","
            << "\"heading_avg\":" << std::setprecision(1) << heading_avg_.load() << ","
            << "\"eval_duration_ms\":" << std::setprecision(2) << last_eval_duration_ms_.load() << ","
            << "\"waiting_reason\":\"" << waiting_reason_ << "\""
@@ -394,7 +395,8 @@ private:
 
                     h_start = last_heading_start_;
                     h_end   = latest_heading_;
-                    h_avg   = (h_start + h_end) * 0.5;
+                    double diff = std::fmod(h_end - h_start + 540.0, 360.0) - 180.0;
+                    h_avg   = std::fmod(h_start + diff * 0.5 + 360.0, 360.0);
                 }
 
                 // 3. Inkrementální načtení bodů z ring bufferu
@@ -437,6 +439,7 @@ private:
                 waiting_reason_ = "OK";
                 min_clearance_cm_.store(res.min_clearance_cm);
                 min_ttc_s_.store(res.min_ttc_s);
+                min_ttc_angle_deg_.store(res.min_ttc_angle_deg);
                 heading_avg_.store(res.heading_avg);
                 last_eval_duration_ms_.store(res.duration_ms);
 
@@ -529,6 +532,7 @@ private:
     std::atomic<size_t>   points_last_cycle_{0};
     std::atomic<float>    min_clearance_cm_{2000.0f};
     std::atomic<float>    min_ttc_s_{999.0f};
+    std::atomic<float>    min_ttc_angle_deg_{-1.0f};
     std::atomic<double>   heading_avg_{0.0};
     std::atomic<double>   last_eval_duration_ms_{0.0};
 

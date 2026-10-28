@@ -15,24 +15,11 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// Matematické jádro pro vyhodnocení kolizních kurzů v mřížce 12 pater × 36 sektorů
+// Matematické jádro pro vyhodnocení kolizních kurzů v mřížce 12 pater × 72 sektorů (po 5°)
 class CollisionEvaluator {
 public:
-    struct SectorOutput {
-        size_t sector_idx = 0;
-        float  azimuth_deg = 0.0f;
-
-        // Profil A: Průjezdnost (Clearance) - reálné minimum napříč patry (neinflační)
-        float  clearance_dist_cm = 2000.0f;
-        float  clearance_closing_speed_ms = 0.0f;
-        size_t clearance_floor_idx = 0;
-
-        // Profil B: Kolizní kurz (TTC) - vyhodnoceno s inflací válcem těla robota
-        float  ttc_sec = 999.0f;
-        float  threat_dist_cm = 2000.0f;
-        float  threat_closing_speed_ms = 0.0f;
-        size_t threat_floor_idx = 0;
-    };
+    static constexpr size_t kMaxFloors  = 12;
+    static constexpr size_t kMaxSectors = 72;
 
     struct EvaluationResult {
         double timestamp = 0.0;
@@ -44,8 +31,14 @@ public:
 
         float min_clearance_cm = 2000.0f;
         float min_ttc_s = 999.0f;
+        float min_ttc_angle_deg = -1.0f;
 
-        std::vector<SectorOutput> sectors;
+        // Výstupní pole v souřadnicích těla robota (72 sektorů po 5°, index 0 = 0° vpřed, rotace clockwise)
+        // Přední polokoule: indexy 0..17 (0°..90°) a 54..71 (270°..360°)
+        // Zadní slepá polokoule: indexy 18..53 (90°..270°) mají distances_cm = -1, delta_d_cms = 0
+        std::vector<int> distances_cm;
+        std::vector<int> delta_d_cms;
+
         std::string json_payload;
     };
 
@@ -56,10 +49,11 @@ public:
     }
 
     void reset() {
-        for (size_t f = 0; f < config_.num_floors; ++f) {
-            for (size_t s = 0; s < config_.num_sectors; ++s) {
+        for (size_t f = 0; f < kMaxFloors; ++f) {
+            for (size_t s = 0; s < kMaxSectors; ++s) {
                 grid_[f][s] = CellTrack{};
                 grid_[f][s].d_est = config_.max_range_cm;
+                grid_[f][s].theta_est = (static_cast<float>(s) + 0.5f) * config_.sector_angle_deg;
             }
         }
         consecutive_valid_frames_ = 0;
@@ -85,18 +79,21 @@ public:
             return false;
         }
 
-        // 2. Akumulace měření v mřížce 12 pater × 36 sektorů
-        float meas_d[12][36];
-        uint32_t meas_count[12][36];
+        // 2. Akumulace měření v globální (North-Up CW) mřížce 12 pater × 72 sektorů
+        float meas_d[kMaxFloors][kMaxSectors];
+        float meas_theta[kMaxFloors][kMaxSectors];
+        uint32_t meas_count[kMaxFloors][kMaxSectors];
 
         for (size_t f = 0; f < config_.num_floors; ++f) {
             for (size_t s = 0; s < config_.num_sectors; ++s) {
-                meas_d[f][s] = config_.max_range_cm;
+                meas_d[f][s]     = config_.max_range_cm;
+                meas_theta[f][s] = (static_cast<float>(s) + 0.5f) * config_.sector_angle_deg;
                 meas_count[f][s] = 0;
             }
         }
 
         const float rad2deg = 180.0f / static_cast<float>(M_PI);
+        const float deg2rad = static_cast<float>(M_PI) / 180.0f;
 
         for (const auto &p : samples) {
             // Kontrola výšky
@@ -118,27 +115,29 @@ public:
                 continue;
             }
 
-            // Lokální azimut v rovině robota
-            float local_deg = std::atan2(yr, xr) * rad2deg;
+            // Lokální azimut v rovině robota (clockwise: 0° = +X vpřed, 90° = -Y vpravo, 270° = +Y vlevo)
+            float local_cw_deg = std::atan2(-yr, xr) * rad2deg;
+            if (local_cw_deg < 0.0f) local_cw_deg += 360.0f;
 
-            // Globální azimut stabilizovaný na sever
-            float global_deg = std::fmod(local_deg + static_cast<float>(heading_avg) + 360.0f, 360.0f);
-            if (global_deg < 0.0f) global_deg += 360.0f;
+            // Globální azimut stabilizovaný na sever (clockwise: 0° = sever, 90° = východ)
+            float global_cw_deg = wrap360(local_cw_deg + static_cast<float>(heading_avg));
 
-            size_t s = static_cast<size_t>(global_deg / config_.sector_angle_deg) % config_.num_sectors;
+            size_t s = static_cast<size_t>(global_cw_deg / config_.sector_angle_deg) % config_.num_sectors;
 
             if (d < meas_d[f][s]) {
-                meas_d[f][s] = d;
+                meas_d[f][s]     = d;
+                meas_theta[f][s] = global_cw_deg;
             }
             meas_count[f][s]++;
         }
 
-        // 3. Dynamická filtrace Alfa-Beta a vertikální provázanost pater
+        // 3. Dynamická filtrace Alfa-Beta (vzdálenost + azimut) a vertikální provázanost pater
         for (size_t s = 0; s < config_.num_sectors; ++s) {
             for (size_t f = 0; f < config_.num_floors; ++f) {
                 auto &track = grid_[f][s];
                 bool has_meas = (meas_count[f][s] >= config_.min_points_per_cell);
-                float dm = meas_d[f][s];
+                float dm      = meas_d[f][s];
+                float thetam  = meas_theta[f][s];
 
                 float d_pred = track.active ? (track.d_est - track.v_est * config_.dt_sec) : config_.max_range_cm;
 
@@ -150,13 +149,15 @@ public:
                     if (f_down != f && meas_count[f_down][s] >= config_.min_points_per_cell) {
                         float cand_d = meas_d[f_down][s];
                         if (std::abs(cand_d - d_pred) < config_.max_track_jump_cm) {
-                            dm = cand_d;
+                            dm       = cand_d;
+                            thetam   = meas_theta[f_down][s];
                             has_meas = true;
                         }
                     } else if (f_up != f && meas_count[f_up][s] >= config_.min_points_per_cell) {
                         float cand_d = meas_d[f_up][s];
                         if (std::abs(cand_d - d_pred) < config_.max_track_jump_cm) {
-                            dm = cand_d;
+                            dm       = cand_d;
+                            thetam   = meas_theta[f_up][s];
                             has_meas = true;
                         }
                     }
@@ -165,16 +166,26 @@ public:
                 if (has_meas) {
                     if (!track.active || std::abs(dm - d_pred) > config_.max_track_jump_cm) {
                         // Nový track
-                        track.d_est = dm;
-                        track.v_est = 0.0f;
-                        track.hits  = 1;
+                        track.d_est         = dm;
+                        track.v_est         = 0.0f;
+                        track.theta_est     = thetam;
+                        track.omega_est     = 0.0f;
+                        track.hits          = 1;
                         track.missed_frames = 0;
-                        track.active = true;
+                        track.active        = true;
                     } else {
-                        // Inkrementální aktualizace alfa-beta
+                        // Inkrementální aktualizace alfa-beta pro vzdálenost
                         float residual = d_pred - dm;
-                        track.d_est = d_pred - config_.alpha * residual;
+                        track.d_est = std::clamp(d_pred - config_.alpha * residual,
+                                                 config_.min_valid_dist_cm, config_.max_range_cm);
                         track.v_est = track.v_est + (config_.beta / config_.dt_sec) * residual;
+
+                        // Inkrementální aktualizace alfa-beta pro globální úhel (sledování míjení / CBDR)
+                        float theta_pred = wrap360(track.theta_est + track.omega_est * config_.dt_sec);
+                        float theta_err  = wrap180(thetam - theta_pred);
+                        track.theta_est  = wrap360(theta_pred + config_.alpha_theta * theta_err);
+                        track.omega_est  = track.omega_est + (config_.beta_theta / config_.dt_sec) * theta_err;
+
                         track.hits++;
                         track.missed_frames = 0;
                         track.active = true;
@@ -183,12 +194,14 @@ public:
                     if (track.active) {
                         track.missed_frames++;
                         if (track.missed_frames > 2) {
-                            track.active = false;
-                            track.d_est = config_.max_range_cm;
-                            track.v_est = 0.0f;
-                            track.hits  = 0;
+                            track.active    = false;
+                            track.d_est     = config_.max_range_cm;
+                            track.v_est     = 0.0f;
+                            track.omega_est = 0.0f;
+                            track.hits      = 0;
                         } else {
-                            track.d_est = d_pred; // setrvačnost
+                            track.d_est     = std::clamp(d_pred, config_.min_valid_dist_cm, config_.max_range_cm);
+                            track.theta_est = wrap360(track.theta_est + track.omega_est * config_.dt_sec);
                         }
                     }
                 }
@@ -201,102 +214,130 @@ public:
             return false;
         }
 
-        // 4. Výpočet inflace a TTC pro každý sektor
-        float ttc_min[36];
-        float threat_d[36];
-        float threat_v[36];
-        size_t threat_floor[36];
-
-        for (size_t s = 0; s < config_.num_sectors; ++s) {
-            ttc_min[s]      = 999.0f;
-            threat_d[s]     = config_.max_range_cm;
-            threat_v[s]     = 0.0f;
-            threat_floor[s] = 0;
-        }
+        // 4. Vyhodnocení kolizního kurzu (CBDR) v přední polokouli robota (-90° až +90°, tj. 270°..90° CW)
+        float global_min_ttc       = 999.0f;
+        float global_min_ttc_angle = -1.0f;
 
         for (size_t f = 0; f < config_.num_floors; ++f) {
             for (size_t s = 0; s < config_.num_sectors; ++s) {
                 const auto &track = grid_[f][s];
-                // Uvažujeme jen aktivní objekty, které se přibližují (v > 5 cm/s = 0.05 m/s)
-                if (!track.active || track.d_est >= config_.max_range_cm || track.v_est <= 5.0f) {
+                // Uvažujeme jen potvrzené aktivní objekty, které se přibližují (v > 5 cm/s = 0.05 m/s)
+                if (!track.active ||
+                    track.hits < config_.min_hits_for_ttc ||
+                    track.d_est >= config_.max_range_cm ||
+                    track.v_est <= 5.0f) {
                     continue;
                 }
 
-                float v_ms = track.v_est / 100.0f;
-                float d_m  = track.d_est / 100.0f;
-                float ttc  = d_m / v_ms;
+                // Směr hrozby v souřadnicích těla robota (0° = vpřed, CW)
+                float body_deg = wrap360(track.theta_est - static_cast<float>(heading_avg));
 
-                // Úhlové rozšíření kuželu (inflace o poloměr robota R = 37.5 cm)
-                float ratio = std::min(1.0f, config_.robot_radius_cm / track.d_est);
-                float delta_rad = std::asin(ratio);
-                float delta_deg = delta_rad * rad2deg;
-                int k = static_cast<int>(std::ceil(delta_deg / config_.sector_angle_deg));
+                // Omezení na přední polokouli (-90° až +90°, tj. [0°..90°] a [270°..360°))
+                if (body_deg > 90.0f && body_deg < 270.0f) {
+                    continue;
+                }
 
-                for (int off = -k; off <= k; ++off) {
-                    int target_s = (static_cast<int>(s) + off + static_cast<int>(config_.num_sectors)) % static_cast<int>(config_.num_sectors);
-                    if (ttc < ttc_min[target_s]) {
-                        ttc_min[target_s]      = ttc;
-                        threat_d[target_s]     = track.d_est;
-                        threat_v[target_s]     = v_ms;
-                        threat_floor[target_s] = f;
+                // Princip CBDR (Constant Bearing, Decreasing Range):
+                // Ze změny azimutu omega_est spočítáme tečnou rychlost v_t a nejbližší vzdálenost minutí (CPA).
+                float v_r_cms = track.v_est; // > 0 (cm/s)
+                float v_t_cms = track.d_est * std::abs(track.omega_est) * deg2rad;
+                float v_rel   = std::sqrt(v_r_cms * v_r_cms + v_t_cms * v_t_cms);
+                float d_cpa   = (v_rel > 1e-3f) ? (track.d_est * (v_t_cms / v_rel)) : 0.0f;
+
+                // Pokud trajektorie míjí válec těla robota (R = 37.5 cm), nejde o kolizní kurz (např. strom vedle cesty)
+                if (d_cpa > config_.robot_radius_cm) {
+                    continue;
+                }
+
+                float ttc = track.d_est / v_r_cms; // [s] (cm / (cm/s))
+                if (ttc < global_min_ttc) {
+                    global_min_ttc       = ttc;
+                    global_min_ttc_angle = body_deg;
+                }
+            }
+        }
+
+        // 5. Syntéza výstupních polí v těle robota (72 sektorů po 5°, 0 = vpřed, rotace clockwise)
+        // Nejprve v globální mřížce najdeme aktuální d_min[72] a predikované d_pred_1s[72] (včetně bočního posuvu)
+        float glob_d_now[kMaxSectors];
+        float glob_d_pred1s[kMaxSectors];
+
+        for (size_t s = 0; s < config_.num_sectors; ++s) {
+            glob_d_now[s]    = config_.max_range_cm;
+            glob_d_pred1s[s] = config_.max_range_cm;
+        }
+
+        for (size_t s = 0; s < config_.num_sectors; ++s) {
+            for (size_t f = 0; f < config_.num_floors; ++f) {
+                const auto &track = grid_[f][s];
+                if (!track.active) continue;
+
+                if (track.d_est < glob_d_now[s]) {
+                    glob_d_now[s] = track.d_est;
+                }
+
+                // Predikce polohy za 1.0 s (radiálně i úhlově)
+                float d_1s = std::clamp(track.d_est - track.v_est * 1.0f,
+                                        config_.min_valid_dist_cm, config_.max_range_cm);
+                if (d_1s < glob_d_pred1s[s]) {
+                    glob_d_pred1s[s] = d_1s;
+                }
+
+                if (track.hits >= 2 && std::abs(track.omega_est) > 1.0f) {
+                    float theta_1s = wrap360(track.theta_est + track.omega_est * 1.0f);
+                    size_t s_1s = static_cast<size_t>(theta_1s / config_.sector_angle_deg) % config_.num_sectors;
+                    if (d_1s < glob_d_pred1s[s_1s]) {
+                        glob_d_pred1s[s_1s] = d_1s;
                     }
                 }
             }
         }
 
-        // 5. Syntéza Profilu A (Clearance) a Profilu B (Kolize) pro 36 sektorů
-        out_result.sectors.resize(config_.num_sectors);
+        out_result.distances_cm.assign(config_.num_sectors, -1);
+        out_result.delta_d_cms.assign(config_.num_sectors, 0);
         float global_min_clearance = config_.max_range_cm;
-        float global_min_ttc = 999.0f;
 
-        for (size_t s = 0; s < config_.num_sectors; ++s) {
-            auto &sec = out_result.sectors[s];
-            sec.sector_idx  = s;
-            sec.azimuth_deg = static_cast<float>(s) * config_.sector_angle_deg;
-
-            // Profil A: Clearance (průjezdnost)
-            float min_d = config_.max_range_cm;
-            float min_v = 0.0f;
-            size_t min_f = 0;
-
-            for (size_t f = 0; f < config_.num_floors; ++f) {
-                if (grid_[f][s].active && grid_[f][s].d_est < min_d) {
-                    min_d = grid_[f][s].d_est;
-                    min_v = grid_[f][s].v_est / 100.0f;
-                    min_f = f;
-                }
+        // Přemapování z globální soustavy (North-Up CW) do těla robota (Body-Up CW)
+        // Sektor b = 0 odpovídá [0°, 5°) vpřed, b = 17 je [85°, 90°) vpravo,
+        // b = 18..53 je zadní slepá polokoule [90°, 270°) -> hodnota -1,
+        // b = 54..71 je levá přední čtvrtina [270°, 360°).
+        for (size_t b = 0; b < config_.num_sectors; ++b) {
+            if (b >= 18 && b < 54) {
+                out_result.distances_cm[b] = -1;
+                out_result.delta_d_cms[b]  = 0;
+                continue;
             }
 
-            sec.clearance_dist_cm          = min_d;
-            sec.clearance_closing_speed_ms = min_v;
-            sec.clearance_floor_idx        = min_f;
+            float body_center_deg = (static_cast<float>(b) + 0.5f) * config_.sector_angle_deg;
+            float glob_deg        = wrap360(body_center_deg + static_cast<float>(heading_avg));
+            size_t glob_s         = static_cast<size_t>(glob_deg / config_.sector_angle_deg) % config_.num_sectors;
 
-            if (min_d < global_min_clearance) {
-                global_min_clearance = min_d;
-            }
+            float d_now  = glob_d_now[glob_s];
+            float d_pred = glob_d_pred1s[glob_s];
 
-            // Profil B: Kolize (TTC)
-            sec.ttc_sec                 = ttc_min[s];
-            sec.threat_dist_cm          = threat_d[s];
-            sec.threat_closing_speed_ms = threat_v[s];
-            sec.threat_floor_idx        = threat_floor[s];
+            int d_now_int  = static_cast<int>(std::lround(d_now));
+            int d_pred_int = static_cast<int>(std::lround(d_pred));
 
-            if (ttc_min[s] < global_min_ttc) {
-                global_min_ttc = ttc_min[s];
+            out_result.distances_cm[b] = d_now_int;
+            out_result.delta_d_cms[b]  = d_pred_int - d_now_int;
+
+            if (d_now < global_min_clearance) {
+                global_min_clearance = d_now;
             }
         }
 
         auto end_time = std::chrono::steady_clock::now();
         double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
-        out_result.timestamp        = timestamp;
-        out_result.heading_start    = heading_start;
-        out_result.heading_end      = heading_end;
-        out_result.heading_avg      = heading_avg;
-        out_result.points_count     = samples.size();
-        out_result.duration_ms      = duration_ms;
-        out_result.min_clearance_cm = global_min_clearance;
-        out_result.min_ttc_s        = global_min_ttc;
+        out_result.timestamp         = timestamp;
+        out_result.heading_start     = heading_start;
+        out_result.heading_end       = heading_end;
+        out_result.heading_avg       = heading_avg;
+        out_result.points_count      = samples.size();
+        out_result.duration_ms       = duration_ms;
+        out_result.min_clearance_cm  = global_min_clearance;
+        out_result.min_ttc_s         = global_min_ttc;
+        out_result.min_ttc_angle_deg = global_min_ttc_angle;
 
         // 6. Generování výstupního JSONu
         out_result.json_payload = buildJsonPayload(out_result);
@@ -308,48 +349,50 @@ private:
     struct CellTrack {
         float d_est = 2000.0f;      // Vyhlazená vzdálenost [cm]
         float v_est = 0.0f;         // Rychlost přibližování [cm/s] (kladná = přibližování)
+        float theta_est = 0.0f;     // Vyhlazený globální azimut [deg CW]
+        float omega_est = 0.0f;     // Úhlová rychlost posuvu [deg/s CW]
         uint32_t hits = 0;          // Počet navazujících detekcí
         uint32_t missed_frames = 0; // Počet po sobě chybějících měření
         bool active = false;
     };
 
+    static float wrap360(float deg) {
+        float r = std::fmod(deg, 360.0f);
+        if (r < 0.0f) r += 360.0f;
+        return r;
+    }
+
+    static float wrap180(float deg) {
+        float r = std::fmod(deg + 180.0f, 360.0f);
+        if (r < 0.0f) r += 360.0f;
+        return r - 180.0f;
+    }
+
     std::string buildJsonPayload(const EvaluationResult &res) const {
         std::ostringstream ss;
-        ss << std::fixed << std::setprecision(2);
-
         ss << "{"
-           << "\"timestamp\":" << std::setprecision(3) << res.timestamp << ","
-           << "\"heading_start\":" << std::setprecision(1) << res.heading_start << ","
-           << "\"heading_end\":" << res.heading_end << ","
-           << "\"heading_avg\":" << res.heading_avg << ","
-           << "\"points_count\":" << res.points_count << ","
-           << "\"eval_duration_ms\":" << std::setprecision(2) << res.duration_ms << ","
-           << "\"sectors\":[";
+           << "\"timestamp\":" << std::fixed << std::setprecision(3) << res.timestamp << ","
+           << "\"heading\":" << std::setprecision(1) << res.heading_avg << ","
+           << "\"min_ttc_s\":" << std::setprecision(2) << res.min_ttc_s << ","
+           << "\"min_ttc_angle_deg\":" << std::setprecision(1) << res.min_ttc_angle_deg << ","
+           << "\"distances_cm\":[";
 
-        for (size_t i = 0; i < res.sectors.size(); ++i) {
-            const auto &s = res.sectors[i];
+        for (size_t i = 0; i < res.distances_cm.size(); ++i) {
             if (i > 0) ss << ",";
-            ss << "{"
-               << "\"sector_idx\":" << s.sector_idx << ","
-               << "\"azimuth_deg\":" << s.azimuth_deg << ","
-               << "\"clearance\":{"
-               << "\"distance_cm\":" << s.clearance_dist_cm << ","
-               << "\"closing_speed_ms\":" << s.clearance_closing_speed_ms << ","
-               << "\"floor_idx\":" << s.clearance_floor_idx
-               << "},"
-               << "\"collision\":{"
-               << "\"ttc_sec\":" << s.ttc_sec << ","
-               << "\"threat_distance_cm\":" << s.threat_dist_cm << ","
-               << "\"closing_speed_ms\":" << s.threat_closing_speed_ms << ","
-               << "\"floor_idx\":" << s.threat_floor_idx
-               << "}"
-               << "}";
+            ss << res.distances_cm[i];
         }
+
+        ss << "],\"delta_d_cms\":[";
+        for (size_t i = 0; i < res.delta_d_cms.size(); ++i) {
+            if (i > 0) ss << ",";
+            ss << res.delta_d_cms[i];
+        }
+
         ss << "]}";
         return ss.str();
     }
 
     CollisionConfig config_;
-    CellTrack grid_[12][36];
+    CellTrack grid_[kMaxFloors][kMaxSectors];
     uint32_t consecutive_valid_frames_{0};
 };

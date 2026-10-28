@@ -20,7 +20,11 @@ except (ImportError, ValueError):
     from geo_utils import rrp_to_nose
 
 
-FRONT_OFFSET_M = 0.40  # Předsazení čumáku robota před středem otáčení (RRP) v metrech
+FRONT_OFFSET_M = 0.40      # Předsazení čumáku robota před středem otáčení (RRP) v metrech
+ROBOT_RADIUS_CM = 37.5     # Poloměr válce těla robota (šířka 60 cm + 2x 7.5 cm rezerva = 75 cm)
+STOP_DISTANCE_CM = 70.0    # Minimální vzdálenost zastavení před překážkou (0.7 m)
+FREE_DISTANCE_CM = 600.0   # Vzdálenost volného prostoru pro plnou rychlost 2.0 m/s (6.0 m)
+ABS_MAX_SPEED_CMS = 200.0  # Absolutní maximální rychlost robota (2.0 m/s = 200 cm/s)
 
 
 class MaratonPilotService:
@@ -39,9 +43,11 @@ class MaratonPilotService:
         self.max_speed = 170
         self.max_pwm = 240
         
-        # Limity zrychlení (v jednotkách rychlosti za iteraci, tedy per 0.1s)
-        self.max_fwd_accel_step = 20.0
-        self.max_brk_accel_step = 40.0
+        # Limity zrychlení (v jednotkách rychlosti cm/s za iteraci, tedy per 0.1s)
+        self.max_fwd_accel_step = 20.0       # 2.0 m/s^2 vpřed
+        self.nominal_brk_accel_step = 20.0   # 2.0 m/s^2 predikovatelné brzdění
+        self.max_brk_accel_step = 40.0       # 4.0 m/s^2 (0.4g) nouzové brzdění
+        self.active_brk_accel_step = 20.0
         self.max_ang_accel_step = 30.0
         
         # Odstředivé (boční) zrychlení v m/s^2 a rozchod kol v mm
@@ -65,6 +71,10 @@ class MaratonPilotService:
         self.fusion_data = None
         self.lidar_distance = -1.0
         self.last_lidar_time = 0.0
+        self.collision_data = None
+        self.last_collision_time = 0.0
+        self.min_ttc_s = 999.0
+        self.min_ttc_angle_deg = -1.0
         
         # OOW state
         self.oow_tcp_ok = False
@@ -90,7 +100,7 @@ class MaratonPilotService:
             return False, f"ERR: {e}"
 
         print(f"[PilotMaraton] START: max_speed={max_speed}, max_pwm={max_pwm}, waypoints={len(self.path_tracker.waypoints)}")
-        self.max_speed = max_speed
+        self.max_speed = min(float(max_speed), ABS_MAX_SPEED_CMS)
         self.max_pwm = max_pwm
         
         # Reset speeds
@@ -203,9 +213,13 @@ class MaratonPilotService:
             else:
                 actual_speed_ms = round(raw_fusion_spd, 2)
 
-        # LiDAR obstacle distance
-        lidar_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-        obstacle_distance_cm = round(float(self.lidar_distance), 1) if lidar_active else -1.0
+        # LiDAR obstacle distance & TTC (primárně LIDAR-KOLIZE, záložně LIDAR DISTANCE)
+        collisions_active = (time.time() - self.last_collision_time) < 2.0 and self.collision_data is not None
+        fallback_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+        lidar_active = collisions_active or fallback_active
+        obstacle_distance_cm = round(float(self._get_effective_obstacle_distance_cm()), 1) if lidar_active else -1.0
+        min_ttc_s = round(float(self.min_ttc_s), 2) if collisions_active else 999.0
+        min_ttc_angle_deg = round(float(self.min_ttc_angle_deg), 1) if collisions_active else -1.0
 
         status_dict = {
             "state": self.state,
@@ -215,6 +229,8 @@ class MaratonPilotService:
             "wp_total": wp_total,
             "distance_to_goal_m": dist,
             "obstacle_distance_cm": obstacle_distance_cm,
+            "min_ttc_s": min_ttc_s,
+            "min_ttc_angle_deg": min_ttc_angle_deg,
             "lat": 0.0,
             "lon": 0.0,
             "heading": 0.0,
@@ -253,6 +269,98 @@ class MaratonPilotService:
     def update_lidar(self, data):
         self.lidar_distance = data.get("distance", -1.0)
         self.last_lidar_time = time.time()
+
+    def update_collisions(self, data):
+        self.collision_data = data
+        self.last_collision_time = time.time()
+        self.min_ttc_s = float(data.get("min_ttc_s", 999.0))
+        self.min_ttc_angle_deg = float(data.get("min_ttc_angle_deg", -1.0))
+
+    def _get_forward_corridor_distance_cm(self) -> float:
+        """
+        Z 72 sektorů (po 5°, 0 = vpřed CW) v collision_data vrátí nejbližší
+        vzdálenost překážky zasahující do přímého jízdního koridoru robota (šířka 75 cm).
+        """
+        if not self.collision_data:
+            return -1.0
+        distances = self.collision_data.get("distances_cm")
+        if not distances or len(distances) != 72:
+            return -1.0
+
+        min_d = 2000.0
+        found = False
+        for b in list(range(0, 18)) + list(range(54, 72)):
+            d = float(distances[b])
+            if d < 0:
+                continue
+            found = True
+            angle_deg = (b + 0.5) * 5.0 if b < 18 else (72 - b - 0.5) * 5.0
+            lateral_cm = d * math.sin(math.radians(angle_deg))
+            if b in (0, 71) or lateral_cm <= ROBOT_RADIUS_CM:
+                if d < min_d:
+                    min_d = d
+        return min_d if found else -1.0
+
+    def _get_effective_obstacle_distance_cm(self) -> float:
+        """Vrátí efektivní vzdálenost překážky před robotem (primárně z COLLISIONS, záložně z DISTANCE)."""
+        now = time.time()
+        collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
+        fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+
+        candidates = []
+        if collisions_active:
+            corr_d = self._get_forward_corridor_distance_cm()
+            if corr_d >= 0.0:
+                candidates.append(corr_d)
+        if fallback_active:
+            candidates.append(float(self.lidar_distance))
+
+        return min(candidates) if candidates else -1.0
+
+    def _evaluate_collision_limits(self, base_target_v: float, obstacle_dist_cm: float) -> tuple[float, float, str]:
+        """
+        Vypočítá omezení rychlosti a brzdné zrychlení podle vzdálenosti překážky a pravidla 2/5 TTC:
+        - Zastavení na minimální vzdálenosti 0.7 m (70 cm).
+        - Plná rychlost (max 2.0 m/s = 200 cm/s) při volném prostoru >= 6.0 m (600 cm).
+        - Robot musí být schopen zastavit za 2/5 * min_ttc_s (predikovatelné brzdění 2 m/s^2, nouzové až 4 m/s^2).
+        Vrací: (target_v_cms, brk_accel_step, status_reason_if_stopped)
+        """
+        target_v = min(float(base_target_v), ABS_MAX_SPEED_CMS)
+        brk_step = self.nominal_brk_accel_step
+        stop_reason = ""
+
+        # 1. Omezení podle vzdálenosti v předním koridoru (0.7 m stop, 6.0 m plná rychlost 2 m/s)
+        if 0.0 < obstacle_dist_cm <= STOP_DISTANCE_CM:
+            target_v = 0.0
+            brk_step = self.max_brk_accel_step
+            stop_reason = f"Překážka před robotem ({obstacle_dist_cm:.0f} cm <= {STOP_DISTANCE_CM:.0f} cm)"
+        elif STOP_DISTANCE_CM < obstacle_dist_cm < FREE_DISTANCE_CM:
+            v_dist_limit = ABS_MAX_SPEED_CMS * ((obstacle_dist_cm - STOP_DISTANCE_CM) / (FREE_DISTANCE_CM - STOP_DISTANCE_CM))
+            target_v = min(target_v, v_dist_limit)
+
+        # 2. Omezení podle kolizního kurzu (pravidlo zastavení za 2/5 TTC)
+        collisions_active = (time.time() - self.last_collision_time) < 2.0 and self.collision_data is not None
+        if collisions_active and 0.0 <= self.min_ttc_s < 900.0:
+            t_stop_allowed = 0.4 * self.min_ttc_s  # 2/5 TTC [s]
+            # Max rychlost při nominálním brzdění 2.0 m/s^2 (200 cm/s^2): v = a_nom * (2/5 * TTC) = 80 * TTC [cm/s]
+            v_ttc_limit = 200.0 * t_stop_allowed
+            if self.min_ttc_s <= 0.30 or v_ttc_limit < 10.0:
+                v_ttc_limit = 0.0
+                if not stop_reason:
+                    stop_reason = f"Kolizní kurz (TTC {self.min_ttc_s:.2f} s, úhel {self.min_ttc_angle_deg:.0f}°)"
+            target_v = min(target_v, v_ttc_limit)
+
+            # Dynamické přizpůsobení brzdné decelerace (mezi 2.0 m/s^2 a nouzovými 4.0 m/s^2 = 0.4g)
+            ref_speed = max(float(self.current_speed), float(self.last_v))
+            if ref_speed > target_v:
+                if t_stop_allowed <= 0.05:
+                    brk_step = self.max_brk_accel_step
+                else:
+                    # Požadovaný krok za 0.1 s pro zastavení ze stávající rychlosti za 2/5 TTC
+                    req_step = ref_speed / (t_stop_allowed * 10.0)
+                    brk_step = min(self.max_brk_accel_step, max(self.nominal_brk_accel_step, req_step))
+
+        return target_v, brk_step, stop_reason
         
     def update_oow_zmq(self, msg):
         print(f"[PilotMaraton] OOW ZMQ Event: {msg}")
@@ -285,6 +393,7 @@ class MaratonPilotService:
         try:
             sub.connect("ipc:///tmp/robot-fusion")
             sub.connect("ipc:///tmp/robot-lidar")
+            sub.connect("ipc:///tmp/robot-lidar-kolize")
             sub.connect("ipc:///tmp/robot-oow")
             sub.setsockopt_string(zmq.SUBSCRIBE, "")
             connected = True
@@ -302,6 +411,8 @@ class MaratonPilotService:
                         self.update_fusion(json.loads(payload))
                     elif topic == "DISTANCE":
                         self.update_lidar(json.loads(payload))
+                    elif topic == "COLLISIONS":
+                        self.update_collisions(json.loads(payload))
                     elif topic in ["STATUS", "CMD"]:
                         self.update_oow_zmq(payload)
                     else:
@@ -358,11 +469,12 @@ class MaratonPilotService:
         w_target = (target_left - target_right) / 2.0
 
         # Dopředné/brzdné zrychlení (změna V)
+        brk_limit = getattr(self, "active_brk_accel_step", self.max_brk_accel_step)
         v_diff = v_target - self.last_v
         if v_diff > self.max_fwd_accel_step:
             v_out = self.last_v + self.max_fwd_accel_step
-        elif v_diff < -self.max_brk_accel_step:
-            v_out = self.last_v - self.max_brk_accel_step
+        elif v_diff < -brk_limit:
+            v_out = self.last_v - brk_limit
         else:
             v_out = v_target
 
@@ -410,19 +522,25 @@ class MaratonPilotService:
                 heading = float(self.fusion_data.get("heading", 0.0))
                 nose_lat, nose_lon = rrp_to_nose(lat, lon, heading, FRONT_OFFSET_M)
 
-            lidar_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-            current_lidar = round(float(self.lidar_distance), 1) if lidar_active else -1.0
+            now_ts = time.time()
+            collisions_active = (now_ts - self.last_collision_time) < 2.0 and self.collision_data is not None
+            fallback_active = (now_ts - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+            lidar_active = collisions_active or fallback_active
+            eff_dist = self._get_effective_obstacle_distance_cm()
+            current_lidar = round(float(eff_dist), 1) if (lidar_active and eff_dist >= 0.0) else -1.0
 
             if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
                 target_v = self.max_speed if self.state == "RUNNING" else 0.0
+                self.active_brk_accel_step = self.nominal_brk_accel_step
 
                 # 1. Kontrola LiDARu - bez platných dat robot nesmí jet
-                if not lidar_active:
+                if not lidar_active or current_lidar < 0.0:
                     target_v = 0.0
+                    self.active_brk_accel_step = self.max_brk_accel_step
                     target_left, target_right = 0, 0
                     if self.state == "RUNNING":
                         self.source = "LIDAR"
-                        if self.last_lidar_time == 0.0:
+                        if self.last_lidar_time == 0.0 and self.last_collision_time == 0.0:
                             self.status_info = "Čekání na data z LiDARu"
                         else:
                             self.status_info = "Výpadek dat z LiDARu (timeout > 2s)"
@@ -481,13 +599,17 @@ class MaratonPilotService:
                                 if dist < slowdown_dist:
                                     target_v = v_waypoint + (self.max_speed - v_waypoint) * (dist / slowdown_dist)
 
-                            # Kontrola antikolize LiDARu (< 70 cm)
-                            if 0 < current_lidar < 70.0:
-                                target_v = 0.0
+                            # Antikolizní omezení rychlosti a zastavení (vzdálenost 0.7 m..6.0 m + pravidlo 2/5 TTC)
+                            if self.state == "RUNNING":
+                                target_v, brk_step, stop_reason = self._evaluate_collision_limits(target_v, current_lidar)
+                                self.active_brk_accel_step = brk_step
+                            else:
+                                stop_reason = ""
+
+                            if target_v <= 0.0 and self.state == "RUNNING":
                                 target_left, target_right = 0, 0
-                                if self.state == "RUNNING":
-                                    self.source = "LIDAR"
-                                    self.status_info = f"Překážka před robotem ({current_lidar:.0f} cm)"
+                                self.source = "LIDAR"
+                                self.status_info = stop_reason if stop_reason else f"Překážka před robotem ({current_lidar:.0f} cm)"
                             else:
                                 if self.state == "RUNNING" and self.source in ["LIDAR", "GPS", "USER"]:
                                     self.source = "NAV"
@@ -498,7 +620,7 @@ class MaratonPilotService:
                 if self.current_speed < target_v:
                     self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
                 elif self.current_speed > target_v:
-                    self.current_speed = max(target_v, self.current_speed - self.max_brk_accel_step)
+                    self.current_speed = max(target_v, self.current_speed - self.active_brk_accel_step)
 
                 # Fyzické limity zrychlení a odeslání do motorů
                 actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)

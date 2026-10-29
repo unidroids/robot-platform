@@ -53,8 +53,15 @@ Služba naslouchá na TCP portu `9033` (výchozí bind `127.0.0.1:9033`).
 6. **Krok 13 až 16**: Výpočet vzdušné vzdálenosti k cíli, potvrzení cíle uživatelem a spuštění `MAPS START`.
 7. **Krok 17 až 17.3**: Volání `MAPS FIND_ROUTE <start> <cíl>`, kontrola napojení na komunikaci, zobrazení délky trasy.
 8. **Krok 18**: Spuštění LiDARu a jeho percepčních profilů (`LIDAR START`, `LIDAR-COLLISIONS START`, `LIDAR-TRAVERSABILITY START`), spuštění záznamu ze stereo kamer (`CAMERA-STEREO START` – čistě pro účely logování, neblokující při selhání `START`), zapnutí motorů `DRIVE ON`, předání JSON trasy do `PILOT-MARATON START <json>` (port 9105), zvuk `barking` + oranžové blikání displeje.
-9. **Kroky 19 až 23**: Monitorovací smyčka jízdy (perioda 0.5s):
-    - **`RUNNING`**: Zobrazení aktuálního waypointu, vzdálenosti a rychlosti na terminálu, tlačítka *Pause* a *Stop*.
+9. **Kroky 19 až 23**: Monitorovací smyčka jízdy (perioda 0.5s + okamžité ZMQ notifikace z `ipc:///tmp/robot-pilot-maraton` topic `STATE`):
+    - **`RUNNING`**: Zobrazení aktuálního waypointu, vzdálenosti, rychlosti a autonomního podstavu pilota (`nav_state`) na terminálu (vždy se zachováním tlačítek *Pause* a *Stop*):
+      - `CRUISING` – *Maraton - Jízda*
+      - `OBSTACLE` – *Maraton - Překážka!* (zpomalování / zastavování před 3D překážkou)
+      - `FOLLOWING` – *Maraton - Sledování chodce* (plynulé srovnání rychlosti za chodcem)
+      - `WAITING_CLEARANCE` – *Maraton - Čeká na uvolnění* (čekání 5 s až 60 s u statické/pohybující se překážky, doprovázené tichým upozorněním `SOUND notification` + oranžové `BLINK`)
+      - `AVOIDING` – *Maraton - Objíždění překážky* (včetně směru a velikosti vybočení v koridoru)
+      - `OVERTAKING` – *Maraton - Předjíždění* (předjíždění pomalejšího chodce)
+      - `NO_PATH` – *Maraton - Není průjezdná cesta!* (čekání na uvolnění zablokovaného koridoru, klidné opakování zvukového upozornění `SOUND notification` jednou za `60 s`)
     - **`PAUSED`**: Pozastavení pilota, tlačítka *Pokračovat* (`RESUME`) a *Stop*.
     - **`STOPPED`**: Zvuk `game-over` + červené blikání, hlášení důvodu, tlačítko *Rozumím* (`acknowledge`).
     - **`FINISHED`**: Zvuk `meow` + zelené blikání (*"Jsme v cíli!"*), tlačítko *Rozumím* (`acknowledge`).

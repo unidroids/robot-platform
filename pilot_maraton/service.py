@@ -14,11 +14,13 @@ try:
     from .drive_client import DriveClient
     from .data_logger import DataLogger
     from .geo_utils import rrp_to_nose
+    from .corridor_planner import RouteCorridor, ObstacleAvoidanceController
 except (ImportError, ValueError):
     from path_tracker import PathTracker
     from drive_client import DriveClient
     from data_logger import DataLogger
     from geo_utils import rrp_to_nose
+    from corridor_planner import RouteCorridor, ObstacleAvoidanceController
 
 
 FRONT_OFFSET_M = 0.40      # Předsazení čumáku robota před středem otáčení (RRP) v metrech
@@ -80,6 +82,20 @@ class MaratonPilotService:
         self.traversability_grid = None
         self.last_traversability_time = 0.0
         self.traversability_corridor_cm = -1.0
+
+        # Navigační podstav pro vyhýbání překážkám a synchronizaci s mission_maraton
+        self.nav_state = "IDLE"
+        self.nav_info = ""
+        self.lateral_offset_m = 0.0
+        self.corridor_planner: ObstacleAvoidanceController | None = None
+
+        # ZMQ PUB pro okamžité hlášení změn stavu (ipc:///tmp/robot-pilot-maraton, topic STATE)
+        self._pub_lock = threading.Lock()
+        self._zmq_pub_ctx = None
+        self._zmq_pub = None
+        self._zmq_pub_failed = False
+        self._last_published_sig = None
+        self._last_publish_ts = 0.0
         
         # OOW state
         self.oow_tcp_ok = False
@@ -89,6 +105,52 @@ class MaratonPilotService:
         self.receiver = None
         self.oow_task = None
 
+    def _ensure_state_publisher(self):
+        if self._zmq_pub is not None or self._zmq_pub_failed:
+            return
+        pub = None
+        try:
+            self._zmq_pub_ctx = zmq.Context.instance()
+            pub = self._zmq_pub_ctx.socket(zmq.PUB)
+            pub.setsockopt(zmq.LINGER, 0)
+            pub.bind("ipc:///tmp/robot-pilot-maraton")
+            self._zmq_pub = pub
+        except Exception as e:
+            if pub is not None:
+                try:
+                    pub.close(linger=0)
+                except Exception:
+                    pass
+            self._zmq_pub_failed = True
+            print(f"[PilotMaraton] ZMQ PUB bind info (ipc:///tmp/robot-pilot-maraton): {e}")
+
+    def _publish_state_event(self, force: bool = False):
+        now = time.time()
+        sig = (self.state, self.nav_state, self.source)
+        if not force and sig == self._last_published_sig and (now - self._last_publish_ts) < 1.0:
+            return
+        self._last_published_sig = sig
+        self._last_publish_ts = now
+        with self._pub_lock:
+            self._ensure_state_publisher()
+            if self._zmq_pub is not None:
+                try:
+                    payload = self.get_status().encode("utf-8")
+                    self._zmq_pub.send_multipart([b"STATE", payload], flags=zmq.NOBLOCK)
+                except Exception:
+                    pass
+
+    def _set_nav_state(self, nav_state: str, nav_info: str, lateral_offset_m: float = 0.0):
+        prev_nav = self.nav_state
+        self.nav_state = nav_state
+        self.nav_info = nav_info
+        self.lateral_offset_m = float(lateral_offset_m)
+        if prev_nav != nav_state:
+            print(f"[PilotMaraton] Změna nav_state: {prev_nav} -> {nav_state} ({nav_info})")
+            self._publish_state_event(force=True)
+        else:
+            self._publish_state_event(force=False)
+
     def start_service(self, max_speed=100, max_pwm=150, route_input=None) -> tuple[bool, str]:
         if self.state in ["RUNNING"]:
             return False, "ERR: ALREADY RUNNING"
@@ -96,10 +158,12 @@ class MaratonPilotService:
         if route_input is None:
             return False, "ERR: START vyžaduje JSON payload s trasou"
 
-        # Inicializace a validace trasy přes PathTracker
+        # Inicializace a validace trasy přes PathTracker + RouteCorridor
         try:
             tracker = PathTracker(route_input, L_near_m=2.0)
             self.path_tracker = tracker
+            corridor = RouteCorridor(tracker.waypoints)
+            self.corridor_planner = ObstacleAvoidanceController(corridor)
         except Exception as e:
             print(f"[PilotMaraton] Chyba inicializace trasy: {e}")
             return False, f"ERR: {e}"
@@ -142,6 +206,10 @@ class MaratonPilotService:
         self.state = "RUNNING"
         self.source = "USER"
         self.status_info = "Starting"
+        self.nav_state = "CRUISING"
+        self.nav_info = "Jízda podle trasy"
+        self.lateral_offset_m = 0.0
+        self._publish_state_event(force=True)
         
         # WORKAROUND: Chyba ve firmware hoverboardu
         # Firmware vyžaduje po příkazu START probuzení regulace motorů nenulovou rychlostí
@@ -173,6 +241,7 @@ class MaratonPilotService:
             self.state = "STOPPED"
             self.source = "USER"
             self.status_info = "Zastaveno příkazem (STOP)"
+            self._publish_state_event(force=True)
         return "OK"
 
     def pause_service(self, source="USER", info=""):
@@ -183,6 +252,7 @@ class MaratonPilotService:
             self.state = "PAUSED"
             self.source = source
             self.status_info = info
+            self._publish_state_event(force=True)
         return "OK"
         
     def resume_service(self, source="USER", info=""):
@@ -193,6 +263,7 @@ class MaratonPilotService:
             self.state = "RUNNING"
             self.source = source
             self.status_info = info
+            self._publish_state_event(force=True)
         return "OK"
         
     def get_status(self):
@@ -229,6 +300,9 @@ class MaratonPilotService:
 
         status_dict = {
             "state": self.state,
+            "nav_state": self.nav_state,
+            "nav_info": self.nav_info,
+            "lateral_offset_m": round(float(self.lateral_offset_m), 2),
             "source": self.source,
             "info": self.status_info,
             "wp_index": wp_index,
@@ -265,6 +339,13 @@ class MaratonPilotService:
         print(f"[PilotMaraton] SHUTDOWN")
         self.running = False
         self.drive.disconnect()
+        with self._pub_lock:
+            if self._zmq_pub is not None:
+                try:
+                    self._zmq_pub.close(linger=0)
+                except Exception:
+                    pass
+                self._zmq_pub = None
         if self.logger:
             self.logger.close()
             self.logger = None
@@ -295,13 +376,14 @@ class MaratonPilotService:
             except Exception:
                 pass
 
-    def get_traversability_cost_at(self, x_fwd_m: float, y_cw_m: float) -> int:
+    def get_traversability_cost_at(self, x_fwd_m: float, y_cw_m: float, now_ts: float | None = None) -> int:
         """
         Vrátí potenciálovou cenu sjízdnosti (0..100, kde 100 = nesjízdné/neznámé)
         v lokálních souřadnicích robota (x_fwd_m in [-2.0, +6.0), y_cw_m in [-4.0, +4.0), +y = vpravo CW).
         Slouží jako podklad pro plánovač / Elastic Band.
         """
-        if not self.traversability_grid or (time.time() - self.last_traversability_time) >= 2.0:
+        now = time.time() if now_ts is None else now_ts
+        if not self.traversability_grid or (now - self.last_traversability_time) >= 2.0:
             return 100
         ix = int(math.floor((x_fwd_m + 2.0) / 0.10))
         iy = int(math.floor((y_cw_m + 4.0) / 0.10))
@@ -334,9 +416,9 @@ class MaratonPilotService:
                     min_d = d
         return min_d if found else -1.0
 
-    def _get_effective_obstacle_distance_cm(self) -> float:
+    def _get_effective_obstacle_distance_cm(self, now_ts: float | None = None) -> float:
         """Vrátí efektivní vzdálenost překážky před robotem (primárně z COLLISIONS/TRAVERSABILITY, záložně z DISTANCE)."""
-        now = time.time()
+        now = time.time() if now_ts is None else now_ts
         collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
         traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
         fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
@@ -353,7 +435,67 @@ class MaratonPilotService:
 
         return min(candidates) if candidates else -1.0
 
-    def _evaluate_collision_limits(self, base_target_v: float, obstacle_dist_cm: float) -> tuple[float, float, str]:
+    def _get_directional_obstacle_distance_cm(self, steer_rel_deg: float, now_ts: float | None = None) -> float:
+        """
+        Vrátí volnou vzdálenost podél plánovaného směru jízdy steer_rel_deg (ve stupních CW, -60..+60),
+        se zachováním tvrdého předního nárazníku <= STOP_DISTANCE_CM (70 cm) v přímém směru.
+        Umožňuje plynulé vybočení do volného pruhu kolem překážky stojící na 1.45 m.
+        """
+        now = time.time() if now_ts is None else now_ts
+        collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
+        traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
+        fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+
+        steer_clamped = max(-60.0, min(60.0, float(steer_rel_deg)))
+        candidates = []
+
+        if collisions_active:
+            # 1. Tvrdý přední nárazník (pokud je cokoliv přímo před šasi <= 70 cm, okamžitý stop)
+            fwd_bumper = self._get_forward_corridor_distance_cm()
+            if 0.0 <= fwd_bumper <= STOP_DISTANCE_CM:
+                candidates.append(fwd_bumper)
+
+            # 2. Volná dráha ve směru zatáčení steer_clamped
+            distances = self.collision_data.get("distances_cm")
+            if distances and len(distances) == 72:
+                min_steered = 2000.0
+                found_s = False
+                for b in list(range(0, 18)) + list(range(54, 72)):
+                    d = float(distances[b])
+                    if d < 0:
+                        continue
+                    found_s = True
+                    sec_deg = (b + 0.5) * 5.0 if b < 18 else -((72 - b - 0.5) * 5.0)
+                    diff_deg = abs(sec_deg - steer_clamped)
+                    if diff_deg < 85.0:
+                        lat_cm = d * math.sin(math.radians(diff_deg))
+                        if diff_deg <= 3.0 or lat_cm <= ROBOT_RADIUS_CM:
+                            if d < min_steered:
+                                min_steered = d
+                if found_s:
+                    candidates.append(min_steered)
+
+        if traversability_active:
+            if self.traversability_grid is not None:
+                steer_rad = math.radians(steer_clamped)
+                cos_s = math.cos(steer_rad)
+                sin_s = math.sin(steer_rad)
+                trav_d_cm = 600.0
+                for step_cm in range(65, 450, 10):
+                    dm = step_cm * 0.01
+                    if self.get_traversability_cost_at(dm * cos_s, dm * sin_s, now_ts=now) >= 100:
+                        trav_d_cm = float(step_cm)
+                        break
+                candidates.append(trav_d_cm)
+            elif abs(steer_clamped) <= 8.0 and self.traversability_corridor_cm >= 0.0:
+                candidates.append(float(self.traversability_corridor_cm))
+
+        if fallback_active and not collisions_active and not traversability_active:
+            candidates.append(float(self.lidar_distance))
+
+        return min(candidates) if candidates else -1.0
+
+    def _evaluate_collision_limits(self, base_target_v: float, obstacle_dist_cm: float, now_ts: float | None = None) -> tuple[float, float, str]:
         """
         Vypočítá omezení rychlosti a brzdné zrychlení podle vzdálenosti překážky a pravidla 2/5 TTC:
         - Zastavení na minimální vzdálenosti 0.7 m (70 cm).
@@ -361,6 +503,7 @@ class MaratonPilotService:
         - Robot musí být schopen zastavit za 2/5 * min_ttc_s (predikovatelné brzdění 2 m/s^2, nouzové až 4 m/s^2).
         Vrací: (target_v_cms, brk_accel_step, status_reason_if_stopped)
         """
+        now = time.time() if now_ts is None else now_ts
         target_v = min(float(base_target_v), ABS_MAX_SPEED_CMS)
         brk_step = self.nominal_brk_accel_step
         stop_reason = ""
@@ -375,7 +518,7 @@ class MaratonPilotService:
             target_v = min(target_v, v_dist_limit)
 
         # 2. Omezení podle kolizního kurzu (pravidlo zastavení za 2/5 TTC)
-        collisions_active = (time.time() - self.last_collision_time) < 2.0 and self.collision_data is not None
+        collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
         if collisions_active and 0.0 <= self.min_ttc_s < 900.0:
             t_stop_allowed = 0.4 * self.min_ttc_s  # 2/5 TTC [s]
             # Max rychlost při nominálním brzdění 2.0 m/s^2 (200 cm/s^2): v = a_nom * (2/5 * TTC) = 80 * TTC [cm/s]
@@ -533,199 +676,262 @@ class MaratonPilotService:
         out_right = v_out - w_out
         return int(out_left), int(out_right)
 
+    def _run_control_step(self, now_ts: float | None = None) -> bool:
+        """
+        Provede jeden 10Hz krok řízení (navigace, koridorový plánovač, antikolize, regulace motorů a logování).
+        Vrací False, pokud má řídicí smyčka skončit (STOPPED/FINISHED po zastavení kol).
+        """
+        now = time.time() if now_ts is None else float(now_ts)
+
+        target_left = 0
+        target_right = 0
+        actual_left = 0
+        actual_right = 0
+
+        # Variables for logging
+        lat = 0.0
+        lon = 0.0
+        nose_lat = 0.0
+        nose_lon = 0.0
+        heading = 0.0
+        target_heading = 0.0
+        heading_error = 0.0
+        distance_to_goal = 0.0
+        d_perp = 0.0
+        near_state = None
+
+        if self.fusion_data:
+            lat = float(self.fusion_data.get("lat", 0.0))
+            lon = float(self.fusion_data.get("lon", 0.0))
+            heading = float(self.fusion_data.get("heading", 0.0))
+            nose_lat, nose_lon = rrp_to_nose(lat, lon, heading, FRONT_OFFSET_M)
+
+        collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
+        traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
+        fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+        lidar_active = collisions_active or traversability_active or fallback_active
+        eff_dist = self._get_effective_obstacle_distance_cm(now_ts=now)
+        current_lidar = round(float(eff_dist), 1) if (lidar_active and eff_dist >= 0.0) else -1.0
+
+        if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
+            target_v = self.max_speed if self.state == "RUNNING" else 0.0
+            self.active_brk_accel_step = self.nominal_brk_accel_step
+
+            # 1. Kontrola LiDARu - bez platných dat robot nesmí jet
+            if not lidar_active or current_lidar < 0.0:
+                target_v = 0.0
+                self.active_brk_accel_step = self.max_brk_accel_step
+                target_left, target_right = 0, 0
+                if self.state == "RUNNING":
+                    self.source = "LIDAR"
+                    if self.last_lidar_time == 0.0 and self.last_collision_time == 0.0 and self.last_traversability_time == 0.0:
+                        self.status_info = "Čekání na data z LiDARu"
+                    else:
+                        self.status_info = "Výpadek dat z LiDARu (timeout > 2s)"
+                    self._set_nav_state("OBSTACLE", self.status_info, self.lateral_offset_m)
+            # 2. Kontrola fúzních dat (GPS)
+            elif not self.fusion_data:
+                target_v = 0.0
+                target_left, target_right = 0, 0
+                if self.state == "RUNNING":
+                    self.source = "GPS"
+                    self.status_info = "Čekání na data z fúze (GPS)"
+            else:
+                hAcc = int(round(float(self.fusion_data.get("hAcc", 9999))))  # v mm
+                heading_sol = self.fusion_data.get("headingSol", "NONE")
+                heading_acc = float(self.fusion_data.get("headingAcc", 9999.0))
+
+                if hAcc > 700 or heading_sol == "NONE" or heading_acc > 15.0:
+                    info_msg = f"Nízká přesnost GPS (hAcc: {hAcc} mm, sol: {heading_sol})"
+                    if self.state == "RUNNING":
+                        self.pause_service(source="GPS", info=info_msg)
+                    target_left, target_right = 0, 0
+                else:
+                    # Pokud byla chyba GPS odstraněna, obnovíme běh
+                    if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 12.0:
+                        self.resume_service(source="GPS", info=f"Přesnost GPS obnovena (hAcc: {hAcc} mm, sol: {heading_sol})")
+
+                    near_state = self.path_tracker.update(nose_lat, nose_lon)
+
+                    if near_state is None:
+                        if self.state != "FINISHED":
+                            reached_end = self.path_tracker and self.path_tracker.current_wp_index >= len(self.path_tracker.waypoints) - 1
+                            print("[PilotMaraton] Konec trasy dosažen. Přepínám na stav FINISHED (zpomaluji na 0).")
+                            self.state = "FINISHED"
+                            self.source = "PILOT"
+                            self.status_info = "Cíl dosažen" if reached_end else "Trasa nenalezena"
+                            self._set_nav_state("IDLE", self.status_info, 0.0)
+                        target_left, target_right = 0, 0
+                    else:
+                        if near_state.distance_to_goal_m is not None and near_state.distance_to_goal_m < 0 and self.path_tracker.current_wp_index >= len(self.path_tracker.waypoints) - 2:
+                            if self.state != "FINISHED":
+                                print("[PilotMaraton] Konec trasy dosažen. Přepínám na stav FINISHED (zpomaluji na 0).")
+                                self.state = "FINISHED"
+                                self.source = "PILOT"
+                                self.status_info = "Cíl dosažen"
+                                self._set_nav_state("IDLE", self.status_info, 0.0)
+
+                        if near_state.heading_to_near_gnss_deg is not None:
+                            target_heading = near_state.heading_to_near_gnss_deg
+                        distance_to_goal = near_state.distance_to_goal_m
+                        self.last_distance_to_goal = distance_to_goal if distance_to_goal is not None else 0.0
+                        d_perp = near_state.d_perp_m
+
+                        # Korekce target_v na základě relativního azimutu (zpomalení do zatáčky)
+                        if self.state == "RUNNING" and near_state.end_rel_azimuth_deg is not None and near_state.distance_to_goal_m is not None:
+                            rel_az = near_state.end_rel_azimuth_deg
+                            v_waypoint = self.max_speed * math.exp(- (abs(rel_az) / 45.0) ** 2)
+                            v_waypoint = max(min(self.max_speed, 100.0), v_waypoint)
+                            dist = max(0.0, near_state.distance_to_goal_m)
+                            slowdown_dist = self.path_tracker.L_near_m
+                            if dist < slowdown_dist:
+                                target_v = v_waypoint + (self.max_speed - v_waypoint) * (dist / slowdown_dist)
+
+                        # Koridorový plánovač a vyhodnocení statických/dynamických překážek
+                        decision = None
+                        if self.state == "RUNNING" and self.corridor_planner is not None:
+                            decision = self.corridor_planner.step(
+                                lat_rrp=lat,
+                                lon_rrp=lon,
+                                heading_deg=heading,
+                                current_speed_cms=self.current_speed,
+                                max_speed_cms=self.max_speed,
+                                current_wp_index=self.path_tracker.current_wp_index,
+                                default_target_heading_deg=target_heading,
+                                collision_data=self.collision_data,
+                                collisions_active=collisions_active,
+                                traversability_active=(traversability_active and self.traversability_grid is not None),
+                                get_traversability_cost_fn=lambda x, y: self.get_traversability_cost_at(x, y, now_ts=now),
+                                now=now,
+                            )
+
+                            if decision.goal_reached_near_obstacle:
+                                print(f"[PilotMaraton] {decision.nav_info}. Přepínám na FINISHED.")
+                                self.state = "FINISHED"
+                                self.source = "PILOT"
+                                self.status_info = decision.nav_info
+                                self._set_nav_state("IDLE", decision.nav_info, 0.0)
+                                target_v = 0.0
+                                target_left, target_right = 0, 0
+                            else:
+                                target_heading = decision.target_heading_deg
+                                target_v = min(target_v, decision.speed_cap_cms)
+
+                        # Antikolizní omezení rychlosti a zastavení (podél směru jízdy + 0.7 m nárazník + 2/5 TTC)
+                        steer_rel_deg = (target_heading - heading + 180.0) % 360.0 - 180.0
+                        ctrl_lidar_cm = self._get_directional_obstacle_distance_cm(steer_rel_deg, now_ts=now)
+                        if ctrl_lidar_cm < 0.0:
+                            ctrl_lidar_cm = current_lidar
+
+                        if self.state == "RUNNING":
+                            target_v, brk_step, stop_reason = self._evaluate_collision_limits(target_v, ctrl_lidar_cm, now_ts=now)
+                            self.active_brk_accel_step = brk_step
+                        else:
+                            stop_reason = ""
+
+                        if self.state == "RUNNING":
+                            if target_v <= 0.0:
+                                target_left, target_right = 0, 0
+                                if decision is not None and decision.nav_state in ("WAITING_CLEARANCE", "NO_PATH", "OBSTACLE"):
+                                    self.source = "NAV"
+                                    self.status_info = decision.nav_info
+                                    self._set_nav_state(decision.nav_state, decision.nav_info, decision.lateral_offset_m)
+                                else:
+                                    self.source = "LIDAR"
+                                    info_txt = stop_reason if stop_reason else f"Překážka před robotem ({ctrl_lidar_cm:.0f} cm)"
+                                    self.status_info = info_txt
+                                    self._set_nav_state("OBSTACLE", info_txt, decision.lateral_offset_m if decision else 0.0)
+                            else:
+                                self.source = "NAV"
+                                if decision is not None:
+                                    self.status_info = decision.nav_info
+                                    self._set_nav_state(decision.nav_state, decision.nav_info, decision.lateral_offset_m)
+                                else:
+                                    self.status_info = "Jízda podle trasy"
+                                    self._set_nav_state("CRUISING", self.status_info, 0.0)
+                                eff_steer_speed = max(self.current_speed, min(target_v, self.max_fwd_accel_step))
+                                target_left, target_right, heading_error = self._calculate_steering(
+                                    heading, target_heading, ctrl_lidar_cm, eff_steer_speed
+                                )
+
+            # Řízení požadované rychlosti (current_speed)
+            if self.current_speed < target_v:
+                self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
+            elif self.current_speed > target_v:
+                self.current_speed = max(target_v, self.current_speed - self.active_brk_accel_step)
+
+            # Fyzické limity zrychlení a odeslání do motorů
+            actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)
+            self.drive.send_drive(self.max_pwm, actual_left, actual_right)
+
+        if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
+            wp_idx = self.path_tracker.current_wp_index if self.path_tracker else 0
+            h_acc_val = int(round(float(self.fusion_data.get("hAcc", 9999)))) if self.fusion_data else 9999
+            reason_escaped = f'"{self.status_info}"'
+
+            # Navigační sloupce
+            target_wp_idx_str = ""
+            target_wp_lat_str = ""
+            target_wp_lon_str = ""
+            near_lat_str = ""
+            near_lon_str = ""
+            closest_lat_str = ""
+            closest_lon_str = ""
+            lookahead_dist_str = ""
+            geom_curv_str = ""
+            geom_radius_str = ""
+            geom_turn_dir_str = ""
+
+            if self.source == "NAV" and self.state == "RUNNING" and near_state is not None and self.path_tracker:
+                tgt_idx = min(self.path_tracker.current_wp_index + 1, len(self.path_tracker.waypoints) - 1)
+                tgt_wp = self.path_tracker.waypoints[tgt_idx]
+                target_wp_idx_str = str(tgt_idx)
+                target_wp_lat_str = f"{tgt_wp.lat:.10f}"
+                target_wp_lon_str = f"{tgt_wp.lon:.10f}"
+                if near_state.near_lat is not None:
+                    near_lat_str = f"{near_state.near_lat:.10f}"
+                if near_state.near_lon is not None:
+                    near_lon_str = f"{near_state.near_lon:.10f}"
+                if near_state.closest_lat is not None:
+                    closest_lat_str = f"{near_state.closest_lat:.10f}"
+                if near_state.closest_lon is not None:
+                    closest_lon_str = f"{near_state.closest_lon:.10f}"
+
+                if near_state.near_x_m is not None and near_state.near_y_m is not None:
+                    dist_to_near = math.hypot(near_state.near_x_m, near_state.near_y_m)
+                else:
+                    dist_to_near = self.path_tracker.L_near_m
+                lookahead_dist_str = f"{dist_to_near:.3f}"
+
+                alpha_rad = math.radians(heading_error)
+                sin_alpha = math.sin(alpha_rad)
+                if abs(sin_alpha) < 1e-6 or abs(heading_error) < 0.01:
+                    geom_curv_str = "0.000000"
+                    geom_radius_str = "inf"
+                    geom_turn_dir_str = "STRAIGHT"
+                else:
+                    curv = (2.0 * sin_alpha) / dist_to_near
+                    radius = dist_to_near / (2.0 * abs(sin_alpha))
+                    geom_curv_str = f"{curv:.6f}"
+                    geom_radius_str = f"{radius:.2f}"
+                    geom_turn_dir_str = "RIGHT" if heading_error > 0 else "LEFT"
+
+            if self.logger:
+                self.logger.print(f"{now},{lat},{lon},{nose_lat},{nose_lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped},{target_wp_idx_str},{target_wp_lat_str},{target_wp_lon_str},{near_lat_str},{near_lon_str},{closest_lat_str},{closest_lon_str},{lookahead_dist_str},{geom_curv_str},{geom_radius_str},{geom_turn_dir_str}")
+
+            if self.state in ["STOPPED", "FINISHED"] and actual_left == 0 and actual_right == 0:
+                print(f"[PilotMaraton] Robot plynule zastavil ({self.state}). Ukončuji řídicí smyčku.")
+                self.running = False
+                return False
+
+        return True
+
     def _control_loop(self):
         print("[PilotMaraton] Control loop started (10 Hz).")
         while self.running:
             start_time = time.time()
-            
-            target_left = 0
-            target_right = 0
-            actual_left = 0
-            actual_right = 0
-            
-            # Variables for logging
-            lat = 0.0
-            lon = 0.0
-            nose_lat = 0.0
-            nose_lon = 0.0
-            heading = 0.0
-            target_heading = 0.0
-            heading_error = 0.0
-            distance_to_goal = 0.0
-            d_perp = 0.0
-            near_state = None
-            
-            if self.fusion_data:
-                lat = float(self.fusion_data.get("lat", 0.0))
-                lon = float(self.fusion_data.get("lon", 0.0))
-                heading = float(self.fusion_data.get("heading", 0.0))
-                nose_lat, nose_lon = rrp_to_nose(lat, lon, heading, FRONT_OFFSET_M)
-
-            now_ts = time.time()
-            collisions_active = (now_ts - self.last_collision_time) < 2.0 and self.collision_data is not None
-            traversability_active = (now_ts - self.last_traversability_time) < 2.0 and self.traversability_data is not None
-            fallback_active = (now_ts - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-            lidar_active = collisions_active or traversability_active or fallback_active
-            eff_dist = self._get_effective_obstacle_distance_cm()
-            current_lidar = round(float(eff_dist), 1) if (lidar_active and eff_dist >= 0.0) else -1.0
-
-            if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
-                target_v = self.max_speed if self.state == "RUNNING" else 0.0
-                self.active_brk_accel_step = self.nominal_brk_accel_step
-
-                # 1. Kontrola LiDARu - bez platných dat robot nesmí jet
-                if not lidar_active or current_lidar < 0.0:
-                    target_v = 0.0
-                    self.active_brk_accel_step = self.max_brk_accel_step
-                    target_left, target_right = 0, 0
-                    if self.state == "RUNNING":
-                        self.source = "LIDAR"
-                        if self.last_lidar_time == 0.0 and self.last_collision_time == 0.0:
-                            self.status_info = "Čekání na data z LiDARu"
-                        else:
-                            self.status_info = "Výpadek dat z LiDARu (timeout > 2s)"
-                # 2. Kontrola fúzních dat (GPS)
-                elif not self.fusion_data:
-                    target_v = 0.0
-                    target_left, target_right = 0, 0
-                    if self.state == "RUNNING":
-                        self.source = "GPS"
-                        self.status_info = "Čekání na data z fúze (GPS)"
-                else:
-                    hAcc = int(round(float(self.fusion_data.get("hAcc", 9999)))) # v mm
-                    heading_sol = self.fusion_data.get("headingSol", "NONE")
-                    heading_acc = float(self.fusion_data.get("headingAcc", 9999.0))
-                    
-                    if hAcc > 700 or heading_sol == "NONE" or heading_acc > 15.0:
-                        info_msg = f"Nízká přesnost GPS (hAcc: {hAcc} mm, sol: {heading_sol})"
-                        if self.state == "RUNNING":
-                            self.pause_service(source="GPS", info=info_msg)
-                        target_left, target_right = 0, 0
-                    else:
-                        # Pokud byla chyba GPS odstraněna, obnovíme běh
-                        if self.state == "PAUSED" and self.source == "GPS" and hAcc < 500 and heading_sol != "NONE" and heading_acc <= 12.0:
-                            self.resume_service(source="GPS", info=f"Přesnost GPS obnovena (hAcc: {hAcc} mm, sol: {heading_sol})")
-                            
-                        near_state = self.path_tracker.update(nose_lat, nose_lon)
-                        
-                        if near_state is None:
-                            if self.state != "FINISHED":
-                                print("[PilotMaraton] Path not found. Přepínám na stav FINISHED (zpomaluji na 0).")
-                                self.state = "FINISHED"
-                                self.source = "PILOT"
-                                self.status_info = "Trasa nenalezena"
-                            target_left, target_right = 0, 0
-                        else:
-                            if near_state.distance_to_goal_m is not None and near_state.distance_to_goal_m < 0 and self.path_tracker.current_wp_index >= len(self.path_tracker.waypoints)-2:
-                                if self.state != "FINISHED":
-                                    print("[PilotMaraton] Konec trasy dosažen. Přepínám na stav FINISHED (zpomaluji na 0).")
-                                    self.state = "FINISHED"
-                                    self.source = "PILOT"
-                                    self.status_info = "Cíl dosažen"
-                                
-                            if near_state.heading_to_near_gnss_deg is not None:
-                                target_heading = near_state.heading_to_near_gnss_deg
-                            distance_to_goal = near_state.distance_to_goal_m
-                            self.last_distance_to_goal = distance_to_goal if distance_to_goal is not None else 0.0
-                            d_perp = near_state.d_perp_m
-                            
-                            # Korekce target_v na základě relativního azimutu (zpomalení do zatáčky)
-                            if self.state == "RUNNING" and near_state.end_rel_azimuth_deg is not None and near_state.distance_to_goal_m is not None:
-                                rel_az = near_state.end_rel_azimuth_deg
-                                v_waypoint = self.max_speed * math.exp(- (abs(rel_az)/45.0)**2)
-                                v_waypoint = max(min(self.max_speed, 100.0), v_waypoint)
-                                dist = max(0.0, near_state.distance_to_goal_m)
-                                slowdown_dist = self.path_tracker.L_near_m
-                                if dist < slowdown_dist:
-                                    target_v = v_waypoint + (self.max_speed - v_waypoint) * (dist / slowdown_dist)
-
-                            # Antikolizní omezení rychlosti a zastavení (vzdálenost 0.7 m..6.0 m + pravidlo 2/5 TTC)
-                            if self.state == "RUNNING":
-                                target_v, brk_step, stop_reason = self._evaluate_collision_limits(target_v, current_lidar)
-                                self.active_brk_accel_step = brk_step
-                            else:
-                                stop_reason = ""
-
-                            if target_v <= 0.0 and self.state == "RUNNING":
-                                target_left, target_right = 0, 0
-                                self.source = "LIDAR"
-                                self.status_info = stop_reason if stop_reason else f"Překážka před robotem ({current_lidar:.0f} cm)"
-                            else:
-                                if self.state == "RUNNING" and self.source in ["LIDAR", "GPS", "USER"]:
-                                    self.source = "NAV"
-                                    self.status_info = "Jízda podle trasy"
-                                target_left, target_right, heading_error = self._calculate_steering(heading, target_heading, current_lidar, self.current_speed)
-
-                # Řízení požadované rychlosti (current_speed)
-                if self.current_speed < target_v:
-                    self.current_speed = min(target_v, self.current_speed + self.max_fwd_accel_step)
-                elif self.current_speed > target_v:
-                    self.current_speed = max(target_v, self.current_speed - self.active_brk_accel_step)
-
-                # Fyzické limity zrychlení a odeslání do motorů
-                actual_left, actual_right = self._apply_acceleration_limits(target_left, target_right)
-                self.drive.send_drive(self.max_pwm, actual_left, actual_right)
-                
-            if self.state in ["RUNNING", "PAUSED", "STOPPED", "FINISHED"]:
-                wp_idx = self.path_tracker.current_wp_index if self.path_tracker else 0
-                h_acc_val = int(round(float(self.fusion_data.get("hAcc", 9999)))) if self.fusion_data else 9999
-                reason_escaped = f'"{self.status_info}"'
-
-                # Navigační sloupce
-                target_wp_idx_str = ""
-                target_wp_lat_str = ""
-                target_wp_lon_str = ""
-                near_lat_str = ""
-                near_lon_str = ""
-                closest_lat_str = ""
-                closest_lon_str = ""
-                lookahead_dist_str = ""
-                geom_curv_str = ""
-                geom_radius_str = ""
-                geom_turn_dir_str = ""
-
-                if self.source == "NAV" and self.state == "RUNNING" and near_state is not None and self.path_tracker:
-                    tgt_idx = min(self.path_tracker.current_wp_index + 1, len(self.path_tracker.waypoints) - 1)
-                    tgt_wp = self.path_tracker.waypoints[tgt_idx]
-                    target_wp_idx_str = str(tgt_idx)
-                    target_wp_lat_str = f"{tgt_wp.lat:.10f}"
-                    target_wp_lon_str = f"{tgt_wp.lon:.10f}"
-                    if near_state.near_lat is not None:
-                        near_lat_str = f"{near_state.near_lat:.10f}"
-                    if near_state.near_lon is not None:
-                        near_lon_str = f"{near_state.near_lon:.10f}"
-                    if near_state.closest_lat is not None:
-                        closest_lat_str = f"{near_state.closest_lat:.10f}"
-                    if near_state.closest_lon is not None:
-                        closest_lon_str = f"{near_state.closest_lon:.10f}"
-
-                    if near_state.near_x_m is not None and near_state.near_y_m is not None:
-                        dist_to_near = math.hypot(near_state.near_x_m, near_state.near_y_m)
-                    else:
-                        dist_to_near = self.path_tracker.L_near_m
-                    lookahead_dist_str = f"{dist_to_near:.3f}"
-
-                    alpha_rad = math.radians(heading_error)
-                    sin_alpha = math.sin(alpha_rad)
-                    if abs(sin_alpha) < 1e-6 or abs(heading_error) < 0.01:
-                        geom_curv_str = "0.000000"
-                        geom_radius_str = "inf"
-                        geom_turn_dir_str = "STRAIGHT"
-                    else:
-                        curv = (2.0 * sin_alpha) / dist_to_near
-                        radius = dist_to_near / (2.0 * abs(sin_alpha))
-                        geom_curv_str = f"{curv:.6f}"
-                        geom_radius_str = f"{radius:.2f}"
-                        geom_turn_dir_str = "RIGHT" if heading_error > 0 else "LEFT"
-
-                if self.logger:
-                    self.logger.print(f"{time.time()},{lat},{lon},{nose_lat},{nose_lon},{heading},{target_heading},{heading_error},{distance_to_goal},{d_perp},{wp_idx},{target_left},{target_right},{actual_left},{actual_right},{current_lidar},{h_acc_val},{self.state},{self.source},{reason_escaped},{target_wp_idx_str},{target_wp_lat_str},{target_wp_lon_str},{near_lat_str},{near_lon_str},{closest_lat_str},{closest_lon_str},{lookahead_dist_str},{geom_curv_str},{geom_radius_str},{geom_turn_dir_str}")
-                
-                if self.state in ["STOPPED", "FINISHED"] and actual_left == 0 and actual_right == 0:
-                    print(f"[PilotMaraton] Robot plynule zastavil ({self.state}). Ukončuji řídicí smyčku.")
-                    self.running = False
-                    break
-            
+            if not self._run_control_step(now_ts=start_time):
+                break
             elapsed = time.time() - start_time
             sleep_time = max(0, 0.1 - elapsed)
             time.sleep(sleep_time)

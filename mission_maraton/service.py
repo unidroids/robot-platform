@@ -72,6 +72,14 @@ class MissionMaratonService:
         self._last_qr_code: Optional[str] = None
         self._qr_event = asyncio.Event()
 
+        # Okamžité notifikace o změně stavu z PILOT-MARATON (ZMQ + sledování nav_state)
+        self._pilot_state_event = asyncio.Event()
+        self._pushed_pilot_status: Optional[Dict[str, Any]] = None
+        self._pushed_pilot_ts: float = 0.0
+        self._last_pilot_nav_state: str = "IDLE"
+        self._last_wait_alert_ts: float = 0.0
+        self._last_no_path_alert_ts: float = 0.0
+
         # Běžící data mise
         self.target_lat: Optional[float] = None
         self.target_lon: Optional[float] = None
@@ -188,10 +196,11 @@ class MissionMaratonService:
         self._zmq_shutdown.clear()
 
         def zmq_worker():
-            print("[MissionMaraton] Připojuji se k ZMQ (ipc:///tmp/robot-terminal & ipc:///tmp/robot-qrscaner)...")
+            print("[MissionMaraton] Připojuji se k ZMQ (robot-terminal, robot-qrscaner & robot-pilot-maraton)...")
             ctx = zmq.Context.instance()
             sub_term = ctx.socket(zmq.SUB)
             sub_qr = ctx.socket(zmq.SUB)
+            sub_pilot = ctx.socket(zmq.SUB)
             poller = zmq.Poller()
 
             try:
@@ -207,6 +216,13 @@ class MissionMaratonService:
                 poller.register(sub_qr, zmq.POLLIN)
             except Exception as e:
                 print(f"[MissionMaraton] ZMQ connect robot-qrscaner warning: {e}")
+
+            try:
+                sub_pilot.connect("ipc:///tmp/robot-pilot-maraton")
+                sub_pilot.setsockopt_string(zmq.SUBSCRIBE, "STATE")
+                poller.register(sub_pilot, zmq.POLLIN)
+            except Exception as e:
+                print(f"[MissionMaraton] ZMQ connect robot-pilot-maraton warning: {e}")
 
             try:
                 while not self._zmq_shutdown.is_set():
@@ -225,27 +241,27 @@ class MissionMaratonService:
                             frame_type = msg[0].decode("utf-8", errors="ignore")
                             frame_val = msg[1].decode("utf-8", errors="ignore")
                             self.on_qr_scanned(frame_val)
+
+                    if sub_pilot in events and events[sub_pilot] == zmq.POLLIN:
+                        msg = sub_pilot.recv_multipart()
+                        if len(msg) >= 2:
+                            frame_type = msg[0].decode("utf-8", errors="ignore")
+                            frame_val = msg[1].decode("utf-8", errors="ignore")
+                            if frame_type == "STATE":
+                                self.on_pilot_state_update(frame_val)
             except Exception as e:
                 if not self._zmq_shutdown.is_set():
                     print(f"[MissionMaraton] ZMQ worker chyba: {e}")
             finally:
-                try:
-                    poller.unregister(sub_term)
-                except Exception:
-                    pass
-                try:
-                    sub_term.close(linger=0)
-                except Exception:
-                    pass
-
-                try:
-                    poller.unregister(sub_qr)
-                except Exception:
-                    pass
-                try:
-                    sub_qr.close(linger=0)
-                except Exception:
-                    pass
+                for sock in (sub_term, sub_qr, sub_pilot):
+                    try:
+                        poller.unregister(sock)
+                    except Exception:
+                        pass
+                    try:
+                        sock.close(linger=0)
+                    except Exception:
+                        pass
                 print("[MissionMaraton] Odpojeno od ZMQ, sockety uzavřeny.")
 
         self._zmq_thread = threading.Thread(target=zmq_worker, daemon=True)
@@ -289,6 +305,157 @@ class MissionMaratonService:
                 self._qr_event.set()
         except RuntimeError:
             self._qr_event.set()
+
+    def on_pilot_state_update(self, state_json: str):
+        """Callback při okamžité změně stavu publikované službou PILOT-MARATON přes ZMQ."""
+        try:
+            data = json.loads(state_json)
+        except Exception:
+            return
+        prev_nav = (self._pushed_pilot_status or {}).get("nav_state")
+        prev_st = (self._pushed_pilot_status or {}).get("state")
+        self._pushed_pilot_status = data
+        self._pushed_pilot_ts = time.time()
+        if data.get("nav_state") != prev_nav or data.get("state") != prev_st:
+            try:
+                if self._loop and self._loop.is_running():
+                    self._loop.call_soon_threadsafe(self._pilot_state_event.set)
+                else:
+                    self._pilot_state_event.set()
+            except RuntimeError:
+                self._pilot_state_event.set()
+
+    @staticmethod
+    def _format_running_terminal_view(status_data: Dict[str, Any]) -> Tuple[str, str]:
+        """Sestaví hlavičku a text pro terminál podle navigačního podstavu pilota (nav_state)."""
+        nav_state = status_data.get("nav_state", "CRUISING") or "CRUISING"
+        nav_info = status_data.get("nav_info", "") or status_data.get("info", "")
+        wp_idx = status_data.get("wp_index", 0)
+        wp_tot = status_data.get("wp_total", 0)
+        dist_left = status_data.get("distance_to_goal_m", 0.0)
+        speed_act = float(status_data.get("speed_actual", status_data.get("speed", 0.0)))
+        speed_tgt = float(status_data.get("speed_target", 0.0))
+        if speed_tgt == 0.0 and speed_act > 0.0:
+            speed_tgt = speed_act
+        gps_sol = status_data.get("gps_sol", "NONE")
+
+        header_map = {
+            "CRUISING": "Maraton - Jízda",
+            "OBSTACLE": "Maraton - Překážka",
+            "WAITING_CLEARANCE": "Maraton - Čeká na uvolnění",
+            "FOLLOWING": "Maraton - Sledování chodce",
+            "AVOIDING": "Maraton - Objíždění překážky",
+            "OVERTAKING": "Maraton - Předjíždění",
+            "NO_PATH": "Maraton - Není průjezdná cesta",
+        }
+        header = header_map.get(nav_state, "Maraton - Jízda")
+
+        if nav_state in ("WAITING_CLEARANCE", "NO_PATH"):
+            detail_line = nav_info if nav_info else ("Čeká na uvolnění" if nav_state == "WAITING_CLEARANCE" else "Není průjezdná cesta")
+            text = (
+                f"{detail_line}\n"
+                f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m | GPS: {gps_sol}"
+            )
+        elif nav_state in ("OBSTACLE", "FOLLOWING", "AVOIDING", "OVERTAKING"):
+            text = (
+                f"{nav_info}\n"
+                f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\n"
+                f"Aktuální: {speed_act:.1f} m/s | Cílová: {speed_tgt:.1f} m/s | GPS: {gps_sol}"
+            )
+        else:
+            extra = f"{nav_info}\n" if (nav_info and "korekce povrchu" in nav_info.lower()) else ""
+            text = (
+                f"{extra}Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\n"
+                f"Aktuální: {speed_act:.1f} m/s | Cílová: {speed_tgt:.1f} m/s | GPS: {gps_sol}"
+            )
+        return header, text
+
+    def _handle_pilot_nav_state_alerts(
+        self,
+        nav_state: str,
+        nav_info: str,
+        wp_idx: int,
+        dist_left: float,
+        now_ts: Optional[float] = None,
+    ):
+        """Loguje změny nav_state pilota a řídí klidné zvukové/světelné upozornění (v NO_PATH po 60 s)."""
+        now = time.time() if now_ts is None else float(now_ts)
+        prev = self._last_pilot_nav_state
+
+        if nav_state != prev:
+            print(f"[MissionMaraton] Změna navigačního stavu pilota: {prev} -> {nav_state} ({nav_info})")
+            self.logger.log(
+                "PILOT_NAV_STATE_CHANGED",
+                {
+                    "from": prev,
+                    "to": nav_state,
+                    "nav_info": nav_info,
+                    "wp_index": wp_idx,
+                    "distance_to_goal_m": dist_left,
+                },
+            )
+            self._last_pilot_nav_state = nav_state
+
+            if nav_state == "WAITING_CLEARANCE" and (now - self._last_wait_alert_ts) >= 15.0:
+                self._last_wait_alert_ts = now
+                self.terminal.sound("notification")
+                self.terminal.blink("#FFA500", 2.0, 2000)
+            elif nav_state == "NO_PATH":
+                self._last_no_path_alert_ts = now
+                self.terminal.sound("notification")
+                self.terminal.blink("#FFA500", 1.5, 2500)
+
+        elif nav_state == "NO_PATH" and (now - self._last_no_path_alert_ts) >= 60.0:
+            # Klidné opakování upozornění po 1 minutě (60 s), aby robot nevyvolával stres
+            self._last_no_path_alert_ts = now
+            self.terminal.sound("notification")
+            self.terminal.blink("#FFA500", 1.5, 2500)
+
+    async def _wait_for_button_or_pilot_change(self, allowed_buttons: List[str], timeout: float = 2.0) -> Optional[str]:
+        """Čeká na stisk tlačítka nebo na okamžitou ZMQ změnu stavu pilota."""
+        start_t = time.time()
+        while self.running and not self._stop_requested:
+            if self._last_button in allowed_buttons:
+                btn = self._last_button
+                self._last_button = None
+                return btn
+
+            if self._pilot_state_event.is_set():
+                self._pilot_state_event.clear()
+                return None
+
+            self._button_event.clear()
+            if self._last_button in allowed_buttons:
+                btn = self._last_button
+                self._last_button = None
+                return btn
+
+            rem = timeout - (time.time() - start_t)
+            if rem <= 0:
+                break
+
+            btn_task = asyncio.create_task(self._button_event.wait())
+            pilot_task = asyncio.create_task(self._pilot_state_event.wait())
+            done, pending = await asyncio.wait(
+                {btn_task, pilot_task},
+                timeout=min(rem, 0.5),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+
+            if self._last_button in allowed_buttons:
+                btn = self._last_button
+                self._last_button = None
+                return btn
+
+            if self._pilot_state_event.is_set():
+                self._pilot_state_event.clear()
+                return None
+
+            if (time.time() - start_t) >= timeout:
+                break
+        return None
 
     async def _wait_for_button(self, allowed_buttons: List[str], timeout: Optional[float] = None) -> Optional[str]:
         """Čeká na stisk povoleného tlačítka."""
@@ -799,6 +966,10 @@ class MissionMaratonService:
         self.terminal.sound("barking")
         self.terminal.blink("#FFA500", 2.0, 3000)
 
+        self._last_pilot_nav_state = "IDLE"
+        self._pushed_pilot_status = None
+        self._pilot_state_event.clear()
+
         # -------------------------------------------------------------
         # Kroky 19 až 23: Monitorovací smyčka jízdy
         # -------------------------------------------------------------
@@ -812,11 +983,22 @@ class MissionMaratonService:
                     status_data = json.loads(st_resp)
                 except Exception:
                     pass
+            elif self._pushed_pilot_status and (time.time() - self._pushed_pilot_ts) < 3.0:
+                status_data = dict(self._pushed_pilot_status)
+
+            # Pokud v mezičase dorazil čerstvější ZMQ push (např. při mockovaném TCP v testu nebo rychlém přechodu),
+            # doplníme nav_state / nav_info, pokud v TCP odpovědi chyběly
+            if self._pushed_pilot_status and (time.time() - self._pushed_pilot_ts) < 2.0:
+                if "nav_state" not in status_data and "nav_state" in self._pushed_pilot_status:
+                    status_data["nav_state"] = self._pushed_pilot_status["nav_state"]
+                    status_data["nav_info"] = self._pushed_pilot_status.get("nav_info", "")
 
             self.pilot_status = status_data
             p_state = status_data.get("state", "IDLE")
             p_info = status_data.get("info", "")
             p_source = status_data.get("source", "")
+            nav_state = status_data.get("nav_state", "CRUISING") or "CRUISING"
+            nav_info = status_data.get("nav_info", "") or p_info
             wp_idx = status_data.get("wp_index", 0)
             wp_tot = status_data.get("wp_total", 0)
             dist_left = status_data.get("distance_to_goal_m", 0.0)
@@ -856,23 +1038,27 @@ class MissionMaratonService:
                 self._stop_driving_services()
                 return
 
-            # Krok 21: Jízda běží
+            # Krok 21: Jízda běží (včetně autonomního řešení překážek: OBSTACLE, WAITING_CLEARANCE, AVOIDING, OVERTAKING, FOLLOWING, NO_PATH)
             elif p_state == "RUNNING":
-                self._set_state(21, "STEP_21_DRIVING", f"WP {wp_idx}/{wp_tot}, zbývá {dist_left} m, akt {speed_act:.1f} m/s, cíl {speed_tgt:.1f} m/s")
+                self._handle_pilot_nav_state_alerts(nav_state, nav_info, wp_idx, dist_left)
+                term_header, term_text = self._format_running_terminal_view(status_data)
+                nav_tag = f" [{nav_state}: {nav_info}]" if nav_state != "CRUISING" else ""
+                self._set_state(
+                    21,
+                    "STEP_21_DRIVING",
+                    f"WP {wp_idx}/{wp_tot}, zbývá {dist_left} m, akt {speed_act:.1f} m/s, cíl {speed_tgt:.1f} m/s{nav_tag}"
+                )
                 self.terminal.show_message(
-                    header="Maraton - Jízda",
-                    text=(
-                        f"Waypoint {wp_idx}/{wp_tot} | Zbývá {dist_left} m\n"
-                        f"Aktuální: {speed_act:.1f} m/s | Cílová: {speed_tgt:.1f} m/s | GPS: {gps_sol}"
-                    ),
+                    header=term_header,
+                    text=term_text,
                     buttons=[
                         {"id": "pause_mission", "text": "Pause"},
                         {"id": "stop_mission", "text": "Stop"}
                     ]
                 )
 
-                # Čekáme až 2 sekundy na případný stisk tlačítka Pause/Stop
-                btn = await self._wait_for_button(["pause_mission", "stop_mission"], timeout=2.0)
+                # Čekáme až 2 sekundy na stisk Pause/Stop nebo na okamžitou ZMQ změnu stavu pilota
+                btn = await self._wait_for_button_or_pilot_change(["pause_mission", "stop_mission"], timeout=2.0)
 
                 if btn == "stop_mission":
                     self.logger.log("USER_STOP_MISSION")

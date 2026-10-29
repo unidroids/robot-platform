@@ -14,9 +14,15 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from pilot_maraton.geo_utils import deg2rad, rad2deg, lla_to_ecef, ecef_to_lla, rrp_to_nose
+from pilot_maraton.geo_utils import deg2rad, rad2deg, lla_to_ecef, ecef_to_lla, rrp_to_nose, displace_wgs84
 from pilot_maraton.near_waypoint import NearWaypoint
 from pilot_maraton.path_tracker import PathTracker
+from pilot_maraton.corridor_planner import (
+    RouteCorridor,
+    ObstacleAvoidanceController,
+    CORRIDOR_LEFT_M,
+    CORRIDOR_RIGHT_M,
+)
 from pilot_maraton.service import MaratonPilotService
 from pilot_maraton.main import handle_client
 
@@ -376,6 +382,283 @@ class TestPilotMaratonTCP(unittest.TestCase):
     def test_stop(self):
         resp = self._send_cmd("STOP")
         self.assertEqual(resp, "OK")
+
+
+class TestCorridorAndObstacleAvoidance(unittest.TestCase):
+    """Testy koridoru [-2 m, +1 m], vyčkávání 5->60 s, zametené oblasti, předjíždění chodců a stavu NO_PATH."""
+
+    def setUp(self):
+        # Přímá severní trasa délky 40 m + odbočka 90° na východ délky 20 m
+        self.lat0, self.lon0 = 50.000000, 14.000000
+        lat1, lon1 = displace_wgs84(self.lat0, self.lon0, d_north_m=40.0, d_east_m=0.0)
+        lat2, lon2 = displace_wgs84(lat1, lon1, d_north_m=0.0, d_east_m=20.0)
+        self.route = {
+            "nodes": [
+                {"id": "w0", "lat": self.lat0, "lon": self.lon0},
+                {"id": "w1", "lat": lat1, "lon": lon1},
+                {"id": "w2", "lat": lat2, "lon": lon2},
+            ]
+        }
+        self.tracker = PathTracker(self.route, L_near_m=2.0)
+        self.corridor = RouteCorridor(self.tracker.waypoints)
+        self.ctrl = ObstacleAvoidanceController(self.corridor)
+
+    @staticmethod
+    def _empty_collisions() -> dict:
+        return {
+            "distances_cm": [2000 if (b < 18 or b >= 54) else -1 for b in range(72)],
+            "delta_d_cms": [0] * 72,
+            "min_ttc_s": 999.0,
+            "min_ttc_angle_deg": -1.0,
+        }
+
+    @classmethod
+    def _collisions_with_point(cls, x_fwd_m: float, y_cw_m: float) -> dict:
+        col = cls._empty_collisions()
+        dist_cm = math.hypot(x_fwd_m, y_cw_m) * 100.0
+        ang_deg = math.degrees(math.atan2(y_cw_m, x_fwd_m)) % 360.0
+        sec = int(ang_deg // 5.0) % 72
+        col["distances_cm"][sec] = round(dist_cm, 1)
+        return col
+
+    def test_corridor_bounds_and_filleted_intersection(self):
+        """Ověření mezí koridoru [-2.0 m vlevo, +1.0 m vpravo] a zaoblení rohu + přepnutí bisektory."""
+        self.assertAlmostEqual(CORRIDOR_LEFT_M, 2.0)
+        self.assertAlmostEqual(CORRIDOR_RIGHT_M, 1.0)
+        self.assertAlmostEqual(min(self.ctrl.lat_offsets), -2.0)
+        self.assertAlmostEqual(max(self.ctrl.lat_offsets), 1.0)
+
+        # Těsně před rohem w1 (ve vzdálenosti s = 39.2 m) už zaoblená tečna stáčí doprava (te > 0)
+        smp_turn = self.corridor.sample_at_s(39.2)
+        self.assertGreater(smp_turn.te, 0.15)
+
+        # Přepnutí vnitřního rohu v PathTrackeru při bočním posunu (např. +0.8 m vpravo u pravotočivé odbočky)
+        lat_inside, lon_inside = displace_wgs84(self.lat0, self.lon0, d_north_m=39.3, d_east_m=0.85)
+        st = self.tracker.update(lat_inside, lon_inside)
+        self.assertIsNotNone(st)
+        self.assertEqual(self.tracker.current_wp_index, 1)
+
+    def test_rough_terrain_avoids_on_the_fly_without_stopping(self):
+        """Hrubý terén / obrubník v LIDAR-TRAVERSABILITY bez 3D překážky -> plynulé objetí v CRUISING bez zastavení."""
+        def trav_cost(x_fwd: float, y_cw: float) -> int:
+            # Přímo před robotem (y kolem 0) je rozbitý povrch / obrubník (cost 85..100), vlevo (y < -0.55) hladký asfalt (cost 3)
+            if 0.8 <= x_fwd <= 3.5 and -0.55 <= y_cw <= 0.50:
+                return 90
+            return 3
+
+        dec = self.ctrl.step(
+            lat_rrp=self.lat0,
+            lon_rrp=self.lon0,
+            heading_deg=0.0,
+            current_speed_cms=150.0,
+            max_speed_cms=180.0,
+            current_wp_index=0,
+            default_target_heading_deg=0.0,
+            collision_data=self._empty_collisions(),
+            collisions_active=True,
+            traversability_active=True,
+            get_traversability_cost_fn=trav_cost,
+            now=1000.0,
+        )
+        self.assertEqual(dec.nav_state, "CRUISING")
+        self.assertAlmostEqual(dec.speed_cap_cms, 180.0)
+        self.assertLess(dec.lateral_offset_m, -0.5)
+        # Azimut míří doleva (západně od severu -> 270..359°)
+        self.assertGreater(dec.target_heading_deg, 270.0)
+
+    def test_static_3d_obstacle_stops_waits_5s_early_clear_and_detour(self):
+        """Statická 3D překážka na 1.40 m -> zastaví, čeká 5 s, poté objede vlevo max rychlostí 1.0 m/s."""
+        col_obs = self._collisions_with_point(x_fwd_m=1.40, y_cw_m=0.0)
+
+        # t = 100.0 s: zastavení u překážky -> WAITING_CLEARANCE
+        dec0 = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            col_obs, True, False, lambda x, y: 0, now=100.0,
+        )
+        self.assertEqual(dec0.nav_state, "WAITING_CLEARANCE")
+        self.assertEqual(dec0.speed_cap_cms, 0.0)
+        self.assertIn("statická", dec0.nav_info)
+
+        # t = 104.5 s (4.5 s čekání): stále čeká
+        dec4 = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            col_obs, True, False, lambda x, y: 0, now=104.5,
+        )
+        self.assertEqual(dec4.nav_state, "WAITING_CLEARANCE")
+        self.assertEqual(dec4.speed_cap_cms, 0.0)
+
+        # t = 105.1 s (> 5.0 s): přechází do AVOIDING, rychlost omezena na 100 cm/s (1.0 m/s), objíždí vlevo (< 0)
+        dec5 = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            col_obs, True, False, lambda x, y: 0, now=105.1,
+        )
+        self.assertEqual(dec5.nav_state, "AVOIDING")
+        self.assertAlmostEqual(dec5.speed_cap_cms, 100.0)
+        self.assertLess(dec5.lateral_offset_m, -0.5)
+        self.assertIn("vlevo", dec5.nav_info)
+
+        # Test dřívějšího uvolnění během čekání: nová instance, překážka po 1.5 s zmizí
+        ctrl2 = ObstacleAvoidanceController(self.corridor)
+        ctrl2.step(self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0, col_obs, True, False, lambda x, y: 0, now=200.0)
+        self.assertEqual(ctrl2.nav_state, "WAITING_CLEARANCE")
+        ctrl2.step(self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0, self._empty_collisions(), True, False, lambda x, y: 0, now=201.0)
+        dec_clear = ctrl2.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            self._empty_collisions(), True, False, lambda x, y: 0, now=202.1,
+        )
+        self.assertEqual(dec_clear.nav_state, "CRUISING")
+        self.assertAlmostEqual(dec_clear.speed_cap_cms, 180.0)
+
+    def test_dynamic_obstacle_extends_wait_up_to_60s_and_swept_zone(self):
+        """Pohybující se překážka (>= 20 cm posuny) prodlužuje čekání až na 60 s a vytváří zametenou oblast."""
+        t0 = 500.0
+        # Start u překážky na y = +0.2 m
+        dec = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            self._collisions_with_point(1.40, 0.20), True, False, lambda x, y: 0, now=t0,
+        )
+        self.assertEqual(dec.nav_state, "WAITING_CLEARANCE")
+
+        # Každé 4 s se překážka posune o >= 25 cm mezi y = -0.35 m a y = +0.25 m -> prodlužuje až do t0 + 60 s
+        positions_y = [-0.10, -0.35, -0.05, 0.25, -0.10, -0.35, -0.05, 0.25, -0.10, -0.35, -0.05, 0.25, -0.10, 0.20]
+        t_cur = t0
+        for idx, py in enumerate(positions_y):
+            t_cur = t0 + (idx + 1) * 4.0  # 4, 8, ..., 56 s
+            dec = self.ctrl.step(
+                self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+                self._collisions_with_point(1.40, py), True, False, lambda x, y: 0, now=t_cur,
+            )
+            self.assertEqual(dec.nav_state, "WAITING_CLEARANCE", f"Měl stále čekat v čase +{t_cur - t0}s")
+            self.assertIn("pohybující se", dec.nav_info)
+
+        # V čase t0 + 60.1 s (1 minuta) vyprší strop, i když se překážka naposledy pohnula v 56 s!
+        # Překážka nyní stojí vpravo (y = +0.25 m), zametená zóna pokrývá [-0.85..+0.75 m] -> objede čistě vlevo (< -1.0 m)
+        dec_after_60 = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            self._collisions_with_point(1.45, 0.25), True, False, lambda x, y: 0, now=t0 + 60.1,
+        )
+        self.assertEqual(dec_after_60.nav_state, "AVOIDING")
+        self.assertLessEqual(dec_after_60.lateral_offset_m, -1.0)
+
+        # Dvoustupňový fallback: i kdyby historická zametená oblast pokryla celou šířku koridoru [-2..+1 m],
+        # ale překážka nyní stojí jen vpravo (+0.6 m), vlevo je zametená oblast průjezdná s penalizací 92 (< 100)!
+        ctrl_full_sweep = ObstacleAvoidanceController(self.corridor)
+        ctrl_full_sweep.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            self._collisions_with_point(1.40, 0.0), True, False, lambda x, y: 0, now=800.0,
+        )
+        for sweep_y in (-1.9, -1.4, -0.9, -0.4, 0.1, 0.6):
+            ctrl_full_sweep._record_swept_footprint([(sweep_y, 1.45)], now=802.0)
+        # Překážka se v t=802.0 přesune na pravou stranu stopy (+0.45 m -> stále blokuje střed, prodlouží o +5 s do 807.0 s) a zůstane stát
+        ctrl_full_sweep.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            self._collisions_with_point(1.45, 0.45), True, False, lambda x, y: 0, now=802.0,
+        )
+        dec_fallback = ctrl_full_sweep.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0,
+            self._collisions_with_point(1.45, 0.45), True, False, lambda x, y: 0, now=807.2,
+        )
+        self.assertTrue(dec_fallback.path_found)
+        self.assertEqual(dec_fallback.nav_state, "AVOIDING")
+        self.assertLessEqual(dec_fallback.lateral_offset_m, -0.6)
+
+    def test_same_direction_pedestrian_overtake_threshold_06ms_and_blind_spot(self):
+        """
+        Chodec ve stejném směru:
+        1) Rychlý chodec (1.35 m/s při max 1.80 m/s -> rozdíl 0.45 < 0.60 m/s) -> robot jen plynule NÁSLEDUJE (FOLLOWING).
+        2) Pomalejší chodec (1.00 m/s při max 1.80 m/s -> rozdíl 0.80 >= 0.60 m/s) -> po 2.5 s PŘEDJÍŽDÍ plnou rychlostí
+           a drží levý pruh, dokud nemá náskok >= 2.2 m před predikovanou polohou chodce ve slepém úhlu!
+        """
+        # 1) Rychlý chodec 1.35 m/s (rozdíl 0.45 m/s < 0.6 m/s)
+        ctrl_fast = ObstacleAvoidanceController(self.corridor)
+        t = 1000.0
+        r_north = 0.0
+        ped_north = 2.2
+        for step_i in range(40):  # 4.0 s po 0.1 s
+            dt = 0.1
+            t += dt
+            r_north += 1.35 * dt
+            ped_north += 1.35 * dt
+            rlat, rlon = displace_wgs84(self.lat0, self.lon0, d_north_m=r_north, d_east_m=0.0)
+            col = self._collisions_with_point(ped_north - r_north, 0.0)
+            dec = ctrl_fast.step(rlat, rlon, 0.0, 135.0, 180.0, 0, 0.0, col, True, False, lambda x, y: 0, now=t)
+        self.assertEqual(dec.nav_state, "FOLLOWING")
+
+        # 2) Pomalejší chodec 1.00 m/s (rozdíl 0.80 m/s >= 0.60 m/s)
+        ctrl_slow = ObstacleAvoidanceController(self.corridor)
+        t = 2000.0
+        r_north = 0.0
+        ped_north = 2.2
+        dec = None
+        for step_i in range(32):  # 3.2 s > 2.5 s pozorování
+            dt = 0.1
+            t += dt
+            r_north += 1.00 * dt
+            ped_north += 1.00 * dt
+            rlat, rlon = displace_wgs84(self.lat0, self.lon0, d_north_m=r_north, d_east_m=0.0)
+            col = self._collisions_with_point(ped_north - r_north, 0.0)
+            dec = ctrl_slow.step(rlat, rlon, 0.0, 100.0, 180.0, 0, 0.0, col, True, False, lambda x, y: 0, now=t)
+
+        self.assertEqual(dec.nav_state, "OVERTAKING")
+        self.assertAlmostEqual(dec.speed_cap_cms, 180.0)  # Plná rychlost při předjíždění!
+        self.assertLessEqual(dec.lateral_offset_m, -0.9)
+
+        # Nyní robot v levém pruhu (-1.2 m) mine chodce o pouhý 1.0 m (chodec je už za LiDARem -> prázdné kolize!):
+        # Predikce slepého úhlu (náskok 1.0 m < 2.2 m) musí robota stále držet v OVERTAKING vlevo!
+        t += 1.0
+        ped_north += 1.0 * 1.0
+        r_north = ped_north + 1.0  # Jen 1.0 m před chodcem (< 2.2 m)
+        rlat, rlon = displace_wgs84(self.lat0, self.lon0, d_north_m=r_north, d_east_m=-1.2)
+        dec_blind = ctrl_slow.step(
+            rlat, rlon, 0.0, 180.0, 180.0, 0, 0.0,
+            self._empty_collisions(), True, False, lambda x, y: 0, now=t,
+        )
+        self.assertEqual(dec_blind.nav_state, "OVERTAKING")
+        self.assertLess(dec_blind.lateral_offset_m, -0.8)
+
+        # Jakmile má robot náskok >= 2.5 m před predikovanou polohou chodce a vrátí se ke stopě -> CRUISING
+        t += 2.5
+        ped_north += 1.0 * 2.5
+        r_north = ped_north + 2.8
+        rlat, rlon = displace_wgs84(self.lat0, self.lon0, d_north_m=r_north, d_east_m=-0.1)
+        dec_done = ctrl_slow.step(
+            rlat, rlon, 0.0, 180.0, 180.0, 0, 0.0,
+            self._empty_collisions(), True, False, lambda x, y: 0, now=t,
+        )
+        self.assertEqual(dec_done.nav_state, "CRUISING")
+
+    def test_no_path_blocked_corridor_recovery_and_goal_occupied(self):
+        """Zablokovaný celý koridor -> NO_PATH (v=0), po uvolnění pokračuje; překážka v cíli -> FINISHED."""
+        # Zeď 3D překážek přes celý koridor ve vzdálenosti 1.40 m
+        col_wall = self._empty_collisions()
+        for b in list(range(0, 13)) + list(range(59, 72)):
+            col_wall["distances_cm"][b] = 140.0
+
+        self.ctrl.step(self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0, col_wall, True, False, lambda x, y: 0, now=3000.0)
+        dec_blocked = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0, col_wall, True, False, lambda x, y: 0, now=3005.2,
+        )
+        self.assertEqual(dec_blocked.nav_state, "NO_PATH")
+        self.assertFalse(dec_blocked.path_found)
+        self.assertEqual(dec_blocked.speed_cap_cms, 0.0)
+
+        # Cesta se úplně uvolní na >= 1.0 s -> přejde zpět do jízdy
+        self.ctrl.step(self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0, self._empty_collisions(), True, False, lambda x, y: 0, now=3006.0)
+        dec_rec = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 180.0, 0, 0.0, self._empty_collisions(), True, False, lambda x, y: 0, now=3007.2,
+        )
+        self.assertIn(dec_rec.nav_state, ("CRUISING", "AVOIDING"))
+        self.assertGreater(dec_rec.speed_cap_cms, 0.0)
+
+        # Statická překážka přímo na posledním waypointu cíle (<= 2.0 m od konce trasy) -> goal_reached_near_obstacle
+        lat_end_prev, lon_end_prev = displace_wgs84(self.lat0, self.lon0, d_north_m=40.0, d_east_m=18.5)
+        ctrl_goal = ObstacleAvoidanceController(self.corridor)
+        col_goal = self._collisions_with_point(1.40, 0.0)  # Robot míří na východ (90°), překážka 1.4 m před ním na cíli
+        ctrl_goal.step(lat_end_prev, lon_end_prev, 90.0, 0.0, 180.0, 1, 90.0, col_goal, True, False, lambda x, y: 0, now=4000.0)
+        dec_goal = ctrl_goal.step(
+            lat_end_prev, lon_end_prev, 90.0, 0.0, 180.0, 1, 90.0, col_goal, True, False, lambda x, y: 0, now=4005.2,
+        )
+        self.assertTrue(dec_goal.goal_reached_near_obstacle)
 
 
 if __name__ == "__main__":

@@ -149,6 +149,69 @@ class TestTerminalClient(unittest.TestCase):
             mock.stop()
 
 
+class TestPilotNavStateSynchronization(unittest.TestCase):
+    """Test zobrazení nav_state pilota na terminálu, ZMQ notifikací a klidného 60s opakování v NO_PATH."""
+
+    def test_terminal_view_formatting_for_all_nav_states(self):
+        base = {
+            "state": "RUNNING",
+            "wp_index": 3,
+            "wp_total": 10,
+            "distance_to_goal_m": 42.5,
+            "speed_actual": 0.0,
+            "speed_target": 0.0,
+            "gps_sol": "FIX",
+        }
+
+        h, txt = MissionMaratonService._format_running_terminal_view(
+            {**base, "nav_state": "WAITING_CLEARANCE", "nav_info": "Čeká na uvolnění (pohybující se, 12.0/60 s)"}
+        )
+        self.assertEqual(h, "Maraton - Čeká na uvolnění")
+        self.assertIn("12.0/60 s", txt)
+
+        h2, txt2 = MissionMaratonService._format_running_terminal_view(
+            {**base, "nav_state": "NO_PATH", "nav_info": "Není průjezdná cesta – čekám na uvolnění koridoru"}
+        )
+        self.assertEqual(h2, "Maraton - Není průjezdná cesta")
+        self.assertIn("Není průjezdná cesta", txt2)
+
+        h3, txt3 = MissionMaratonService._format_running_terminal_view(
+            {**base, "nav_state": "OVERTAKING", "nav_info": "Předjíždím chodce vlevo (1.2 m)", "speed_actual": 1.8, "speed_target": 1.8}
+        )
+        self.assertEqual(h3, "Maraton - Předjíždění")
+        self.assertIn("Předjíždím chodce vlevo", txt3)
+
+    def test_nav_state_alerts_and_60s_calm_repeat_in_no_path(self):
+        from unittest.mock import MagicMock
+        svc = MissionMaratonService()
+        svc.terminal = MagicMock()
+        svc.logger = MagicMock()
+
+        # Přechod do WAITING_CLEARANCE -> 1x zvuk + bliknutí
+        svc._handle_pilot_nav_state_alerts("WAITING_CLEARANCE", "Čeká 5 s", 2, 50.0, now_ts=100.0)
+        self.assertEqual(svc.terminal.sound.call_count, 1)
+        self.assertEqual(svc.terminal.blink.call_count, 1)
+
+        # Přechod do NO_PATH v t=106 s -> 1x zvuk + bliknutí (celkem 2)
+        svc._handle_pilot_nav_state_alerts("NO_PATH", "Není průjezdná cesta", 2, 50.0, now_ts=106.0)
+        self.assertEqual(svc.terminal.sound.call_count, 2)
+
+        # Po 30 s v NO_PATH (t=136 s < 60 s) -> ŽÁDNÝ další zvuk (nevyvolává stres)
+        svc._handle_pilot_nav_state_alerts("NO_PATH", "Není průjezdná cesta", 2, 50.0, now_ts=136.0)
+        self.assertEqual(svc.terminal.sound.call_count, 2)
+
+        # Po 61 s v NO_PATH (t=167 s >= 60 s) -> klidné zopakování upozornění (celkem 3)
+        svc._handle_pilot_nav_state_alerts("NO_PATH", "Není průjezdná cesta", 2, 50.0, now_ts=167.0)
+        self.assertEqual(svc.terminal.sound.call_count, 3)
+
+    def test_zmq_pilot_state_push_sets_event_immediately(self):
+        svc = MissionMaratonService()
+        svc._pilot_state_event.clear()
+        svc.on_pilot_state_update(json.dumps({"state": "RUNNING", "nav_state": "OBSTACLE", "nav_info": "Překážka"}))
+        self.assertTrue(svc._pilot_state_event.is_set())
+        self.assertEqual(svc._pushed_pilot_status["nav_state"], "OBSTACLE")
+
+
 class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
     """Test stavového automatu mise Maraton s mockovanými mikroslužbami."""
 

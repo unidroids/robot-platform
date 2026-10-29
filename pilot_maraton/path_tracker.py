@@ -93,14 +93,55 @@ class PathTracker:
         else:
             self.active_near_wp = None
 
+    def _crossed_corner_bisector(self, R_lat: float, R_lon: float, state: NearState) -> bool:
+        """
+        Ověří, zda robot při bočním vybočení v koridoru překročil osu úhlu (bisektoru)
+        vnitřního rohu křižovatky mezi úsekem i -> i+1 a i+1 -> i+2.
+        """
+        idx = self.current_wp_index
+        if idx >= len(self.waypoints) - 2:
+            return False
+        if state.distance_to_goal_m is None or state.distance_to_goal_m > 3.0:
+            return False
+        if state.d_perp_m is None or state.d_perp_m < 0.15:
+            return False
+
+        w0 = self.waypoints[idx]
+        w1 = self.waypoints[idx + 1]
+        w2 = self.waypoints[idx + 2]
+
+        lat_mid = math.radians(w1.lat)
+        m_lat = 111132.92 - 559.82 * math.cos(2.0 * lat_mid) + 1.175 * math.cos(4.0 * lat_mid)
+        m_lon = 111412.84 * math.cos(lat_mid) - 93.5 * math.cos(3.0 * lat_mid)
+
+        v1x = (w1.lon - w0.lon) * m_lon
+        v1y = (w1.lat - w0.lat) * m_lat
+        l1 = math.hypot(v1x, v1y)
+        v2x = (w2.lon - w1.lon) * m_lon
+        v2y = (w2.lat - w1.lat) * m_lat
+        l2 = math.hypot(v2x, v2y)
+        if l1 < 1e-3 or l2 < 1e-3:
+            return False
+
+        u1x, u1y = v1x / l1, v1y / l1
+        u2x, u2y = v2x / l2, v2y / l2
+        bx, by = u1x + u2x, u1y + u2y
+        blen = math.hypot(bx, by)
+        if blen < 0.25:
+            return False
+
+        rx = (R_lon - w1.lon) * m_lon
+        ry = (R_lat - w1.lat) * m_lat
+        return (rx * bx + ry * by) >= 0.0
+
     def update(self, R_lat: float, R_lon: float) -> NearState:
         if not self.waypoints or self.active_near_wp is None:
             return None
 
         state = self.active_near_wp.update(R_lat, R_lon)
 
-        # Přepnutí na další waypoint
-        if state.distance_to_goal_m <= 0.0:
+        # Přepnutí na další waypoint (kolmá projekce za koncem úseku nebo bisektora rohu při objížďce)
+        if state.distance_to_goal_m <= 0.0 or self._crossed_corner_bisector(R_lat, R_lon, state):
             self.current_wp_index += 1
             if self.current_wp_index < len(self.waypoints) - 1:
                 print(f"[PathTracker] Dosažen Waypoint {self.current_wp_index}. Přepínám na další segment.")

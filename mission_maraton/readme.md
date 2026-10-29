@@ -34,8 +34,10 @@ Služba naslouchá na TCP portu `9033` (výchozí bind `127.0.0.1:9033`).
 | **`LOGGER`** | 9012 | Centrální datalogger telemetrie robota | `PONG LOGGER` |
 | **`FUSION`** | 9009 | Fúze polohy a orientace (příkaz DATA) | `PONG FUSION` |
 | **`MAPS`** | 9040 | Vyhledávání tras v grafu cest (FIND_ROUTE) | `PONG MAPS` |
-| **`LIDAR`** | 9002 | Antikolizní laserový scanner | `PONG LIDAR` |
+| **`CAMERA-STEREO`** | 9001 | Stereo kamera (spouštěná čistě pro záznam obrazu a logování) | `PONG CAMERA_STEREO` |
+| **`LIDAR`** | 9002 | Nízkoúrovňový ovladač laserového scanneru | `PONG LIDAR` |
 | **`LIDAR-COLLISIONS`** | 9222 | Kolizní kurzy a minimální vzdálenosti překážek | `PONG LIDAR-COLLISIONS` |
+| **`LIDAR-TRAVERSABILITY`** | 9223 | Potenciálová mapa sjízdnosti terénu (8×8 m) | `PONG LIDAR-TRAVERSABILITY` |
 | **`OOW-BRIDGE`**| 9030 | Bezpečnostní dohled OOW | `PONG OOW` |
 | **`PILOT-MARATON`**| 9105 | Autonomní pilot robota pro maraton | `PONG PILOT_MARATON` |
 
@@ -43,22 +45,21 @@ Služba naslouchá na TCP portu `9033` (výchozí bind `127.0.0.1:9033`).
 
 ## 📋 Přehled fází stavového automatu (Workflow)
 
-1. **Krok 0**: Striktní PING/PONG ověření dostupnosti všech 14 mikroslužeb.
+1. **Krok 0**: Striktní PING/PONG ověření dostupnosti všech 16 mikroslužeb.
 2. **Krok 1**: Spuštění polohových a senzorických služeb (`LOGGER`, `DRIVE`, `GNSS-DUAL`, `GNSS-GPS`, `GNSS-IMU`, `RTK`, `FUSION`).
 3. **Krok 2 & 3**: Úvodní obrazovka (*"Maraton - Jdeme na to!"*), otevření nového logu mise do `/data/robot/mission_maraton/<yyyy-mm-dd>/mission-<HH-MM-SS>.dat`.
 4. **Krok 4 až 9**: Spuštění QR scanneru (`START`), příjem souřadnic přes ZMQ `ipc:///tmp/robot-qrscaner` (`geo:<lat>,<lon>`), timeout 120s, přehrání zvuku `notification` a vypnutí scanneru (`STOP`).
 5. **Krok 10 až 12**: Dotaz na `FUSION DATA`, ověření stavu fixu (`gpsSol != NONE`) a přesnosti (`hAcc <= 10000 mm`).
-6. **Krok 13 až 16**: Výpočet vzdušné vzdálenosti k cíli a potvrzení cíle uživatelem.
-7. **Krok 16.1**: Spuštění podpůrných jízdních služeb `MAPS START` a `LIDAR START`.
-8. **Krok 17 až 17.3**: Volání `MAPS FIND_ROUTE <start> <cíl>`, kontrola napojení na komunikaci, zobrazení délky trasy.
-9. **Krok 18**: Zapnutí motorů `DRIVE ON`, předání JSON trasy do `PILOT-MARATON START <json>` (port 9105), zvuk `barking` + oranžové blikání displeje.
-10. **Kroky 19 až 23**: Monitorovací smyčka jízdy (perioda 0.5s):
+6. **Krok 13 až 16**: Výpočet vzdušné vzdálenosti k cíli, potvrzení cíle uživatelem a spuštění `MAPS START`.
+7. **Krok 17 až 17.3**: Volání `MAPS FIND_ROUTE <start> <cíl>`, kontrola napojení na komunikaci, zobrazení délky trasy.
+8. **Krok 18**: Spuštění LiDARu a jeho percepčních profilů (`LIDAR START`, `LIDAR-COLLISIONS START`, `LIDAR-TRAVERSABILITY START`), spuštění záznamu ze stereo kamer (`CAMERA-STEREO START` – čistě pro účely logování, neblokující při selhání `START`), zapnutí motorů `DRIVE ON`, předání JSON trasy do `PILOT-MARATON START <json>` (port 9105), zvuk `barking` + oranžové blikání displeje.
+9. **Kroky 19 až 23**: Monitorovací smyčka jízdy (perioda 0.5s):
     - **`RUNNING`**: Zobrazení aktuálního waypointu, vzdálenosti a rychlosti na terminálu, tlačítka *Pause* a *Stop*.
     - **`PAUSED`**: Pozastavení pilota, tlačítka *Pokračovat* (`RESUME`) a *Stop*.
     - **`STOPPED`**: Zvuk `game-over` + červené blikání, hlášení důvodu, tlačítko *Rozumím* (`acknowledge`).
     - **`FINISHED`**: Zvuk `meow` + zelené blikání (*"Jsme v cíli!"*), tlačítko *Rozumím* (`acknowledge`).
-11. **Ukončení jízdy**:
-    - Při `acknowledge` nebo zrušení mise: zastaví se jízdní služby (`DRIVE OFF`, `PILOT-MARATON STOP`, `MAPS STOP`, `LIDAR STOP`), uzavře se log a systém se vrátí do Kroku 2.
+10. **Ukončení jízdy**:
+    - Ihned po `STOPPED`/`FINISHED` (a rovněž při `acknowledge` nebo zrušení mise): zastaví se jízdní a záznamové služby etapy (`PILOT-MARATON STOP`, `LIDAR-COLLISIONS STOP`, `LIDAR-TRAVERSABILITY STOP`, `LIDAR STOP`, `CAMERA-STEREO STOP`, `MAPS STOP` a po potvrzení `DRIVE OFF`), uzavře se log a systém se vrátí do Kroku 2.
     - Při celkovém zastavení služby (`STOP` / `SHUTDOWN` na portu 9033): zastaví se všechny spuštěné mikroslužby.
 
 ---

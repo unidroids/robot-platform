@@ -47,6 +47,10 @@ MICROSERVICES_CONFIG: Dict[str, Dict[str, Any]] = {
         "port": 9040,
         "expected_pong": ["PONG MAPS"]
     },
+    "CAMERA-STEREO": {
+        "port": 9001,
+        "expected_pong": ["PONG CAMERA_STEREO", "PONG CAMERA-STEREO"]
+    },
     "LIDAR": {
         "port": 9002,
         "expected_pong": ["PONG LIDAR"]
@@ -54,6 +58,10 @@ MICROSERVICES_CONFIG: Dict[str, Dict[str, Any]] = {
     "LIDAR-COLLISIONS": {
         "port": 9222,
         "expected_pong": ["PONG LIDAR-COLLISIONS", "PONG LIDAR_COLLISIONS", "PONG LIDAR-KOLIZE", "PONG LIDAR_KOLIZE"]
+    },
+    "LIDAR-TRAVERSABILITY": {
+        "port": 9223,
+        "expected_pong": ["PONG LIDAR-TRAVERSABILITY", "PONG LIDAR_TRAVERSABILITY"]
     },
     "OOW-BRIDGE": {
         "port": 9030,

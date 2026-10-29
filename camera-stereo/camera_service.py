@@ -89,7 +89,7 @@ class CameraService:
             # --- Levá kamera (sensor-id=0, flip=3) ---
             #f"nvarguscamerasrc sensor-id=0 aeregion=\"86 320 722 950 1.0\" exposuretimerange=\"34000 5000000\" gainrange=\"1.0 16.0\" ! "
             #f"nvarguscamerasrc sensor-id=0 ! "
-            #f"nvarguscamerasrc sensor-id=0 aeregion=\"86 320 722 950 1.0\" ! "
+            f"nvarguscamerasrc sensor-id=0 aeregion=\"86 320 722 950 1.0\" ! "
             f"video/x-raw(memory:NVMM), width=1640, height=1232, format=NV12, framerate=10/1 ! "
             f"nvvidconv flip-method=3 ! video/x-raw(memory:NVMM), width=1232, height=1640 ! "
             f"queue max-size-buffers=2 leaky=downstream ! comp.sink_0 "

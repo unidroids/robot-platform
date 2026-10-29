@@ -393,8 +393,10 @@ class MissionMaratonService:
                 try:
                     await self._run_mission_cycle()
                 finally:
-                    # Po jakémkoliv ukončení mise (cíl, zrušení cancel_mission, návrat) vždy zastavíme jízdní služby
-                    self._stop_driving_services()
+                    # Po jakémkoliv ukončení etapy (cíl, zrušení cancel_mission, návrat) vždy zastavíme jízdní služby
+                    # (pokud už neprobíhá celkový stop_mission, který volá _stop_all_services)
+                    if not self._stop_requested:
+                        self._stop_driving_services()
 
         except asyncio.CancelledError:
             print("[MissionMaraton] Workflow mise byla zrušena.")
@@ -767,21 +769,33 @@ class MissionMaratonService:
                     return
 
         # -------------------------------------------------------------
-        # Krok 18: Spuštění jízdy (LIDAR, DRIVE, PILOT)
+        # Krok 18: Spuštění jízdy (LIDAR + profily, CAMERA-STEREO, DRIVE, PILOT)
         # -------------------------------------------------------------
-        self._set_state(18, "STEP_18_START_DRIVING", "Spuštění LiDARu, DRIVE ON a PILOT-MARATON")
+        self._set_state(
+            18,
+            "STEP_18_START_DRIVING",
+            "Spuštění LiDARu, LIDAR-COLLISIONS, LIDAR-TRAVERSABILITY, CAMERA-STEREO, DRIVE ON a PILOT-MARATON"
+        )
 
-        # 1. Spuštění LiDARu
-        self._send_cmd("LIDAR", "START", timeout=2.0)
+        # 1. Spuštění LiDARu a jeho percepčních profilů (kolize + sjízdnost)
+        self._send_cmd("LIDAR", "START", timeout=3.0)
+        self._send_cmd("LIDAR-COLLISIONS", "START", timeout=2.0)
+        self._send_cmd("LIDAR-TRAVERSABILITY", "START", timeout=2.0)
 
-        # 2. Zapnutí motorů DRIVE ON
+        # 2. Spuštění stereo kamery čistě pro účely logování (neblokující při selhání START)
+        ok_cam, resp_cam = self._send_cmd("CAMERA-STEREO", "START", timeout=3.0)
+        if not ok_cam or not resp_cam.upper().startswith(("OK", "STARTED", "ALREADY")):
+            print(f"[MissionMaraton] [VAROVÁNÍ] CAMERA-STEREO se nepodařilo spustit ({resp_cam}), pokračuji v jízdě bez kamerového záznamu.")
+            self.logger.log("CAMERA_STEREO_START_WARNING", {"ok": ok_cam, "response": resp_cam})
+
+        # 3. Zapnutí motorů DRIVE ON
         self._send_cmd("DRIVE", "ON", timeout=2.0)
 
-        # 3. Spuštění pilota s předanou trasou
+        # 4. Spuštění pilota s předanou trasou
         pilot_cmd = f"START {self.route_json_str}"
         self._send_cmd("PILOT-MARATON", pilot_cmd, timeout=3.0)
 
-        # 4. Zvuková a vizuální signalizace
+        # 5. Zvuková a vizuální signalizace
         self.terminal.sound("barking")
         self.terminal.blink("#FFA500", 2.0, 3000)
 
@@ -924,25 +938,31 @@ class MissionMaratonService:
     def _stop_active_run_services(self):
         """
         Zastaví služby aktivního běhu trasy ihned při ukončení jízdy (STOPPED / FINISHED):
-        LIDAR STOP, PILOT-MARATON STOP, MAPS STOP.
+        PILOT-MARATON STOP, LIDAR-COLLISIONS STOP, LIDAR-TRAVERSABILITY STOP, LIDAR STOP, CAMERA-STEREO STOP, MAPS STOP.
         Motory (DRIVE OFF) se vypínají až následně po potvrzení obsluhou (acknowledge).
         """
-        print("[MissionMaraton] Jízda ukončena (STOPPED/FINISHED) - okamžitě zastavuji LIDAR, PILOT a MAPS...")
-        self._send_cmd("LIDAR", "STOP", timeout=1.5)
+        print("[MissionMaraton] Jízda ukončena (STOPPED/FINISHED) - okamžitě zastavuji PILOT, LIDAR profily, LIDAR, CAMERA-STEREO a MAPS...")
         self._send_cmd("PILOT-MARATON", "STOP", timeout=1.5)
+        self._send_cmd("LIDAR-COLLISIONS", "STOP", timeout=1.5)
+        self._send_cmd("LIDAR-TRAVERSABILITY", "STOP", timeout=1.5)
+        self._send_cmd("LIDAR", "STOP", timeout=1.5)
+        self._send_cmd("CAMERA-STEREO", "STOP", timeout=3.0)
         self._send_cmd("MAPS", "STOP", timeout=1.5)
 
     def _stop_driving_services(self):
         """
         Zastaví pouze služby specifické pro jízdu (konec mise, acknowledge, cancel):
-        DRIVE OFF, PILOT-MARATON STOP, MAPS STOP, LIDAR STOP.
+        DRIVE OFF, PILOT-MARATON STOP, MAPS STOP, LIDAR-COLLISIONS STOP, LIDAR-TRAVERSABILITY STOP, LIDAR STOP, CAMERA-STEREO STOP.
         Polohové služby (GNSS, RTK, FUSION, LOGGER, DRIVE proces) zůstávají běžet.
         """
         print("[MissionMaraton] Zastavuji jízdní služby (konec etapy)...")
         self._send_cmd("PILOT-MARATON", "STOP", timeout=1.5)
         self._send_cmd("DRIVE", "OFF", timeout=1.5)
         self._send_cmd("MAPS", "STOP", timeout=1.5)
+        self._send_cmd("LIDAR-COLLISIONS", "STOP", timeout=1.5)
+        self._send_cmd("LIDAR-TRAVERSABILITY", "STOP", timeout=1.5)
         self._send_cmd("LIDAR", "STOP", timeout=1.5)
+        self._send_cmd("CAMERA-STEREO", "STOP", timeout=3.0)
         self.logger.close()
 
     def _stop_all_services(self):
@@ -955,7 +975,10 @@ class MissionMaratonService:
         all_stoppable = [
             "PILOT-MARATON",
             "MAPS",
+            "LIDAR-COLLISIONS",
+            "LIDAR-TRAVERSABILITY",
             "LIDAR",
+            "CAMERA-STEREO",
             "LOGGER",
             "FUSION",
             "RTK",
@@ -969,4 +992,5 @@ class MissionMaratonService:
         self._send_cmd("DRIVE", "STOP", timeout=1.5)
 
         for s_name in all_stoppable:
-            self._send_cmd(s_name, "STOP", timeout=1.0)
+            to = 3.0 if s_name == "CAMERA-STEREO" else 1.0
+            self._send_cmd(s_name, "STOP", timeout=to)

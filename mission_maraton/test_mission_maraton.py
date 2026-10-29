@@ -164,8 +164,10 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
             "LOGGER": 29012,
             "FUSION": 29009,
             "MAPS": 29040,
+            "CAMERA-STEREO": 29001,
             "LIDAR": 29002,
             "LIDAR-COLLISIONS": 29222,
+            "LIDAR-TRAVERSABILITY": 29223,
             "OOW-BRIDGE": 29030,
             "PILOT-MARATON": 29105
         }
@@ -180,8 +182,8 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         for name, port in self.ports.items():
             resp_map = {
                 "PING": MICROSERVICES_CONFIG[name]["expected_pong"][0],
-                "START": "OK",
-                "STOP": "OK",
+                "START": "STARTED" if name == "CAMERA-STEREO" else "OK",
+                "STOP": "STOPPED" if name == "CAMERA-STEREO" else "OK",
                 "ON": "OK",
                 "OFF": "OK"
             }
@@ -272,12 +274,15 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.1)
         self.assertIn(self.service.current_step, (18, 19, 21))
 
-        # Ověříme, že DRIVE dostal příkaz ON a PILOT-MARATON dostal START a LIDAR dostal START
+        # Ověříme, že DRIVE dostal ON, PILOT-MARATON dostal START a LIDAR + profily + CAMERA-STEREO dostaly START
         drive_cmds = self.mocks["DRIVE"].received_cmds
         pilot_cmds = self.mocks["PILOT-MARATON"].received_cmds
         lidar_cmds = self.mocks["LIDAR"].received_cmds
         self.assertIn("ON", drive_cmds)
         self.assertIn("START", lidar_cmds)
+        self.assertIn("START", self.mocks["LIDAR-COLLISIONS"].received_cmds)
+        self.assertIn("START", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
+        self.assertIn("START", self.mocks["CAMERA-STEREO"].received_cmds)
         self.assertTrue(any(c.startswith("START") for c in pilot_cmds))
 
         # 6. Změníme odpověď pilota na FINISHED
@@ -294,8 +299,11 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.service.current_step, 20)
 
-        # Ověříme, že ihned po FINISHED (krok 20) byl zastaven LIDAR a PILOT, ale motory ještě čekají na acknowledge
+        # Ověříme, že ihned po FINISHED (krok 20) byly zastaveny LIDAR + profily, CAMERA-STEREO a PILOT, ale motory ještě čekají na acknowledge
         self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
+        self.assertIn("STOP", self.mocks["LIDAR-COLLISIONS"].received_cmds)
+        self.assertIn("STOP", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
+        self.assertIn("STOP", self.mocks["CAMERA-STEREO"].received_cmds)
         self.assertIn("STOP", self.mocks["PILOT-MARATON"].received_cmds)
         self.assertNotIn("OFF", self.mocks["DRIVE"].received_cmds)
 
@@ -412,7 +420,51 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("OFF", self.mocks["DRIVE"].received_cmds)
         self.assertIn("STOP", self.mocks["PILOT-MARATON"].received_cmds)
         self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
+        self.assertIn("STOP", self.mocks["LIDAR-COLLISIONS"].received_cmds)
+        self.assertIn("STOP", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
+        self.assertIn("STOP", self.mocks["CAMERA-STEREO"].received_cmds)
         self.assertIn("STOP", self.mocks["MAPS"].received_cmds)
+
+    async def test_camera_stereo_start_failure_does_not_block_driving(self):
+        """Ověření, že selhání START služby CAMERA-STEREO v Kroku 18 pouze zaloguje varování a nezablokuje jízdu."""
+        self.mocks["CAMERA-STEREO"].response_map["START"] = "ERR ERROR"
+
+        ok, _ = self.service.start_mission()
+        self.assertTrue(ok)
+        for _ in range(40):
+            if self.service.current_step == 2:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("scan_qrcode")
+        for _ in range(40):
+            if self.service.current_step == 4:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_qr_scanned("geo:49.555201,12.743162")
+        for _ in range(40):
+            if self.service.current_step == 15:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("destination_ok")
+        for _ in range(40):
+            if self.service.current_step == 17:
+                break
+            await asyncio.sleep(0.1)
+
+        self.service.on_button_pressed("mission_go")
+        for _ in range(40):
+            if self.service.current_step == 21:
+                break
+            await asyncio.sleep(0.1)
+
+        # Jízda musí normálně běžet i při selhání START kamery
+        self.assertEqual(self.service.current_step, 21)
+        self.assertIn("START", self.mocks["CAMERA-STEREO"].received_cmds)
+        self.assertIn("ON", self.mocks["DRIVE"].received_cmds)
+        self.assertTrue(any(c.startswith("START") for c in self.mocks["PILOT-MARATON"].received_cmds))
 
     async def test_pilot_paused_handling(self):
         """Ověření, že pokud pilot vrátí PAUSED, stavový automat přejde do STEP_22_PAUSED a terminál obdrží zprávu."""

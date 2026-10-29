@@ -20,7 +20,7 @@ public:
                        const std::string &lidar_ip = "192.168.10.62",
                        uint16_t local_port = 6201,
                        const std::string &local_ip = "192.168.10.2",
-                       uint16_t cloud_scan_num = 3,
+                       uint16_t cloud_scan_num = 1,
                        bool use_system_timestamp = true)
     {
         if (reader_) {

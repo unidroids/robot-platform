@@ -7,7 +7,9 @@ try:
 except (ImportError, ValueError):
     from service import RobotourPilotService
 
+SERVICE_HOST = "127.0.0.1"
 SERVICE_PORT = 9104
+TCP_STREAM_LIMIT = 16 * 1024 * 1024  # 16 MiB limit řádku pro dlouhé trasy z MAPS (5+ km JSON > 64 KiB)
 
 OOW_PORT = 9030
 
@@ -47,7 +49,8 @@ async def handle_client(reader, writer, service):
                 
                 parts = line.split()
                 cmd = parts[0].upper()
-                print(f"[TCP_Server] Zpracovávám TCP příkaz: {line}")
+                log_preview = line if len(line) <= 200 else f"{line[:200]}... ({len(line)} znaků)"
+                print(f"[TCP_Server] Zpracovávám TCP příkaz: {log_preview}")
                 
                 if cmd == "PING":
                     writer.write(b"PONG PILOT_ROBOTOUR\n")
@@ -116,6 +119,11 @@ async def handle_client(reader, writer, service):
                 pass
     except Exception as e:
         print(f"[TCP_Server] Klient chyba: {e}")
+        try:
+            writer.write(f"ERR: {e}\n".encode("utf-8"))
+            await writer.drain()
+        except Exception:
+            pass
     finally:
         print(f"[TCP_Server] Klient odpojen: {addr}")
         try:
@@ -124,13 +132,18 @@ async def handle_client(reader, writer, service):
             pass
 
 async def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Služba PILOT-ROBOTOUR")
+    parser.add_argument("--host", default=SERVICE_HOST, help=f"Host (default: {SERVICE_HOST})")
+    parser.add_argument("--port", type=int, default=SERVICE_PORT, help=f"Port (default: {SERVICE_PORT})")
+    args = parser.parse_args()
     service = RobotourPilotService()
     server = await asyncio.start_server(
         lambda r, w: handle_client(r, w, service),
-        '0.0.0.0', SERVICE_PORT
+        args.host, args.port, limit=TCP_STREAM_LIMIT
     )
     
-    print(f"[TCP_Server] Služba PILOT-ROBOTOUR naslouchá na TCP portu {SERVICE_PORT}.")
+    print(f"[TCP_Server] Služba PILOT-ROBOTOUR naslouchá na {args.host}:{args.port}.")
     async with server:
         await server.serve_forever()
 

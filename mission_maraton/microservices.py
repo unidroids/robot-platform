@@ -83,8 +83,11 @@ def send_tcp_command(host: str, port: int, cmd: str, timeout: float = DEFAULT_TI
     try:
         s.connect((host, port))
         s.sendall((cmd.strip() + "\n").encode("utf-8"))
-        f = s.makefile("rwb", buffering=0)
-        line = f.readline().decode("utf-8").strip()
+        with s.makefile("rb", buffering=65536) as f:
+            raw_line = f.readline()
+        if not raw_line:
+            return False, "Prázdná odpověď (EOF – spojení uzavřeno serverem)"
+        line = raw_line.decode("utf-8").strip()
         return True, line
     except Exception as e:
         return False, str(e)

@@ -16,7 +16,7 @@ from pilot_robotour.geo_utils import deg2rad, rad2deg, lla_to_ecef, ecef_to_lla,
 from pilot_robotour.near_waypoint import NearWaypoint
 from pilot_robotour.path_tracker import PathTracker
 from pilot_robotour.service import RobotourPilotService
-from pilot_robotour.main import handle_client
+from pilot_robotour.main import handle_client, TCP_STREAM_LIMIT
 
 
 class TestPilotRobotourLogic(unittest.TestCase):
@@ -218,7 +218,7 @@ class TestPilotRobotourTCP(unittest.TestCase):
                 cls.stop_event = asyncio.Event()
                 cls.server = await asyncio.start_server(
                     lambda r, w: handle_client(r, w, cls.service),
-                    '127.0.0.1', cls.test_port
+                    '127.0.0.1', cls.test_port, limit=TCP_STREAM_LIMIT
                 )
                 cls.server_ready.set()
                 async with cls.server:

@@ -128,6 +128,28 @@ class TestMissionMaratonBasics(unittest.TestCase):
         finally:
             mock.stop()
 
+    def test_send_tcp_command_rejects_empty_eof(self):
+        """Pokud server uzavře spojení bez odpovědi (EOF), send_tcp_command musí vrátit ok=False."""
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", 19099))
+        srv.listen(1)
+
+        def close_immediately():
+            conn, _ = srv.accept()
+            conn.recv(4096)
+            conn.close()
+
+        t = threading.Thread(target=close_immediately, daemon=True)
+        t.start()
+        try:
+            ok, resp = send_tcp_command("127.0.0.1", 19099, "START {}", timeout=2.0)
+            self.assertFalse(ok)
+            self.assertIn("EOF", resp)
+        finally:
+            srv.close()
+            t.join(timeout=1.0)
+
 
 class TestTerminalClient(unittest.TestCase):
     """Test komunikace s TERMINAL klientem."""

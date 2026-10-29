@@ -47,6 +47,6 @@ struct CollisionConfig {
       3; // Min počet snímků v kolizním kurzu pro vyhlášení TTC
   size_t min_points_per_cell = 2; // Odfiltrování ojedinělých odrazů / šumu
   size_t min_points_per_cycle =
-      10000;                 // Minimální počet bodů za 100 ms pro platný cyklus
-  uint32_t max_lag_ms = 150; // Max povolená prodleva mezi cykly
+      500;                   // Minimální počet bodů za 100 ms pro platný cyklus (venku ~800-3500 bodů/100 ms)
+  uint32_t max_lag_ms = 500; // Max povolená prodleva mezi cykly (odolnost vůči diskovému I/O)
 };

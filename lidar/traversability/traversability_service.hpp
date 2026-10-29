@@ -430,7 +430,7 @@ private:
                 }
 
                 // 3. Inkrementální načtení bodů z ring bufferu (vlastní kurzor last_seq_)
-                auto inc_res = lidar_->getPointBuffer().getNewSamples(last_seq_, samples);
+                auto inc_res = lidar_->getPointBuffer().getNewSamples(last_seq_, samples, config_.min_points_per_cycle);
                 points_last_cycle_.store(inc_res.count);
 
                 if (inc_res.count < config_.min_points_per_cycle) {

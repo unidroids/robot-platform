@@ -232,7 +232,7 @@ private:
         std::string local_ip  = "192.168.10.2";
         uint16_t lidar_port   = 6101;
         uint16_t local_port   = 6201;
-        uint16_t cloud_scan_num = 3;
+        uint16_t cloud_scan_num = 1;
         bool use_system_timestamp = true;
 
         if (!reader_.initializeUDP(lidar_port, lidar_ip, local_port, local_ip,

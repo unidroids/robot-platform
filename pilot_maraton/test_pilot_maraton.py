@@ -24,7 +24,7 @@ from pilot_maraton.corridor_planner import (
     CORRIDOR_RIGHT_M,
 )
 from pilot_maraton.service import MaratonPilotService
-from pilot_maraton.main import handle_client
+from pilot_maraton.main import handle_client, TCP_STREAM_LIMIT
 
 
 class TestPilotMaratonLogic(unittest.TestCase):
@@ -290,6 +290,8 @@ class TestPilotMaratonTCP(unittest.TestCase):
     def setUpClass(cls):
         cls.test_port = 19105
         cls.service = MaratonPilotService()
+        cls.service.drive = MagicMock()
+        cls.service.set_oow_tcp_ok = MagicMock()
         cls.server_ready = threading.Event()
 
         def run_server():
@@ -297,7 +299,8 @@ class TestPilotMaratonTCP(unittest.TestCase):
                 cls.stop_event = asyncio.Event()
                 cls.server = await asyncio.start_server(
                     lambda r, w: handle_client(r, w, cls.service),
-                    '127.0.0.1', cls.test_port
+                    '127.0.0.1', cls.test_port,
+                    limit=TCP_STREAM_LIMIT
                 )
                 cls.server_ready.set()
                 async with cls.server:
@@ -359,12 +362,58 @@ class TestPilotMaratonTCP(unittest.TestCase):
             "edges": []
         })
         resp = self._send_cmd(f"START {maps_json}")
-        self.assertEqual(resp, "OK")
-        
-        status_resp = self._send_cmd("STATUS")
-        st = json.loads(status_resp)
-        self.assertEqual(st["state"], "RUNNING")
-        self.assertEqual(st["wp_total"], 2)
+        try:
+            self.assertEqual(resp, "OK")
+            status_resp = self._send_cmd("STATUS")
+            st = json.loads(status_resp)
+            self.assertEqual(st["state"], "RUNNING")
+            self.assertEqual(st["wp_total"], 2)
+        finally:
+            self._send_cmd("STOP")
+
+    def test_start_with_large_5km_maps_json_over_64kb(self):
+        """Regresní test: trasa > 5.5 km (> 120 KB JSON na jednom řádku) nesmí narazit na 64 KiB StreamReader limit."""
+        nodes = []
+        edges = []
+        base_lat, base_lon = 50.10455, 14.43031
+        for i in range(600):
+            nid = f"stromovka_node_{i:04d}"
+            nodes.append({
+                "id": nid,
+                "lat": round(base_lat + i * 0.00009, 7),  # ~10 m krok -> ~6.0 km trasa
+                "lon": round(base_lon + (i % 5) * 0.00001, 7),
+                "surface": "asphalt_promenade",
+                "description": "Královská obora Stromovka - pěší promenáda maraton",
+            })
+            if i > 0:
+                edges.append({
+                    "from": f"stromovka_node_{i-1:04d}",
+                    "to": nid,
+                    "length_m": 10.02,
+                    "width_m": 3.5,
+                })
+        large_json = json.dumps({
+            "metadata": {"area_name": "Královská obora (Stromovka v5)", "route_length_m": 5990.0},
+            "nodes": nodes,
+            "edges": edges,
+        }, ensure_ascii=False)
+        self.assertGreater(len(large_json.encode("utf-8")), 90000)
+
+        resp = self._send_cmd(f"START {large_json}")
+        try:
+            self.assertEqual(resp, "OK")
+            st = json.loads(self._send_cmd("STATUS"))
+            self.assertEqual(st["state"], "RUNNING")
+            self.assertEqual(st["wp_total"], 600)
+
+            # Ověření rychlosti projekce na 6 km koridoru (~30 000 vzorků)
+            t0 = time.perf_counter()
+            for _ in range(36):
+                self.service.corridor_planner.corridor.project_enu(2.0, 55.0, hint_seg_idx=5)
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            self.assertLess(elapsed_ms, 25.0)
+        finally:
+            self._send_cmd("STOP")
 
     def test_start_without_route_fails(self):
         resp = self._send_cmd("START")

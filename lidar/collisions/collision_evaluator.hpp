@@ -73,7 +73,7 @@ public:
     {
         auto start_time = std::chrono::steady_clock::now();
 
-        // 1. Kontrola počtu bodů (min 10 000 bodů za 100 ms)
+        // 1. Kontrola počtu bodů (min config_.min_points_per_cycle bodů za cyklus)
         if (samples.size() < config_.min_points_per_cycle) {
             consecutive_valid_frames_ = 0;
             return false;

@@ -58,8 +58,8 @@ public:
     std::size_t size() const noexcept { return size_; }
     uint64_t totalWritten() const noexcept { return total_written_.load(std::memory_order_acquire); }
 
-    // Inkrementální vyčtení nových vzorků od last_seq
-    IncrementalResult getNewSamples(uint64_t &last_seq, std::vector<Sample> &out) const
+    // Inkrementální vyčtení nových vzorků od last_seq (pokud je méně než min_count, kurzor last_seq neposouvá a body nezahazuje)
+    IncrementalResult getNewSamples(uint64_t &last_seq, std::vector<Sample> &out, std::size_t min_count = 1) const
     {
         IncrementalResult res{};
         uint64_t current_seq = total_written_.load(std::memory_order_acquire);
@@ -69,6 +69,11 @@ public:
         }
 
         uint64_t available = current_seq - last_seq;
+        if (available < min_count && available <= kCapacity) {
+            out.clear();
+            res.count = available;
+            return res;
+        }
         if (available > kCapacity) {
             res.overflow = true;
             last_seq = current_seq - kCapacity;

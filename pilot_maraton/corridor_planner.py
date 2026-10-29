@@ -6,6 +6,7 @@ předjíždění chodců jdoucích stejným směrem a detekci neprůjezdné cest
 """
 from __future__ import annotations
 
+import bisect
 import math
 import time
 from dataclasses import dataclass, field
@@ -119,6 +120,8 @@ class RouteCorridor:
         ]
         self.sample_step_m = sample_step_m
         self.samples: List[CenterlineSample] = []
+        self._seg_bounds: Dict[int, Tuple[int, int]] = {}
+        self._sample_s: List[float] = []
         self._build_filleted_centerline()
         self.total_length_m = self.samples[-1].s if self.samples else 0.0
 
@@ -226,6 +229,8 @@ class RouteCorridor:
         if not raw_pts:
             e0, n0 = self.wp_enu[0]
             self.samples = [CenterlineSample(0.0, e0, n0, 0.0, 1.0, 1.0, 0.0, 0)]
+            self._seg_bounds = {0: (0, 0)}
+            self._sample_s = [0.0]
             return
 
         # Spočítáme kumulativní délku oblouku a vyhlazené tečny/normály
@@ -245,6 +250,7 @@ class RouteCorridor:
                 te, tn = 0.0, 1.0
             else:
                 te, tn = tx / tlen, ty / tlen
+            seg_i = raw_pts[idx][2]
             # Pravostranná normála v ENU: otočení (te, tn) o 90° CW -> (tn, -te)
             self.samples.append(
                 CenterlineSample(
@@ -255,9 +261,15 @@ class RouteCorridor:
                     tn=tn,
                     nr_e=tn,
                     nr_n=-te,
-                    seg_idx=raw_pts[idx][2],
+                    seg_idx=seg_i,
                 )
             )
+            if seg_i not in self._seg_bounds:
+                self._seg_bounds[seg_i] = (idx, idx)
+            else:
+                self._seg_bounds[seg_i] = (self._seg_bounds[seg_i][0], idx)
+
+        self._sample_s = cum_s
 
     def project_enu(self, e_pt: float, n_pt: float, hint_seg_idx: Optional[int] = None) -> Tuple[float, float, int]:
         """
@@ -267,17 +279,25 @@ class RouteCorridor:
         best_dist2 = float("inf")
         best_idx = 0
 
-        for idx, smp in enumerate(self.samples):
-            if hint_seg_idx is not None and abs(smp.seg_idx - hint_seg_idx) > 2:
-                continue
-            de = e_pt - smp.e
-            dn = n_pt - smp.n
-            d2 = de * de + dn * dn
-            if d2 < best_dist2:
-                best_dist2 = d2
-                best_idx = idx
+        if hint_seg_idx is not None and self._seg_bounds:
+            idx_lo: Optional[int] = None
+            idx_hi: Optional[int] = None
+            for seg_k in range(hint_seg_idx - 2, hint_seg_idx + 3):
+                bounds = self._seg_bounds.get(seg_k)
+                if bounds is not None:
+                    idx_lo = bounds[0] if idx_lo is None else min(idx_lo, bounds[0])
+                    idx_hi = bounds[1] if idx_hi is None else max(idx_hi, bounds[1])
+            if idx_lo is not None and idx_hi is not None:
+                for idx in range(idx_lo, idx_hi + 1):
+                    smp = self.samples[idx]
+                    de = e_pt - smp.e
+                    dn = n_pt - smp.n
+                    d2 = de * de + dn * dn
+                    if d2 < best_dist2:
+                        best_dist2 = d2
+                        best_idx = idx
 
-        # Fallback přes celou trasu, pokud okno kolem hint_seg_idx nic nenašlo
+        # Fallback přes celou trasu, pokud okno kolem hint_seg_idx nebylo zadáno nebo nic nenašlo
         if best_dist2 == float("inf"):
             for idx, smp in enumerate(self.samples):
                 de = e_pt - smp.e
@@ -304,11 +324,8 @@ class RouteCorridor:
         if s_query >= self.total_length_m:
             return self.samples[-1]
 
-        idx = max(0, min(len(self.samples) - 2, start_idx))
-        while idx > 0 and self.samples[idx].s > s_query:
-            idx -= 1
-        while idx < len(self.samples) - 2 and self.samples[idx + 1].s < s_query:
-            idx += 1
+        idx = bisect.bisect_right(self._sample_s, s_query) - 1
+        idx = max(0, min(len(self.samples) - 2, idx))
 
         s0 = self.samples[idx]
         s1 = self.samples[idx + 1]

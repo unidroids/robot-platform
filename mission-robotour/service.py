@@ -781,7 +781,22 @@ class MissionRobotourService:
 
         # 3. Spuštění pilota s předanou trasou
         pilot_cmd = f"START {self.route_json_str}"
-        self._send_cmd("PILOT-ROBOTOUR", pilot_cmd, timeout=3.0)
+        ok_pilot, resp_pilot = self._send_cmd("PILOT-ROBOTOUR", pilot_cmd, timeout=8.0)
+        if not ok_pilot or not resp_pilot.upper().startswith("OK"):
+            err_msg = resp_pilot or "Prázdná odpověď při spuštění pilota"
+            self.logger.log("STEP_18_PILOT_START_FAILED", {"ok": ok_pilot, "response": resp_pilot})
+            print(f"[MissionService] [CHYBA] PILOT-ROBOTOUR odmítl START: {err_msg}")
+            self._stop_active_run_services()
+            self.terminal.sound("game-over")
+            self.terminal.blink("#FF0000", 2.0, 3000)
+            self.terminal.show_message(
+                header="Robotour - Chyba startu pilota",
+                text=f"Nepodařilo se spustit PILOT-ROBOTOUR:\n{err_msg}",
+                buttons=[{"id": "acknowledge", "text": "Rozumím"}]
+            )
+            await self._wait_for_button(["acknowledge"])
+            self._stop_driving_services()
+            return
 
         # 4. Zvuková a vizuální signalizace
         self.terminal.sound("barking")

@@ -56,6 +56,8 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
     private lateinit var btnPilotManualStatus: Button
     private lateinit var switchMissionRobotour: SwitchCompat
     private lateinit var btnMissionRobotourStatus: Button
+    private lateinit var switchMissionMaraton: SwitchCompat
+    private lateinit var btnMissionMaratonStatus: Button
     private lateinit var btnTelemetry: Button
 
     private lateinit var bleManager: BleManager
@@ -105,6 +107,8 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
         btnPilotManualStatus = findViewById(R.id.btnPilotManualStatus)
         switchMissionRobotour = findViewById(R.id.switchMissionRobotour)
         btnMissionRobotourStatus = findViewById(R.id.btnMissionRobotourStatus)
+        switchMissionMaraton = findViewById(R.id.switchMissionMaraton)
+        btnMissionMaratonStatus = findViewById(R.id.btnMissionMaratonStatus)
         btnTelemetry = findViewById(R.id.btnTelemetry)
     }
 
@@ -196,6 +200,11 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             bleManager.sendCommand(getClientId(), if (isChecked) "MISSION_ROBOTOUR_ON" else "MISSION_ROBOTOUR_OFF")
         }
         btnMissionRobotourStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "MISSION_ROBOTOUR_STATUS") }
+
+        switchMissionMaraton.setOnCheckedChangeListener { _, isChecked ->
+            bleManager.sendCommand(getClientId(), if (isChecked) "MISSION_MARATON_ON" else "MISSION_MARATON_OFF")
+        }
+        btnMissionMaratonStatus.setOnClickListener { bleManager.sendCommand(getClientId(), "MISSION_MARATON_STATUS") }
 
         btnTelemetry.setOnClickListener {
             tvTelemetry.setText(R.string.telemetry_loading)
@@ -317,6 +326,7 @@ class MainActivity : AppCompatActivity(), BleManager.BleCallback {
             updateSwitchQuietly(switchFusion, telemetry.fusionOn, "FUSION_ON", "FUSION_OFF")
             updateSwitchQuietly(switchPilotManual, telemetry.pilotManualOn, "PILOT_MANUAL_START", "PILOT_MANUAL_STOP")
             updateSwitchQuietly(switchMissionRobotour, telemetry.missionRobotourOn, "MISSION_ROBOTOUR_ON", "MISSION_ROBOTOUR_OFF")
+            updateSwitchQuietly(switchMissionMaraton, telemetry.missionMaratonOn, "MISSION_MARATON_ON", "MISSION_MARATON_OFF")
         }
     }
 

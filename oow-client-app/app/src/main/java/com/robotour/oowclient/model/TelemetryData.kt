@@ -12,7 +12,8 @@ data class TelemetryData(
     val driveOn: Boolean? = null,
     val fusionOn: Boolean? = null,
     val pilotManualOn: Boolean? = null,
-    val missionRobotourOn: Boolean? = null
+    val missionRobotourOn: Boolean? = null,
+    val missionMaratonOn: Boolean? = null
 ) {
     companion object {
         fun fromJson(raw: String): TelemetryData {
@@ -25,6 +26,7 @@ data class TelemetryData(
             var fusion: Boolean? = null
             var pilotManual: Boolean? = null
             var missionRobotour: Boolean? = null
+            var missionMaraton: Boolean? = null
 
             try {
                 val json = JSONObject(raw)
@@ -57,6 +59,11 @@ data class TelemetryData(
                 } else if (json.optString("service").equals("MISSION-ROBOTOUR", ignoreCase = true) && json.has("running")) {
                     missionRobotour = json.optBoolean("running")
                 }
+                if (json.has("mission_maraton_status")) {
+                    missionMaraton = json.optString("mission_maraton_status").equals("ON", ignoreCase = true) || json.optString("mission_maraton_status").equals("RUNNING", ignoreCase = true)
+                } else if (json.optString("service").equals("MISSION-MARATON", ignoreCase = true) && json.has("running")) {
+                    missionMaraton = json.optBoolean("running")
+                }
             } catch (_: Exception) {
                 // Return data with raw string if parsing fails
             }
@@ -71,7 +78,8 @@ data class TelemetryData(
                 driveOn = drive,
                 fusionOn = fusion,
                 pilotManualOn = pilotManual,
-                missionRobotourOn = missionRobotour
+                missionRobotourOn = missionRobotour,
+                missionMaratonOn = missionMaraton
             )
         }
     }

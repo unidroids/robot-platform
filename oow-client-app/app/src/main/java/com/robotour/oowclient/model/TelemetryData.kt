@@ -38,6 +38,9 @@ data class TelemetryData(
                 }
                 if (json.has("lidar_status")) {
                     lidar = json.optString("lidar_status").equals("ON", ignoreCase = true)
+                } else if (json.has("LIDAR")) {
+                    val lidarVal = json.optString("LIDAR")
+                    lidar = lidarVal.startsWith("OK", ignoreCase = true) || lidarVal.startsWith("RUNNING", ignoreCase = true)
                 }
                 if (json.has("gamepad_status")) {
                     gamepad = json.optString("gamepad_status").equals("ON", ignoreCase = true)

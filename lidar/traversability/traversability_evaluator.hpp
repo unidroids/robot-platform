@@ -69,6 +69,7 @@ public:
         has_anchor_ = false;
         anchor_lat_ = 0.0;
         anchor_lon_ = 0.0;
+        has_initial_plane_ = false;
     }
 
     bool evaluate(const std::vector<LidarPointBuffer::Sample> &samples,
@@ -122,6 +123,32 @@ public:
 
         const float half_mem_cm = (static_cast<float>(kMemSize) * config_.cell_size_cm) * 0.5f; // 700 cm
 
+        // 2b. Inicializace počáteční roviny při startu (předpoklad: obsluha spustila robota na sjízdném místě)
+        if (config_.use_init_plane && !has_initial_plane_) {
+            for (float xb = config_.init_plane_x_min_cm; xb <= config_.init_plane_x_max_cm; xb += config_.cell_size_cm * 0.5f) {
+                for (float yb = config_.init_plane_y_min_cm; yb <= config_.init_plane_y_max_cm; yb += config_.cell_size_cm * 0.5f) {
+                    float north_cm = static_cast<float>(d_north_cm) + (xb * ch - yb * sh);
+                    float east_cm  = static_cast<float>(d_east_cm)  + (xb * sh + yb * ch);
+                    int mi = static_cast<int>(std::floor((north_cm + half_mem_cm) / config_.cell_size_cm));
+                    int mj = static_cast<int>(std::floor((east_cm  + half_mem_cm) / config_.cell_size_cm));
+                    if (mi >= 0 && mi < static_cast<int>(kMemSize) &&
+                        mj >= 0 && mj < static_cast<int>(kMemSize)) {
+                        auto &mem = mem_grid_[mi][mj];
+                        if (!mem.seen) {
+                            mem.z_mean = 0.0f;
+                            mem.z_min  = 0.0f;
+                            mem.z_max  = 0.0f;
+                            mem.roughness_cm = 0.0f;
+                            mem.is_high_obstacle = false;
+                            mem.seen = true;
+                            mem.last_seen_ts = timestamp;
+                        }
+                    }
+                }
+            }
+            has_initial_plane_ = true;
+        }
+
         // 3. Průchod 3D body a projekce do severově stabilizované mřížky
         for (const auto &p : samples) {
             // Převod z LiDARu na střed otáčení robota (CoR)
@@ -163,7 +190,8 @@ public:
             auto &acc = frame_accum_[mi][mj];
             if (z_grav < acc.z_min) acc.z_min = z_grav;
             if (z_grav > acc.z_max) acc.z_max = z_grav;
-            acc.z_sum += z_grav;
+            acc.z_sum += static_cast<double>(z_grav);
+            acc.z_sq_sum += static_cast<double>(z_grav) * static_cast<double>(z_grav);
             acc.count++;
         }
 
@@ -179,8 +207,14 @@ public:
                 }
 
                 if (acc.count >= config_.min_ground_pts_cell) {
-                    float mean_z  = acc.z_sum / static_cast<float>(acc.count);
+                    float mean_z  = static_cast<float>(acc.z_sum / static_cast<double>(acc.count));
+                    double var_z  = (acc.z_sq_sum / static_cast<double>(acc.count)) - (static_cast<double>(mean_z) * static_cast<double>(mean_z));
+                    float std_z   = (var_z > 0.0) ? static_cast<float>(std::sqrt(var_z)) : 0.0f;
                     float span_z  = acc.z_max - acc.z_min;
+                    // Drsnost počítáme ze směrodatné odchylky (odolnost vůči šumu dálkoměru)
+                    // Pro méně než 6 bodů použijeme korigované vertikální rozpětí
+                    float roughness = (acc.count >= 6) ? (2.5f * std_z) : (span_z * 0.7f);
+
                     // Pokud vertikální rozpětí v buňce přesahuje 15 cm nebo minimum leží vysoko nad zemí, jde o 3D překážku
                     bool is_high_obs = (span_z > 15.0f) || (acc.z_min > config_.obstacle_z_min_cm && acc.z_min < config_.obstacle_z_max_cm);
 
@@ -188,7 +222,7 @@ public:
                         mem.z_mean = mean_z;
                         mem.z_min  = acc.z_min;
                         mem.z_max  = acc.z_max;
-                        mem.roughness_cm = span_z;
+                        mem.roughness_cm = roughness;
                         mem.is_high_obstacle = is_high_obs;
                         mem.seen = true;
                     } else {
@@ -197,8 +231,8 @@ public:
                         mem.z_mean = (1.0f - alpha) * mem.z_mean + alpha * mean_z;
                         mem.z_min  = (1.0f - alpha) * mem.z_min  + alpha * acc.z_min;
                         mem.z_max  = (1.0f - alpha) * mem.z_max  + alpha * acc.z_max;
-                        mem.roughness_cm = (1.0f - alpha) * mem.roughness_cm + alpha * span_z;
-                        mem.is_high_obstacle = is_high_obs || (mem.is_high_obstacle && span_z > config_.max_roughness_cm);
+                        mem.roughness_cm = (1.0f - alpha) * mem.roughness_cm + alpha * roughness;
+                        mem.is_high_obstacle = is_high_obs || (mem.is_high_obstacle && roughness > config_.max_roughness_cm);
                     }
                     mem.last_seen_ts = timestamp;
                 }
@@ -250,7 +284,7 @@ public:
                 } else {
                     seen_mask[ix][iy] = false;
                     obs_mask[ix][iy]  = false;
-                    raw_cost[ix][iy]  = 100;
+                    raw_cost[ix][iy]  = config_.unseen_cell_cost;
                     body_z[ix][iy]    = 0.0f;
                 }
             }
@@ -384,13 +418,15 @@ private:
     struct FrameAccum {
         float z_min = 1e9f;
         float z_max = -1e9f;
-        float z_sum = 0.0f;
+        double z_sum = 0.0;
+        double z_sq_sum = 0.0;
         size_t count = 0;
 
         void reset() {
             z_min = 1e9f;
             z_max = -1e9f;
-            z_sum = 0.0f;
+            z_sum = 0.0;
+            z_sq_sum = 0.0;
             count = 0;
         }
     };
@@ -493,9 +529,9 @@ private:
             }
 
             for (int ix = 0; ix < static_cast<int>(kOutRows); ++ix) {
-                // Pokud buňku LiDAR nikdy neviděl, dostane striktně 100 (neprůjezdná - voda, schod, stín)
+                // Pokud buňku LiDAR nikdy neviděl, dostane nastavenou penalizaci (neblokuje jako zeď)
                 if (!seen_mask[ix][iy]) {
-                    out_grid[ix * kOutCols + iy] = 100;
+                    out_grid[ix * kOutCols + iy] = config_.unseen_cell_cost;
                     continue;
                 }
 
@@ -574,6 +610,7 @@ private:
     MemCell mem_grid_[kMemSize][kMemSize];
     FrameAccum frame_accum_[kMemSize][kMemSize];
     bool has_anchor_{false};
+    bool has_initial_plane_{false};
     double anchor_lat_{0.0};
     double anchor_lon_{0.0};
 };

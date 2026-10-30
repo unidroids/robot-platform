@@ -15,8 +15,16 @@ struct TraversabilityConfig {
 
     // Fyzikální limity sjízdnosti povrchu (vůči gravitaci)
     float max_step_cm            = 4.0f;    // Max povolený schod / obrubník (4 cm)
-    float max_roughness_cm       = 4.0f;    // Max povolená drsnost v buňce (4 cm)
+    float max_roughness_cm       = 7.0f;    // Max povolená drsnost v buňce (7 cm, směrodatná odchylka)
     float max_slope_deg          = 25.0f;   // Max povolený sklon svahu vůči gravitaci (25°)
+
+    // Počáteční rovina v okolí startu robota (předpoklad: obsluha startuje robota na sjízdném místě)
+    bool  use_init_plane         = true;
+    float init_plane_x_min_cm    = -100.0f; // Počáteční rovina: 1 m za robotem
+    float init_plane_x_max_cm    =  120.0f; // Počáteční rovina: 1.2 m před středem otáčení (plynulý přechod do zorného pole LiDARu)
+    float init_plane_y_min_cm    = -70.0f;  // Počáteční rovina: 70 cm vlevo
+    float init_plane_y_max_cm    =  70.0f;  // Počáteční rovina: 70 cm vpravo
+    uint8_t unseen_cell_cost     = 70;      // Penalizace pro neviděné buňky (70 místo 100, aby neblokovaly jako zeď)
 
     // Výškové pásmo pro detekci vysokých 3D překážek
     float obstacle_z_min_cm      = 12.0f;   // Výška nad lokálním terénem pro 3D překážku
@@ -42,4 +50,3 @@ struct TraversabilityConfig {
     size_t min_obstacle_pts_cell = 2;       // Min počet bodů pro vysokou překážku
     float memory_decay_sec       = 15.0f;   // Doba platnosti paměti pro místa mimo aktuální zorné pole (v křižovatce)
 };
-

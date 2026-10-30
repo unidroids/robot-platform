@@ -96,6 +96,14 @@ public:
         const float deg2rad = static_cast<float>(M_PI) / 180.0f;
 
         for (const auto &p : samples) {
+            // Kontrola geometrického obrysu šasi robota v rámci LiDARu (v metrech)
+            float px_m = p.x * 0.01f;
+            float py_m = p.y * 0.01f;
+            if (px_m >= config_.mask_x_min_m && px_m <= config_.mask_front_x_m &&
+                py_m >= config_.mask_y_min_m && py_m <= config_.mask_y_max_m) {
+                continue;
+            }
+
             // Kontrola výšky
             if (p.z < config_.z_min_cm || p.z >= config_.z_max_cm) {
                 continue;
@@ -221,12 +229,20 @@ public:
         for (size_t f = 0; f < config_.num_floors; ++f) {
             for (size_t s = 0; s < config_.num_sectors; ++s) {
                 const auto &track = grid_[f][s];
-                // Uvažujeme jen potvrzené aktivní objekty, které se přibližují (v > 5 cm/s = 0.05 m/s)
+                // Uvažujeme jen potvrzené aktivní objekty, které se přibližují (v >= min_ttc_speed_cms)
                 if (!track.active ||
                     track.hits < config_.min_hits_for_ttc ||
                     track.d_est >= config_.max_range_cm ||
-                    track.v_est <= 5.0f) {
+                    track.v_est < config_.min_ttc_speed_cms) {
                     continue;
+                }
+
+                // Pro nejnižší patro (Floor 0: 12-22 cm) vyžadujeme potvrzení z vyššího patra nebo dostatečný počet bodů (odfiltrování trávy)
+                if (f == 0) {
+                    bool has_upper = (config_.num_floors > 1 && grid_[1][s].active);
+                    if (!has_upper && meas_count[0][s] < config_.min_points_ground_floor) {
+                        continue;
+                    }
                 }
 
                 // Směr hrozby v souřadnicích těla robota (0° = vpřed, CW)
@@ -271,6 +287,14 @@ public:
             for (size_t f = 0; f < config_.num_floors; ++f) {
                 const auto &track = grid_[f][s];
                 if (!track.active) continue;
+
+                // Pro nejnižší patro (Floor 0: 12-22 cm) odfiltrujeme ojedinělá stébla trávy
+                if (f == 0) {
+                    bool has_upper = (config_.num_floors > 1 && grid_[1][s].active);
+                    if (!has_upper && meas_count[0][s] < config_.min_points_ground_floor) {
+                        continue;
+                    }
+                }
 
                 if (track.d_est < glob_d_now[s]) {
                     glob_d_now[s] = track.d_est;

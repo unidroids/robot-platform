@@ -709,6 +709,34 @@ class TestCorridorAndObstacleAvoidance(unittest.TestCase):
         )
         self.assertTrue(dec_goal.goal_reached_near_obstacle)
 
+    def test_unmeasured_traversability_grid_without_3d_obstacle_allows_cruising(self):
+        """Nezměřená/neviděná mřížka Traversability (cost 100) bez 3D překážky nezamrzne v NO_PATH ani v nárazníku 70 cm."""
+        # 1. Plánovač koridoru: všechny buňky mají cost 100, ale v dráze není 3D překážka
+        dec = self.ctrl.step(
+            self.lat0, self.lon0, 0.0, 0.0, 170.0, 0, 0.0,
+            self._empty_collisions(), True, True, lambda x, y: 100, now=5000.0,
+        )
+        self.assertTrue(dec.path_found)
+        self.assertEqual(dec.nav_state, "CRUISING")
+        self.assertGreater(dec.speed_cap_cms, 0.0)
+
+        # 2. Služba a nárazník: traversability clearance <= 70 cm nesmí vyvolat nouzový stop target_v = 0
+        service = MaratonPilotService()
+        service.max_speed = 170.0
+        service.state = "RUNNING"
+        service.collision_data = self._empty_collisions()
+        service.last_collision_time = 5000.0
+        service.traversability_data = {"min_corridor_clearance_cm": 50.0}
+        service.last_traversability_time = 5000.0
+        service.traversability_corridor_cm = 50.0
+
+        dir_d = service._get_directional_obstacle_distance_cm(0.0, now_ts=5000.0)
+        self.assertGreater(dir_d, 70.0)  # Traversability je omezena na > 70 cm
+
+        target_v, _, stop_reason = service._evaluate_collision_limits(170.0, dir_d, now_ts=5000.0)
+        self.assertGreater(target_v, 0.0)
+        self.assertEqual(stop_reason, "")
+
 
 if __name__ == "__main__":
     unittest.main()

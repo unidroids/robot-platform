@@ -428,10 +428,14 @@ class MaratonPilotService:
             corr_d = self._get_forward_corridor_distance_cm()
             if corr_d >= 0.0:
                 candidates.append(corr_d)
-        if traversability_active and self.traversability_corridor_cm >= 0.0:
-            candidates.append(float(self.traversability_corridor_cm))
         if fallback_active:
             candidates.append(float(self.lidar_distance))
+
+        # Traversability clearance slouží pro plynulé přibrzdění na terénu,
+        # nikoliv pro falešný nouzový 3D stop <= STOP_DISTANCE_CM (70 cm)
+        if traversability_active and self.traversability_corridor_cm >= 0.0:
+            trav_c = max(STOP_DISTANCE_CM + 15.0, float(self.traversability_corridor_cm))
+            candidates.append(trav_c)
 
         return min(candidates) if candidates else -1.0
 
@@ -484,11 +488,13 @@ class MaratonPilotService:
                 for step_cm in range(65, 450, 10):
                     dm = step_cm * 0.01
                     if self.get_traversability_cost_at(dm * cos_s, dm * sin_s, now_ts=now) >= 100:
-                        trav_d_cm = float(step_cm)
+                        # Traversability nesmí podstřelit tvrdý nouzový nárazník STOP_DISTANCE_CM (70 cm)
+                        trav_d_cm = max(STOP_DISTANCE_CM + 15.0, float(step_cm))
                         break
                 candidates.append(trav_d_cm)
             elif abs(steer_clamped) <= 8.0 and self.traversability_corridor_cm >= 0.0:
-                candidates.append(float(self.traversability_corridor_cm))
+                trav_c = max(STOP_DISTANCE_CM + 15.0, float(self.traversability_corridor_cm))
+                candidates.append(trav_c)
 
         if fallback_active and not collisions_active and not traversability_active:
             candidates.append(float(self.lidar_distance))

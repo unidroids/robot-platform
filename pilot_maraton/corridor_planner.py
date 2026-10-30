@@ -661,8 +661,15 @@ class ObstacleAvoidanceController:
                         raw_tc = get_traversability_cost_fn(x_fwd, y_cw)
                         # Spolehlivé okno pro tvrdou stopku povrchu (mimo ignoreBox pod robotem a vzdálený řídký horizont)
                         if raw_tc >= 100:
-                            if 0.65 <= x_fwd <= 4.20 and abs(y_cw) <= 3.50:
-                                continue
+                            # Pokud je v dráze potvrzena 3D překážka nebo zakázaná zóna, vyřadíme vzorek
+                            if live_obs_points_enu or virtual_hard_zones_enu:
+                                if 0.65 <= x_fwd <= 4.20 and abs(y_cw) <= 3.50:
+                                    continue
+                            else:
+                                # Bez 3D překážky jde o neznámý/neviděný terén nebo šum.
+                                # Penalizujeme vysokou cenou (85), ale netvoříme absolutní zeď,
+                                # aby robot nezamrzl na volné cestě.
+                                c_trav = 85.0
                         else:
                             c_trav = float(raw_tc)
 
@@ -1056,7 +1063,7 @@ class ObstacleAvoidanceController:
             if self.nav_state in ("AVOIDING", "OVERTAKING"):
                 self.nav_state = "NO_PATH"
                 self._no_path_clear_since_ts = None
-            elif traversability_active and blocking_cl is None:
+            elif blocking_cl is not None:
                 self.nav_state = "NO_PATH"
                 self._no_path_clear_since_ts = None
 

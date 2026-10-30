@@ -237,14 +237,6 @@ public:
                     continue;
                 }
 
-                // Pro nejnižší patro (Floor 0: 12-22 cm) vyžadujeme potvrzení z vyššího patra nebo dostatečný počet bodů (odfiltrování trávy)
-                if (f == 0) {
-                    bool has_upper = (config_.num_floors > 1 && grid_[1][s].active);
-                    if (!has_upper && meas_count[0][s] < config_.min_points_ground_floor) {
-                        continue;
-                    }
-                }
-
                 // Směr hrozby v souřadnicích těla robota (0° = vpřed, CW)
                 float body_deg = wrap360(track.theta_est - static_cast<float>(heading_avg));
 
@@ -287,14 +279,6 @@ public:
             for (size_t f = 0; f < config_.num_floors; ++f) {
                 const auto &track = grid_[f][s];
                 if (!track.active) continue;
-
-                // Pro nejnižší patro (Floor 0: 12-22 cm) odfiltrujeme ojedinělá stébla trávy
-                if (f == 0) {
-                    bool has_upper = (config_.num_floors > 1 && grid_[1][s].active);
-                    if (!has_upper && meas_count[0][s] < config_.min_points_ground_floor) {
-                        continue;
-                    }
-                }
 
                 if (track.d_est < glob_d_now[s]) {
                     glob_d_now[s] = track.d_est;

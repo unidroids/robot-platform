@@ -23,11 +23,11 @@ struct CollisionConfig {
   float mask_y_min_m = -0.35f; // Pravá boční hrana (-30 cm + 5 cm rezerva)
   float mask_y_max_m = 0.35f;  // Levá boční hrana (+30 cm + 5 cm rezerva)
 
-  // Vertikální patra
-  float z_min_cm = 12.0f;        // Odfiltrování země/nerovností pod 12 cm
-  float z_max_cm = 132.0f;       // Horní limit obrysu robota
+  // Vertikální patra (spodní hranice 30 cm nad zemí, detekce pouze těla překážek)
+  float z_min_cm = 30.0f;        // Odfiltrování země, nerovností a trávy pod 30 cm
+  float z_max_cm = 130.0f;       // Horní limit obrysu robota
   float floor_height_cm = 10.0f; // Výška jednoho patra (10 cm)
-  size_t num_floors = 12; // Celkem 12 pater: [12-22), [22-32), ..., [122-132)
+  size_t num_floors = 10;        // Celkem 10 pater: [30-40), [40-50), ..., [120-130) cm
 
   // Horizontální výseče (72 sektorů po 5°)
   size_t num_sectors = 72;       // 72 sektorů po 5° (360° / 72)
@@ -46,7 +46,6 @@ struct CollisionConfig {
   uint32_t min_hits_for_ttc =
       3; // Min počet snímků v kolizním kurzu pro vyhlášení TTC
   size_t min_points_per_cell = 2; // Odfiltrování ojedinělých odrazů / šumu
-  size_t min_points_ground_floor = 6;  // Floor 0 vyžaduje >= 6 bodů nebo potvrzení z vyššího patra (proti trávě)
   float min_ttc_speed_cms = 15.0f;     // Minimální rychlost přibližování pro TTC (15 cm/s, ignoruje statický šum)
   size_t min_points_per_cycle =
       500;                   // Minimální počet bodů za 100 ms pro platný cyklus (venku ~800-3500 bodů/100 ms)

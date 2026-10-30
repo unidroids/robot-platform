@@ -109,8 +109,10 @@ class TestPilotMaratonLogic(unittest.TestCase):
         self.assertIsInstance(st["h_acc_mm"], int)
         self.assertEqual(st["h_acc_mm"], 9999)
 
-        # S daty lidaru a fúze s plovoucí desetinnou čárkou
-        self.service.update_lidar({"distance": 85.38})
+        # S daty LIDAR-COLLISIONS a fúze s plovoucí desetinnou čárkou
+        distances = [2000 if (b < 18 or b >= 54) else -1 for b in range(72)]
+        distances[0] = 85.38
+        self.service.update_collisions({"distances_cm": distances, "min_ttc_s": 999.0, "min_ttc_angle_deg": -1.0})
         self.service.update_fusion({"hAcc": 124.6, "lat": 49.5, "lon": 12.5, "heading": 90.0, "gpsSol": "FIX"})
         st = json.loads(self.service.get_status())
         self.assertEqual(st["obstacle_distance_cm"], 85.4)
@@ -280,7 +282,8 @@ class TestPilotMaratonLogic(unittest.TestCase):
         self.assertEqual(self.service.get_traversability_cost_at(1.55, 0.25), 42)
         self.assertEqual(self.service.get_traversability_cost_at(-1.0, 0.0), 100)
         self.assertEqual(self.service.get_traversability_cost_at(10.0, 0.0), 100)  # mimo rozsah -> 100
-        self.assertAlmostEqual(self.service._get_effective_obstacle_distance_cm(), 185.0)
+        # Traversability slouží pro telemetrii, ale neovlivňuje efektivní vzdálenost překážky (ta je čistě z COLLISIONS)
+        self.assertEqual(self.service._get_effective_obstacle_distance_cm(), -1.0)
 
 
 class TestPilotMaratonTCP(unittest.TestCase):

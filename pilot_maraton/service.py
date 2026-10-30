@@ -289,11 +289,9 @@ class MaratonPilotService:
             else:
                 actual_speed_ms = round(raw_fusion_spd, 2)
 
-        # LiDAR obstacle distance & TTC (primárně LIDAR-COLLISIONS / TRAVERSABILITY, záložně LIDAR DISTANCE)
+        # LiDAR obstacle distance & TTC (výhradně LIDAR-COLLISIONS)
         collisions_active = (time.time() - self.last_collision_time) < 2.0 and self.collision_data is not None
-        traversability_active = (time.time() - self.last_traversability_time) < 2.0 and self.traversability_data is not None
-        fallback_active = (time.time() - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-        lidar_active = collisions_active or traversability_active or fallback_active
+        lidar_active = collisions_active
         obstacle_distance_cm = round(float(self._get_effective_obstacle_distance_cm()), 1) if lidar_active else -1.0
         min_ttc_s = round(float(self.min_ttc_s), 2) if collisions_active else 999.0
         min_ttc_angle_deg = round(float(self.min_ttc_angle_deg), 1) if collisions_active else -1.0
@@ -417,87 +415,57 @@ class MaratonPilotService:
         return min_d if found else -1.0
 
     def _get_effective_obstacle_distance_cm(self, now_ts: float | None = None) -> float:
-        """Vrátí efektivní vzdálenost překážky před robotem (primárně z COLLISIONS/TRAVERSABILITY, záložně z DISTANCE)."""
+        """Vrátí efektivní vzdálenost překážky před robotem (výhradně z LIDAR-COLLISIONS)."""
         now = time.time() if now_ts is None else now_ts
         collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
-        traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
-        fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
 
-        candidates = []
         if collisions_active:
             corr_d = self._get_forward_corridor_distance_cm()
             if corr_d >= 0.0:
-                candidates.append(corr_d)
-        if fallback_active:
-            candidates.append(float(self.lidar_distance))
+                return corr_d
 
-        # Traversability clearance slouží pro plynulé přibrzdění na terénu,
-        # nikoliv pro falešný nouzový 3D stop <= STOP_DISTANCE_CM (70 cm)
-        if traversability_active and self.traversability_corridor_cm >= 0.0:
-            trav_c = max(STOP_DISTANCE_CM + 15.0, float(self.traversability_corridor_cm))
-            candidates.append(trav_c)
-
-        return min(candidates) if candidates else -1.0
+        return -1.0
 
     def _get_directional_obstacle_distance_cm(self, steer_rel_deg: float, now_ts: float | None = None) -> float:
         """
         Vrátí volnou vzdálenost podél plánovaného směru jízdy steer_rel_deg (ve stupních CW, -60..+60),
-        se zachováním tvrdého předního nárazníku <= STOP_DISTANCE_CM (70 cm) v přímém směru.
+        se zachováním tvrdého předního nárazníku <= STOP_DISTANCE_CM (70 cm) v přímém směru
+        (výhradně z LIDAR-COLLISIONS).
         Umožňuje plynulé vybočení do volného pruhu kolem překážky stojící na 1.45 m.
         """
         now = time.time() if now_ts is None else now_ts
         collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
-        traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
-        fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
+
+        if not collisions_active:
+            return -1.0
 
         steer_clamped = max(-60.0, min(60.0, float(steer_rel_deg)))
         candidates = []
 
-        if collisions_active:
-            # 1. Tvrdý přední nárazník (pokud je cokoliv přímo před šasi <= 70 cm, okamžitý stop)
-            fwd_bumper = self._get_forward_corridor_distance_cm()
-            if 0.0 <= fwd_bumper <= STOP_DISTANCE_CM:
-                candidates.append(fwd_bumper)
+        # 1. Tvrdý přední nárazník (pokud je cokoliv přímo před šasi <= 70 cm, okamžitý stop)
+        fwd_bumper = self._get_forward_corridor_distance_cm()
+        if 0.0 <= fwd_bumper <= STOP_DISTANCE_CM:
+            candidates.append(fwd_bumper)
 
-            # 2. Volná dráha ve směru zatáčení steer_clamped
-            distances = self.collision_data.get("distances_cm")
-            if distances and len(distances) == 72:
-                min_steered = 2000.0
-                found_s = False
-                for b in list(range(0, 18)) + list(range(54, 72)):
-                    d = float(distances[b])
-                    if d < 0:
-                        continue
-                    found_s = True
-                    sec_deg = (b + 0.5) * 5.0 if b < 18 else -((72 - b - 0.5) * 5.0)
-                    diff_deg = abs(sec_deg - steer_clamped)
-                    if diff_deg < 85.0:
-                        lat_cm = d * math.sin(math.radians(diff_deg))
-                        if diff_deg <= 3.0 or lat_cm <= ROBOT_RADIUS_CM:
-                            if d < min_steered:
-                                min_steered = d
-                if found_s:
-                    candidates.append(min_steered)
-
-        if traversability_active:
-            if self.traversability_grid is not None:
-                steer_rad = math.radians(steer_clamped)
-                cos_s = math.cos(steer_rad)
-                sin_s = math.sin(steer_rad)
-                trav_d_cm = 600.0
-                for step_cm in range(65, 450, 10):
-                    dm = step_cm * 0.01
-                    if self.get_traversability_cost_at(dm * cos_s, dm * sin_s, now_ts=now) >= 100:
-                        # Traversability nesmí podstřelit tvrdý nouzový nárazník STOP_DISTANCE_CM (70 cm)
-                        trav_d_cm = max(STOP_DISTANCE_CM + 15.0, float(step_cm))
-                        break
-                candidates.append(trav_d_cm)
-            elif abs(steer_clamped) <= 8.0 and self.traversability_corridor_cm >= 0.0:
-                trav_c = max(STOP_DISTANCE_CM + 15.0, float(self.traversability_corridor_cm))
-                candidates.append(trav_c)
-
-        if fallback_active and not collisions_active and not traversability_active:
-            candidates.append(float(self.lidar_distance))
+        # 2. Volná dráha ve směru zatáčení steer_clamped
+        distances = self.collision_data.get("distances_cm")
+        if distances and len(distances) == 72:
+            min_steered = 2000.0
+            found_s = False
+            for b in list(range(0, 18)) + list(range(54, 72)):
+                d = float(distances[b])
+                if d < 0:
+                    continue
+                found_s = True
+                sec_deg = (b + 0.5) * 5.0 if b < 18 else -((72 - b - 0.5) * 5.0)
+                diff_deg = abs(sec_deg - steer_clamped)
+                if diff_deg < 85.0:
+                    lat_cm = d * math.sin(math.radians(diff_deg))
+                    if diff_deg <= 3.0 or lat_cm <= ROBOT_RADIUS_CM:
+                        if d < min_steered:
+                            min_steered = d
+            if found_s:
+                candidates.append(min_steered)
 
         return min(candidates) if candidates else -1.0
 
@@ -713,9 +681,7 @@ class MaratonPilotService:
             nose_lat, nose_lon = rrp_to_nose(lat, lon, heading, FRONT_OFFSET_M)
 
         collisions_active = (now - self.last_collision_time) < 2.0 and self.collision_data is not None
-        traversability_active = (now - self.last_traversability_time) < 2.0 and self.traversability_data is not None
-        fallback_active = (now - self.last_lidar_time) < 2.0 and self.lidar_distance >= 0.0
-        lidar_active = collisions_active or traversability_active or fallback_active
+        lidar_active = collisions_active
         eff_dist = self._get_effective_obstacle_distance_cm(now_ts=now)
         current_lidar = round(float(eff_dist), 1) if (lidar_active and eff_dist >= 0.0) else -1.0
 
@@ -723,17 +689,17 @@ class MaratonPilotService:
             target_v = self.max_speed if self.state == "RUNNING" else 0.0
             self.active_brk_accel_step = self.nominal_brk_accel_step
 
-            # 1. Kontrola LiDARu - bez platných dat robot nesmí jet
+            # 1. Kontrola LiDARu - bez platných dat z LIDAR-COLLISIONS robot nesmí jet
             if not lidar_active or current_lidar < 0.0:
                 target_v = 0.0
                 self.active_brk_accel_step = self.max_brk_accel_step
                 target_left, target_right = 0, 0
                 if self.state == "RUNNING":
                     self.source = "LIDAR"
-                    if self.last_lidar_time == 0.0 and self.last_collision_time == 0.0 and self.last_traversability_time == 0.0:
-                        self.status_info = "Čekání na data z LiDARu"
+                    if self.last_collision_time == 0.0:
+                        self.status_info = "Čekání na data z LIDAR-COLLISIONS"
                     else:
-                        self.status_info = "Výpadek dat z LiDARu (timeout > 2s)"
+                        self.status_info = "Výpadek dat z LIDAR-COLLISIONS (timeout > 2s)"
                     self._set_nav_state("OBSTACLE", self.status_info, self.lateral_offset_m)
             # 2. Kontrola fúzních dat (GPS)
             elif not self.fusion_data:
@@ -806,8 +772,8 @@ class MaratonPilotService:
                                 default_target_heading_deg=target_heading,
                                 collision_data=self.collision_data,
                                 collisions_active=collisions_active,
-                                traversability_active=(traversability_active and self.traversability_grid is not None),
-                                get_traversability_cost_fn=lambda x, y: self.get_traversability_cost_at(x, y, now_ts=now),
+                                traversability_active=False,
+                                get_traversability_cost_fn=lambda x, y: 0,
                                 now=now,
                             )
 

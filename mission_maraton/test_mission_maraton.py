@@ -366,7 +366,7 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ON", drive_cmds)
         self.assertIn("START", lidar_cmds)
         self.assertIn("START", self.mocks["LIDAR-COLLISIONS"].received_cmds)
-        self.assertIn("START", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
+        self.assertNotIn("START", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
         self.assertIn("START", self.mocks["CAMERA-STEREO"].received_cmds)
         self.assertTrue(any(c.startswith("START") for c in pilot_cmds))
 
@@ -384,10 +384,10 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.service.current_step, 20)
 
-        # Ověříme, že ihned po FINISHED (krok 20) byly zastaveny LIDAR + profily, CAMERA-STEREO a PILOT, ale motory ještě čekají na acknowledge
+        # Ověříme, že ihned po FINISHED (krok 20) byly zastaveny LIDAR, LIDAR-COLLISIONS, CAMERA-STEREO a PILOT, ale motory ještě čekají na acknowledge
         self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
         self.assertIn("STOP", self.mocks["LIDAR-COLLISIONS"].received_cmds)
-        self.assertIn("STOP", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
+        self.assertNotIn("STOP", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
         self.assertIn("STOP", self.mocks["CAMERA-STEREO"].received_cmds)
         self.assertIn("STOP", self.mocks["PILOT-MARATON"].received_cmds)
         self.assertNotIn("OFF", self.mocks["DRIVE"].received_cmds)
@@ -506,7 +506,7 @@ class TestMissionServiceWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("STOP", self.mocks["PILOT-MARATON"].received_cmds)
         self.assertIn("STOP", self.mocks["LIDAR"].received_cmds)
         self.assertIn("STOP", self.mocks["LIDAR-COLLISIONS"].received_cmds)
-        self.assertIn("STOP", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
+        self.assertNotIn("STOP", self.mocks["LIDAR-TRAVERSABILITY"].received_cmds)
         self.assertIn("STOP", self.mocks["CAMERA-STEREO"].received_cmds)
         self.assertIn("STOP", self.mocks["MAPS"].received_cmds)
 
